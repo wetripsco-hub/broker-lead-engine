@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { ChevronDown, ChevronRight, RefreshCw, CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { ChevronDown, ChevronRight, RefreshCw, CheckCircle, XCircle, Loader2, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CensusUpload } from "@/components/ingestion/census-upload"
-import { triggerManualIngest } from "./actions"
+import { toast } from "sonner"
+import { triggerManualIngest, deleteIngestionLog } from "./actions"
 import type { CensusFileInfo } from "./upload-actions"
 import type { Database } from "@/types/database"
 
@@ -51,9 +52,31 @@ function duration(log: LogRow): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-function LogEntry({ log }: { log: LogRow & { brokers: BrokerRow[] } }) {
+function LogEntry({
+  log,
+  isAdmin,
+  onDeleted,
+}: {
+  log: LogRow & { brokers: BrokerRow[] }
+  isAdmin: boolean
+  onDeleted: (id: string) => void
+}) {
   const [open, setOpen] = useState(false)
+  const [isDeleting, startDeleteTransition] = useTransition()
   const hasBrokers = log.brokers.length > 0
+
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!confirm(`Delete the ${log.run_date} ingestion log entry?`)) return
+    startDeleteTransition(async () => {
+      const { error } = await deleteIngestionLog(log.id)
+      if (error) toast.error(`Delete failed: ${error}`)
+      else {
+        toast.success("Log entry deleted")
+        onDeleted(log.id)
+      }
+    })
+  }
 
   return (
     <div className="border-b last:border-b-0">
@@ -61,7 +84,7 @@ function LogEntry({ log }: { log: LogRow & { brokers: BrokerRow[] } }) {
       <button
         onClick={() => hasBrokers && setOpen((v) => !v)}
         className={[
-          "w-full flex items-center gap-3 px-4 py-3 text-sm text-left",
+          "w-full flex items-center gap-3 px-4 py-3 text-sm text-left group",
           hasBrokers ? "hover:bg-muted/50 cursor-pointer" : "cursor-default",
         ].join(" ")}
         aria-expanded={hasBrokers ? open : undefined}
@@ -84,6 +107,18 @@ function LogEntry({ log }: { log: LogRow & { brokers: BrokerRow[] } }) {
         </span>
 
         <span className="text-muted-foreground text-xs shrink-0">{duration(log)}</span>
+
+        {isAdmin && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={handleDelete}
+            className="shrink-0 p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-opacity"
+            aria-label="Delete log entry"
+          >
+            {isDeleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+          </span>
+        )}
       </button>
 
       {/* Error message */}
@@ -127,9 +162,14 @@ function LogEntry({ log }: { log: LogRow & { brokers: BrokerRow[] } }) {
   )
 }
 
-export function IngestionLogClient({ logs, isAdmin, censusFileInfo }: IngestionLogClientProps) {
+export function IngestionLogClient({ logs: initialLogs, isAdmin, censusFileInfo }: IngestionLogClientProps) {
+  const [logs, setLogs] = useState(initialLogs)
   const [isPending, startTransition] = useTransition()
   const [result, setResult] = useState<string | null>(null)
+
+  function handleDeleted(id: string) {
+    setLogs((prev) => prev.filter((l) => l.id !== id))
+  }
 
   function handleManualRun() {
     startTransition(async () => {
@@ -187,7 +227,7 @@ export function IngestionLogClient({ logs, isAdmin, censusFileInfo }: IngestionL
               <span>Duration</span>
             </div>
             {logs.map((log) => (
-              <LogEntry key={log.id} log={log} />
+              <LogEntry key={log.id} log={log} isAdmin={isAdmin} onDeleted={handleDeleted} />
             ))}
           </div>
         )}

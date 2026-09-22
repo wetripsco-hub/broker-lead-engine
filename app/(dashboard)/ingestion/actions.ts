@@ -1,5 +1,6 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { IngestionService } from "@/lib/ingestion/service"
 import { FmcsaCensusProvider } from "@/lib/fmcsa/census-provider"
@@ -29,4 +30,21 @@ export async function triggerManualIngest(): Promise<{ message: string }> {
   } catch (err) {
     return { message: `Error: ${err instanceof Error ? err.message : String(err)}` }
   }
+}
+
+export async function deleteIngestionLog(id: string): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user?.user_metadata?.role !== "admin") {
+    return { error: "Admin access required" }
+  }
+
+  const { error } = await supabase.from("daily_ingestion_log").delete().eq("id", id)
+  if (error) return { error: error.message }
+
+  revalidatePath("/ingestion")
+  return {}
 }
