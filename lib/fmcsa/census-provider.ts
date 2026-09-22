@@ -89,14 +89,35 @@ async function streamCensusFile(url: string): Promise<Readable> {
     throw new Error(`FMCSA fetch failed: ${response.status} ${response.statusText} — URL: ${url}`)
   }
 
+  const buffer = Buffer.from(await response.arrayBuffer())
+
   const isZip = url.toLowerCase().endsWith(".zip")
   if (!isZip) {
-    // Plain text/CSV — return body stream directly
-    return Readable.fromWeb(response.body as any)
+    // Plain text/CSV — bail out with a clear error if this looks like an
+    // HTML block/error page instead of the expected delimited data.
+    const head = buffer.subarray(0, 200).toString("utf-8").trimStart()
+    if (head.startsWith("<") || /^\s*<!doctype html/i.test(head)) {
+      throw new Error(
+        `FMCSA returned HTML instead of the census file — likely blocked/redirected ` +
+          `(WAF, geo/IP block, or auth wall). URL: ${url} — Response starts with: ${head.slice(0, 150)}`,
+      )
+    }
+    return Readable.from(buffer)
   }
 
-  // ZIP: extract the first .txt entry
-  const buffer = Buffer.from(await response.arrayBuffer())
+  // ZIP: validate the local-file-header magic bytes ("PK\x03\x04") before
+  // handing it to unzipper — a non-ZIP body (e.g. an HTML block page) makes
+  // unzipper crash internally with an opaque "Cannot read properties of
+  // null (reading 'length')" instead of a useful error.
+  const isValidZip = buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b
+  if (!isValidZip) {
+    const head = buffer.subarray(0, 200).toString("utf-8").trimStart()
+    throw new Error(
+      `FMCSA did not return a valid ZIP file — likely blocked/redirected ` +
+        `(WAF, geo/IP block, or auth wall). URL: ${url} — Response starts with: ${head.slice(0, 150)}`,
+    )
+  }
+
   const directory = await unzipper.Open.buffer(buffer)
   const txtEntry = directory.files.find((f: { path: string }) => f.path.endsWith(".txt") || f.path.endsWith(".csv"))
   if (!txtEntry) throw new Error("No .txt/.csv file found inside FMCSA census ZIP")
