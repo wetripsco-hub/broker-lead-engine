@@ -111,10 +111,28 @@ export class FmcsaApiProvider implements BrokerDataProvider {
         )
       }
       const json = await res.json()
-      const rows = (json.content ?? json.results ?? json.carriers ?? (Array.isArray(json) ? json : [])) as Record<
-        string,
-        unknown
-      >[]
+
+      // Recognise the response shape explicitly — don't silently fall back to
+      // an empty array, or a wrong endpoint/param guess looks identical to
+      // "no brokers registered" and the real cause never surfaces.
+      const recognisedKey = ["content", "results", "carriers"].find(
+        (k) => json && typeof json === "object" && k in json,
+      )
+      const rows: Record<string, unknown>[] = recognisedKey
+        ? (json as Record<string, unknown>)[recognisedKey] as Record<string, unknown>[]
+        : Array.isArray(json)
+          ? json
+          : []
+
+      if (!recognisedKey && !Array.isArray(json)) {
+        const snippet = JSON.stringify(json).slice(0, 500)
+        throw new Error(
+          `FMCSA API returned an unrecognised response shape (expected "content"/"results"/"carriers" ` +
+            `or a bare array) — verify FMCSA_API_ENDPOINT and query params against the live API docs. ` +
+            `URL: ${url.toString()} — Response: ${snippet}`,
+        )
+      }
+
       if (rows.length === 0) break
 
       for (const row of rows) {
