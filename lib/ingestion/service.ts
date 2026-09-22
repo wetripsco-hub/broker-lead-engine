@@ -1,5 +1,6 @@
 import type { BrokerDataProvider } from "@/lib/fmcsa/provider"
 import type { IngestionSummary } from "@/lib/fmcsa/types"
+import { enrichBrokers } from "@/lib/fmcsa/api-provider"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 /**
@@ -7,12 +8,13 @@ import { createAdminClient } from "@/lib/supabase/admin"
  *
  * Orchestrates a single ingestion run:
  *  1. Opens a `daily_ingestion_log` row (status = "running")
- *  2. Calls the provider to fetch broker records (default: last 30 days)
+ *  2. Calls the provider to discover broker records (default: last 30 days)
  *  3. Diffs against existing MC numbers in `brokers`
- *  4. Bulk-inserts genuinely new records (with ingestion_run_id)
- *  5. The `on_broker_inserted` trigger auto-creates a lead at stage='new'
- *  6. Bulk-updates records that already exist (refreshed profile fields)
- *  7. Marks the log row as "success" or "error"
+ *  4. Enriches new/changed records with a live QCMobile lookup (best-effort)
+ *  5. Bulk-inserts genuinely new records (with ingestion_run_id)
+ *  6. The `on_broker_inserted` trigger auto-creates a lead at stage='new'
+ *  7. Bulk-updates records that already exist (refreshed profile fields)
+ *  8. Marks the log row as "success" or "error"
  */
 export class IngestionService {
   constructor(private readonly provider: BrokerDataProvider) {}
@@ -60,8 +62,15 @@ export class IngestionService {
       const existing = await this.#fetchExistingMcNumbers(supabase, mcNumbers)
 
       // Split into new vs already-known (existing get updated, not skipped)
-      const toInsert = records.filter((r) => !existing.has(r.mcNumber))
-      const toUpdate = records.filter((r) => existing.has(r.mcNumber))
+      const toInsertRaw = records.filter((r) => !existing.has(r.mcNumber))
+      const toUpdateRaw = records.filter((r) => existing.has(r.mcNumber))
+
+      // Best-effort live refresh via QCMobile (skipped per-record on any
+      // failure — census data is always the fallback, never blocks the run)
+      const [toInsert, toUpdate] = await Promise.all([
+        enrichBrokers(toInsertRaw),
+        enrichBrokers(toUpdateRaw),
+      ])
 
       // Bulk insert new brokers in batches of 500
       let inserted = 0

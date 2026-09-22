@@ -7,8 +7,12 @@ import type { BrokerRecord, FetchOptions } from "./types"
  * the rest of the application (ingestion service, API route, cron job).
  *
  * Current implementations:
- *   - FmcsaApiProvider       (official FMCSA QCMobile API — default)
+ *   - FmcsaCensusProvider    (bulk file — discovers new registrations; default)
  *   - MockBrokerDataProvider (local dev / testing)
+ *
+ * The QCMobile API (lib/fmcsa/api-provider.ts) is lookup-only — it has no
+ * listing/search endpoint, so it cannot implement this interface. It is
+ * instead called by IngestionService to enrich records this provider finds.
  */
 export interface BrokerDataProvider {
   /**

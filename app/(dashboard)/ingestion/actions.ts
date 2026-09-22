@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { IngestionService } from "@/lib/ingestion/service"
-import { FmcsaApiProvider } from "@/lib/fmcsa/api-provider"
+import { FmcsaCensusProvider } from "@/lib/fmcsa/census-provider"
 import { MockBrokerDataProvider } from "@/lib/fmcsa/mock-provider"
 
 export async function triggerManualIngest(): Promise<{ message: string }> {
@@ -18,7 +18,7 @@ export async function triggerManualIngest(): Promise<{ message: string }> {
   }
 
   const useMock = process.env.FMCSA_USE_MOCK === "true"
-  const provider = useMock ? new MockBrokerDataProvider() : new FmcsaApiProvider()
+  const provider = useMock ? new MockBrokerDataProvider() : new FmcsaCensusProvider()
   const service = new IngestionService(provider)
 
   try {
