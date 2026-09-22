@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { AnimatedNumber } from "@/components/ui/animated-number"
 import { Users, TrendingUp, Mail, Phone, MessageSquare, ArrowUpRight, ArrowDownLeft } from "lucide-react"
 import type { UserRole, OutreachChannel } from "@/types/database"
 
@@ -49,6 +50,7 @@ export default async function DashboardPage() {
     {
       label: "Total Leads",
       value: totalLeads ?? 0,
+      numeric: true as const,
       icon: Users,
       sub: `+${thisWeekLeads ?? 0} this week`,
       href: "/leads",
@@ -56,6 +58,7 @@ export default async function DashboardPage() {
     {
       label: "Converted",
       value: convertedLeads ?? 0,
+      numeric: true as const,
       icon: TrendingUp,
       sub: totalLeads
         ? `${((((convertedLeads ?? 0) / totalLeads) * 100) | 0)}% conversion`
@@ -65,6 +68,7 @@ export default async function DashboardPage() {
     {
       label: "Outreach Sent",
       value: totalOutreach ?? 0,
+      numeric: true as const,
       icon: Mail,
       sub: "Email + call + SMS",
       href: null,
@@ -75,6 +79,7 @@ export default async function DashboardPage() {
         totalLeads && totalOutreach
           ? ((totalOutreach / totalLeads) as number).toFixed(1)
           : "—",
+      numeric: false as const,
       icon: Phone,
       sub: "Per lead",
       href: null,
@@ -132,16 +137,25 @@ export default async function DashboardPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map(({ label, value, icon: Icon, sub, href }) => {
+        {stats.map(({ label, value, numeric, icon: Icon, sub, href }, i) => {
           const card = (
-            <Card className={href ? "transition-colors hover:bg-muted/50 cursor-pointer" : ""}>
+            <Card
+              className={`shadow-sm transition-[transform,box-shadow,background-color] duration-200 ease-[var(--ease-out)] animate-in-rise ${
+                href ? "hover:shadow-md hover:-translate-y-0.5 hover:bg-muted/30 cursor-pointer" : ""
+              }`}
+              style={{ animationDelay: `${i * 50}ms` }}
+            >
               <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {label}
+                </CardTitle>
                 <Icon className="size-4 text-muted-foreground" aria-hidden />
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold tabular-nums">{value}</p>
-                <p className="text-xs text-muted-foreground mt-1">{sub}</p>
+                <p className="text-3xl font-semibold tracking-tight tabular-nums">
+                  {numeric ? <AnimatedNumber value={value as number} /> : value}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1.5">{sub}</p>
               </CardContent>
             </Card>
           )
@@ -157,28 +171,33 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
         {/* Recent activity */}
-        <Card>
+        <Card className="shadow-sm animate-in-rise" style={{ animationDelay: "150ms" }}>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Recent activity</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {recent.length === 0 ? (
-              <p className="px-6 pb-6 text-sm text-muted-foreground">
-                No outreach events yet. Open a lead to get started.
-              </p>
+              <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
+                <div className="size-10 rounded-full bg-muted flex items-center justify-center">
+                  <Mail className="size-4 text-muted-foreground/60" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  No outreach events yet. Open a lead to get started.
+                </p>
+              </div>
             ) : (
               <ul className="divide-y">
-                {recent.map((ev) => {
+                {recent.map((ev, i) => {
                   const Icon = CHANNEL_ICON[ev.channel]
                   const brokerName =
                     ev.leads?.brokers?.company_name ?? `MC-${ev.leads?.brokers?.mc_number ?? "?"}`
                   const isInbound = ev.direction === "inbound"
 
                   return (
-                    <li key={ev.id}>
+                    <li key={ev.id} className="animate-in-rise" style={{ animationDelay: `${Math.min(i * 40, 320)}ms` }}>
                       <Link
                         href={ev.leads?.id ? `/leads/${ev.leads.id}` : "#"}
-                        className="flex items-center gap-3 px-6 py-3 text-sm hover:bg-muted/50 transition-colors"
+                        className="flex items-center gap-3 px-6 py-3 text-sm transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/50"
                       >
                         <div className="size-7 rounded-full bg-muted flex items-center justify-center shrink-0">
                           <Icon className="size-3.5 text-muted-foreground" />
@@ -209,23 +228,23 @@ export default async function DashboardPage() {
         </Card>
 
         {/* Stage breakdown */}
-        <Card>
+        <Card className="shadow-sm animate-in-rise" style={{ animationDelay: "200ms" }}>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Leads by stage</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {stages.map(({ key, label, color }) => {
+            {stages.map(({ key, label, color }, i) => {
               const count = stageCounts[key] ?? 0
               const pct = totalLeads ? Math.round((count / totalLeads) * 100) : 0
               return (
-                <div key={key}>
+                <div key={key} className="animate-in-fade" style={{ animationDelay: `${250 + i * 40}ms` }}>
                   <div className="flex items-center justify-between text-sm mb-1">
                     <span className="text-muted-foreground">{label}</span>
                     <span className="font-medium tabular-nums">{count}</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${color} transition-all`}
+                      className={`h-full rounded-full ${color} transition-[width] duration-500 ease-[var(--ease-out)]`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>

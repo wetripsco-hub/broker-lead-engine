@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/layout/app-sidebar"
+import { PageTransition } from "@/components/layout/page-transition"
 import { Toaster } from "@/components/ui/sonner"
 import type { UserRole } from "@/types/database"
 
@@ -19,12 +20,13 @@ export default async function DashboardLayout({
 
   const { data: agentData } = await supabase
     .from("agents")
-    .select("name")
+    .select("id, name")
     .eq("user_id", user.id)
     .maybeSingle()
 
+  const agent = agentData as { id: string; name: string } | null
   const role = (user.user_metadata?.role as UserRole) ?? "agent"
-  const userName = (agentData as { name: string } | null)?.name ?? user.email ?? "User"
+  const userName = agent?.name ?? user.email ?? "User"
 
   return (
     <SidebarProvider>
@@ -32,12 +34,15 @@ export default async function DashboardLayout({
         userName={userName}
         userEmail={user.email ?? ""}
         role={role}
+        agentId={agent?.id ?? null}
       />
       <main className="flex flex-1 flex-col min-h-screen">
         <header className="flex items-center h-12 px-4 border-b shrink-0">
           <SidebarTrigger className="-ml-1" />
         </header>
-        <div className="flex-1 p-6">{children}</div>
+        <div className="flex-1 overflow-y-auto">
+          <PageTransition>{children}</PageTransition>
+        </div>
       </main>
       <Toaster richColors position="top-right" />
     </SidebarProvider>

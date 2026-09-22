@@ -27,5 +27,5 @@ export interface FetchOptions {
 export interface IngestionSummary {
   fetched: number
   inserted: number
-  skipped: number   // already existed by MC number
+  updated: number   // already existed by MC number — refreshed with latest data
 }

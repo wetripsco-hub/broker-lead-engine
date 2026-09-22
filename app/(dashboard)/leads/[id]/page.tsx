@@ -33,7 +33,8 @@ function InfoRow({
   )
 }
 
-export default async function LeadDetailPage({ params }: { params: { id: string } }) {
+export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const supabase = await createClient()
   const {
     data: { user },
@@ -75,7 +76,7 @@ export default async function LeadDetailPage({ params }: { params: { id: string 
       ),
       agents ( id, name )
     `)
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle()
 
   if (!leadRaw) notFound()

@@ -135,7 +135,7 @@ export interface Database {
       outreach_events: {
         Row: {
           id: string
-          lead_id: string
+          lead_id: string | null
           agent_id: string
           channel: OutreachChannel
           status: OutreachStatus
@@ -144,11 +144,12 @@ export interface Database {
           transcript: string | null
           external_id: string | null
           direction: "inbound" | "outbound"
+          direct_number: string | null
           occurred_at: string
         }
         Insert: {
           id?: string
-          lead_id: string
+          lead_id?: string | null
           agent_id: string
           channel: OutreachChannel
           status?: OutreachStatus
@@ -157,6 +158,7 @@ export interface Database {
           transcript?: string | null
           external_id?: string | null
           direction?: "inbound" | "outbound"
+          direct_number?: string | null
           occurred_at?: string
         }
         Update: Partial<Database["public"]["Tables"]["outreach_events"]["Insert"]>

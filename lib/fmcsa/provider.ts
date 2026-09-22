@@ -7,7 +7,7 @@ import type { BrokerRecord, FetchOptions } from "./types"
  * the rest of the application (ingestion service, API route, cron job).
  *
  * Current implementations:
- *   - FmcsaCensusProvider  (free bulk census file — default)
+ *   - FmcsaApiProvider       (official FMCSA QCMobile API — default)
  *   - MockBrokerDataProvider (local dev / testing)
  */
 export interface BrokerDataProvider {

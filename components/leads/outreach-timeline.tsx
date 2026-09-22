@@ -104,16 +104,22 @@ function parseDuration(body: string | null): string | null {
 export function OutreachTimeline({ events }: OutreachTimelineProps) {
   if (events.length === 0) {
     return (
-      <div className="rounded-lg border bg-card py-10 text-center text-sm text-muted-foreground">
-        No outreach yet. Use the buttons above to log the first contact.
+      <div className="rounded-lg border bg-card py-10 flex flex-col items-center gap-2.5 text-center animate-in-fade">
+        <div className="size-10 rounded-full bg-muted flex items-center justify-center">
+          <Phone className="size-4 text-muted-foreground/60" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          No outreach yet. Use the buttons above to log the first contact.
+        </p>
       </div>
     )
   }
 
   const groups = groupByDay(events)
+  let rowIndex = 0
 
   return (
-    <div className="rounded-lg border bg-card divide-y">
+    <div className="rounded-lg border bg-card shadow-sm divide-y overflow-hidden">
       {groups.map((group) => (
         <div key={group.label}>
           {/* Day separator */}
@@ -125,9 +131,14 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
             const Icon = CHANNEL_ICON[ev.channel]
             const isInbound = ev.direction === "inbound"
             const duration = ev.channel === "call" ? parseDuration(ev.message_body) : null
+            const delay = Math.min(rowIndex++ * 40, 320)
 
             return (
-              <div key={ev.id} className="flex items-start gap-3 px-4 py-3 text-sm border-t first:border-t-0">
+              <div
+                key={ev.id}
+                className="flex items-start gap-3 px-4 py-3 text-sm border-t first:border-t-0 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/30 animate-in-rise"
+                style={{ animationDelay: `${delay}ms` }}
+              >
                 {/* Channel icon */}
                 <div className="mt-0.5 shrink-0 size-7 rounded-full bg-muted flex items-center justify-center">
                   <Icon className="size-3.5 text-muted-foreground" />

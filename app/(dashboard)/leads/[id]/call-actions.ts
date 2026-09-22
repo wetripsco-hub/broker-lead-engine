@@ -20,6 +20,7 @@ export async function logCallStarted(
       agent_id: agentId,
       channel: "call",
       status: "pending",
+      direction: "outbound",
       external_id: externalId,
     })
     .select("id")
@@ -29,13 +30,49 @@ export async function logCallStarted(
   return { eventId: (data as { id: string }).id }
 }
 
-export async function logCallEnded(
+export type DispositionKey =
+  | "no_answer"
+  | "left_voicemail"
+  | "answered_interested"
+  | "answered_not_interested"
+  | "callback"
+  | "wrong_number"
+
+export const DISPOSITION_LABEL: Record<DispositionKey, string> = {
+  no_answer:               "No answer",
+  left_voicemail:          "Left voicemail",
+  answered_interested:     "Answered — interested",
+  answered_not_interested: "Answered — not interested",
+  callback:                "Call back later",
+  wrong_number:            "Wrong number",
+}
+
+// Maps disposition to outreach_event status
+const DISPOSITION_STATUS: Record<DispositionKey, "answered" | "no_answer"> = {
+  no_answer:               "no_answer",
+  left_voicemail:          "no_answer",
+  answered_interested:     "answered",
+  answered_not_interested: "answered",
+  callback:                "answered",
+  wrong_number:            "no_answer",
+}
+
+// Maps disposition to a lead stage update (null = no change)
+const DISPOSITION_STAGE: Record<DispositionKey, string | null> = {
+  no_answer:               null,
+  left_voicemail:          "contacted",
+  answered_interested:     "interested",
+  answered_not_interested: "contacted",
+  callback:                "contacted",
+  wrong_number:            null,
+}
+
+export async function saveCallDisposition(
   eventId: string,
-  outcome: {
-    status: "answered" | "no_answer" | "failed"
-    durationSeconds?: number
-    recordingUrl?: string | null
-  },
+  leadId: string,
+  disposition: DispositionKey,
+  notes: string,
+  durationSeconds: number,
 ): Promise<{ error?: string }> {
   const supabase = await createClient()
   const {
@@ -43,20 +80,35 @@ export async function logCallEnded(
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not authenticated" }
 
-  const { error } = await (supabase.from("outreach_events") as any)
+  const label = DISPOSITION_LABEL[disposition]
+  const messageBody = [
+    `Disposition: ${label}`,
+    `Duration: ${durationSeconds}s`,
+    notes.trim() ? `Notes: ${notes.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n")
+
+  const { error: evErr } = await (supabase.from("outreach_events") as any)
     .update({
-      status: outcome.status,
-      recording_url: outcome.recordingUrl ?? null,
-      // store duration as JSON in message_body if no dedicated column yet
-      ...(outcome.durationSeconds != null
-        ? { message_body: `Duration: ${outcome.durationSeconds}s` }
-        : {}),
+      status: DISPOSITION_STATUS[disposition],
+      message_body: messageBody,
     })
     .eq("id", eventId)
 
-  if (error) return { error: error.message }
+  if (evErr) return { error: evErr.message }
 
-  // Refresh lead detail page so timeline reflects the new call
-  revalidatePath(`/leads`, "layout")
+  // Advance lead stage if disposition implies it
+  const newStage = DISPOSITION_STAGE[disposition]
+  if (newStage) {
+    await (supabase.from("leads") as any)
+      .update({ stage: newStage })
+      .eq("id", leadId)
+      // Only advance forward — don't demote an already-converted lead
+      .in("stage", ["new", "contacted"])
+  }
+
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath("/leads")
   return {}
 }

@@ -7,11 +7,12 @@ import { createAdminClient } from "@/lib/supabase/admin"
  *
  * Orchestrates a single ingestion run:
  *  1. Opens a `daily_ingestion_log` row (status = "running")
- *  2. Calls the provider to fetch new broker records
+ *  2. Calls the provider to fetch broker records (default: last 30 days)
  *  3. Diffs against existing MC numbers in `brokers`
  *  4. Bulk-inserts genuinely new records (with ingestion_run_id)
  *  5. The `on_broker_inserted` trigger auto-creates a lead at stage='new'
- *  6. Marks the log row as "success" or "error"
+ *  6. Bulk-updates records that already exist (refreshed profile fields)
+ *  7. Marks the log row as "success" or "error"
  */
 export class IngestionService {
   constructor(private readonly provider: BrokerDataProvider) {}
@@ -40,10 +41,10 @@ export class IngestionService {
     const logId = logRow.id
 
     try {
-      // Fetch from provider
+      // Fetch from provider — default lookback is the last 30 days
       const since_ = since ?? (() => {
         const d = new Date()
-        d.setDate(d.getDate() - 1)
+        d.setDate(d.getDate() - 30)
         return d
       })()
 
@@ -51,18 +52,18 @@ export class IngestionService {
 
       if (records.length === 0) {
         await this.#closeLog(supabase, logId, "success", 0, 0, 0)
-        return { fetched: 0, inserted: 0, skipped: 0 }
+        return { fetched: 0, inserted: 0, updated: 0 }
       }
 
       // Fetch existing MC numbers in one query (chunked if large)
       const mcNumbers = records.map((r) => r.mcNumber)
       const existing = await this.#fetchExistingMcNumbers(supabase, mcNumbers)
 
-      // Split into new vs already known
+      // Split into new vs already-known (existing get updated, not skipped)
       const toInsert = records.filter((r) => !existing.has(r.mcNumber))
-      const skipped = records.length - toInsert.length
+      const toUpdate = records.filter((r) => existing.has(r.mcNumber))
 
-      // Bulk insert in batches of 500
+      // Bulk insert new brokers in batches of 500
       let inserted = 0
       const BATCH = 500
       for (let i = 0; i < toInsert.length; i += BATCH) {
@@ -87,8 +88,31 @@ export class IngestionService {
         inserted += batch.length
       }
 
-      await this.#closeLog(supabase, logId, "success", records.length, inserted, 0)
-      return { fetched: records.length, inserted, skipped }
+      // Refresh already-known brokers with the latest FMCSA data
+      // (one update per row — mc_number is unique, no bulk upsert-by-column needed)
+      let updated = 0
+      for (const r of toUpdate) {
+        const { error } = await (supabase.from("brokers") as any)
+          .update({
+            dot_number: r.dotNumber ?? null,
+            company_name: r.companyName,
+            contact_name: r.contactName ?? null,
+            email: r.email ?? null,
+            phone: r.phone ?? null,
+            address_line1: r.addressLine1 ?? null,
+            city: r.city ?? null,
+            state: r.state ?? null,
+            zip: r.zip ?? null,
+            authority_status: r.authorityStatus ?? null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("mc_number", r.mcNumber) as { error: { message: string } | null }
+        if (error) throw new Error(`Broker update failed (MC-${r.mcNumber}): ${error.message}`)
+        updated++
+      }
+
+      await this.#closeLog(supabase, logId, "success", records.length, inserted, updated)
+      return { fetched: records.length, inserted, updated }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       await this.#closeLog(supabase, logId, "error", 0, 0, 0, msg)

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { IngestionService } from "@/lib/ingestion/service"
-import { FmcsaCensusProvider } from "@/lib/fmcsa/census-provider"
+import { FmcsaApiProvider } from "@/lib/fmcsa/api-provider"
 import { MockBrokerDataProvider } from "@/lib/fmcsa/mock-provider"
 
-// Max 5 minutes — sufficient for downloading + parsing the census file
+// Max 5 minutes — sufficient for a paginated FMCSA API pull
 export const maxDuration = 300
 
 /**
@@ -12,10 +12,14 @@ export const maxDuration = 300
  * Called by Vercel Cron daily at 06:00 UTC, and available for
  * manual runs (admin only, from the Ingestion Log page).
  *
+ * Pulls brokers (authority type BROKER) registered in the last 30 days
+ * from the FMCSA QCMobile API, diffs on MC number against the `brokers`
+ * table, inserts new records and updates existing ones.
+ *
  * Security: requires Authorization: Bearer <CRON_SECRET>
  *
  * Body (optional JSON):
- *   { "since": "2026-09-21" }  — override the lookback date
+ *   { "since": "2026-09-21" }  — override the 30-day lookback date
  *   { "mock": true }           — use MockBrokerDataProvider (dev/testing)
  */
 export async function POST(req: NextRequest) {
@@ -39,7 +43,7 @@ export async function POST(req: NextRequest) {
     // no body — fine
   }
 
-  const provider = useMock ? new MockBrokerDataProvider() : new FmcsaCensusProvider()
+  const provider = useMock ? new MockBrokerDataProvider() : new FmcsaApiProvider()
   const service = new IngestionService(provider)
 
   try {

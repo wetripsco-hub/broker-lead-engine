@@ -14,7 +14,7 @@ export default function LeadNotFound() {
           This lead doesn&apos;t exist or you don&apos;t have access to it.
         </p>
       </div>
-      <Button variant="outline" render={<Link href="/leads" />}>
+      <Button variant="outline" nativeButton={false} render={<Link href="/leads" />}>
         <ArrowLeft className="size-4 mr-2" />
         Back to leads
       </Button>

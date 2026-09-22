@@ -93,10 +93,12 @@ export function LeadsListClient({ leads, isAdmin }: { leads: LeadRow[]; isAdmin:
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border bg-card">
+      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         {filtered.length === 0 ? (
-          <div className="py-14 flex flex-col items-center gap-2 text-center">
-            <Search className="size-6 text-muted-foreground/50" />
+          <div className="py-14 flex flex-col items-center gap-2.5 text-center animate-in-fade">
+            <div className="size-10 rounded-full bg-muted flex items-center justify-center">
+              <Search className="size-4 text-muted-foreground/60" />
+            </div>
             <p className="text-sm text-muted-foreground">
               {leads.length === 0
                 ? "No leads yet. Run an ingestion to populate the list."
@@ -112,29 +114,31 @@ export function LeadsListClient({ leads, isAdmin }: { leads: LeadRow[]; isAdmin:
               <span>Stage</span>
               <span />
             </div>
-            {filtered.map((lead) => {
+            {filtered.map((lead, i) => {
               const b = lead.brokers
               return (
                 <div
                   key={lead.id}
-                  className="grid grid-cols-[1fr_140px_180px_100px_32px] gap-4 px-4 py-3 border-b last:border-0 items-center hover:bg-muted/40 group"
+                  className="relative grid grid-cols-[1fr_140px_180px_100px_32px] gap-4 px-4 py-3 border-b last:border-0 items-center transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/40 group animate-in-fade"
+                  style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
                 >
-                  <div className="min-w-0">
+                  <Link href={`/leads/${lead.id}`} className="absolute inset-0" aria-label={b?.company_name ?? "View lead"} />
+                  <div className="min-w-0 pointer-events-none">
                     <p className="font-medium truncate text-sm">{b?.company_name ?? "—"}</p>
                     <p className="text-xs text-muted-foreground font-mono">MC-{b?.mc_number}</p>
                   </div>
-                  <span className="text-sm text-muted-foreground truncate">
+                  <span className="text-sm text-muted-foreground truncate pointer-events-none">
                     {[b?.city, b?.state].filter(Boolean).join(", ") || "—"}
                   </span>
                   {isAdmin && (
-                    <span className="text-sm text-muted-foreground truncate">
+                    <span className="text-sm text-muted-foreground truncate pointer-events-none">
                       {lead.agents?.name ?? <span className="italic">Unassigned</span>}
                     </span>
                   )}
-                  <StageSelector leadId={lead.id} stage={lead.stage} />
-                  <Link href={`/leads/${lead.id}`} className="text-muted-foreground hover:text-foreground">
-                    <ChevronRight className="size-4" />
-                  </Link>
+                  <div className="relative z-10">
+                    <StageSelector leadId={lead.id} stage={lead.stage} />
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground transition-[transform,color] duration-150 ease-[var(--ease-out)] group-hover:text-foreground group-hover:translate-x-0.5 pointer-events-none" />
                 </div>
               )
             })}

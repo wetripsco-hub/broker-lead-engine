@@ -25,6 +25,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { logout } from "@/app/(auth)/login/actions"
+import { DialerWidget } from "@/components/dialer/dialer-widget"
 import type { UserRole } from "@/types/database"
 
 const navItems = [
@@ -39,9 +40,10 @@ interface AppSidebarProps {
   userName: string
   userEmail: string
   role: UserRole
+  agentId: string | null
 }
 
-export function AppSidebar({ userName, userEmail, role }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, role, agentId }: AppSidebarProps) {
   const pathname = usePathname()
   const initials = userName
     .split(" ")
@@ -53,8 +55,8 @@ export function AppSidebar({ userName, userEmail, role }: AppSidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader className="px-4 py-4">
-        <div className="flex items-center gap-2">
-          <div className="size-7 rounded-md bg-foreground shrink-0" aria-hidden />
+        <div className="flex items-center gap-2.5">
+          <div className="size-7 rounded-md bg-foreground shrink-0 transition-transform duration-200 ease-[var(--ease-out)] hover:scale-105" aria-hidden />
           <span className="font-semibold text-sm tracking-tight leading-none">
             Broker Lead Engine
           </span>
@@ -66,18 +68,25 @@ export function AppSidebar({ userName, userEmail, role }: AppSidebarProps) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map(({ href, label, icon: Icon }) => (
-                <SidebarMenuItem key={href}>
-                  <SidebarMenuButton
-                    render={<Link href={href} />}
-                    isActive={pathname === href || pathname.startsWith(href + "/")}
-                  >
-                    <Icon className="size-4" />
-                    <span>{label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+            <SidebarMenu className="gap-0.5">
+              {navItems.map(({ href, label, icon: Icon }) => {
+                const active = pathname === href || pathname.startsWith(href + "/")
+                return (
+                  <SidebarMenuItem key={href}>
+                    <SidebarMenuButton
+                      render={<Link href={href} />}
+                      isActive={active}
+                      className="relative transition-colors duration-150 ease-[var(--ease-out)] data-[active=true]:font-medium"
+                    >
+                      {active && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full bg-primary animate-in-fade" />
+                      )}
+                      <Icon className="size-4 transition-transform duration-150 ease-[var(--ease-out)] group-hover/menu-item:translate-x-0.5" />
+                      <span>{label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -85,8 +94,8 @@ export function AppSidebar({ userName, userEmail, role }: AppSidebarProps) {
 
       <SidebarSeparator />
 
-      <SidebarFooter className="px-3 py-3">
-        <div className="flex items-center gap-3 mb-3 px-1">
+      <SidebarFooter className="px-3 py-3 gap-1">
+        <div className="flex items-center gap-3 mb-2 px-1">
           <Avatar className="size-7 shrink-0">
             <AvatarFallback className="text-xs">{initials}</AvatarFallback>
           </Avatar>
@@ -99,10 +108,12 @@ export function AppSidebar({ userName, userEmail, role }: AppSidebarProps) {
           </Badge>
         </div>
 
+        <DialerWidget agentId={agentId} />
+
         <form action={logout}>
           <button
             type="submit"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-150"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-[transform,background-color,color] duration-150 ease-[var(--ease-out)] hover:text-foreground hover:bg-accent active:scale-[0.98]"
           >
             <LogOut className="size-4" />
             Sign out
