@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { IngestionLogClient } from "./ingestion-log-client"
+import { getCensusFileInfo } from "./upload-actions"
 import type { Database } from "@/types/database"
 
 type LogRow = Database["public"]["Tables"]["daily_ingestion_log"]["Row"]
@@ -54,9 +55,11 @@ export default async function IngestionPage() {
     brokers: brokersByRunId[log.id] ?? [],
   }))
 
+  const censusFileInfo = isAdmin ? await getCensusFileInfo() : null
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <IngestionLogClient logs={enrichedLogs} isAdmin={isAdmin} />
+      <IngestionLogClient logs={enrichedLogs} isAdmin={isAdmin} censusFileInfo={censusFileInfo} />
     </div>
   )
 }

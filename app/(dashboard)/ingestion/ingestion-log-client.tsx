@@ -4,7 +4,9 @@ import { useState, useTransition } from "react"
 import { ChevronDown, ChevronRight, RefreshCw, CheckCircle, XCircle, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CensusUpload } from "@/components/ingestion/census-upload"
 import { triggerManualIngest } from "./actions"
+import type { CensusFileInfo } from "./upload-actions"
 import type { Database } from "@/types/database"
 
 type LogRow = Database["public"]["Tables"]["daily_ingestion_log"]["Row"]
@@ -16,6 +18,7 @@ type BrokerRow = Pick<
 interface IngestionLogClientProps {
   logs: (LogRow & { brokers: BrokerRow[] })[]
   isAdmin: boolean
+  censusFileInfo: CensusFileInfo | null
 }
 
 function StatusBadge({ status }: { status: LogRow["status"] }) {
@@ -124,7 +127,7 @@ function LogEntry({ log }: { log: LogRow & { brokers: BrokerRow[] } }) {
   )
 }
 
-export function IngestionLogClient({ logs, isAdmin }: IngestionLogClientProps) {
+export function IngestionLogClient({ logs, isAdmin, censusFileInfo }: IngestionLogClientProps) {
   const [isPending, startTransition] = useTransition()
   const [result, setResult] = useState<string | null>(null)
 
@@ -164,6 +167,8 @@ export function IngestionLogClient({ logs, isAdmin }: IngestionLogClientProps) {
           {result}
         </div>
       )}
+
+      {isAdmin && <CensusUpload initialInfo={censusFileInfo} />}
 
       <div className="rounded-lg border bg-card">
         {logs.length === 0 ? (
