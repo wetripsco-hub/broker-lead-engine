@@ -3,16 +3,19 @@ Broker-only lead pipeline for Broker Lead Engine.
 
 Discovers newly-filed freight brokers (property + household goods only —
 truckers/forwarders/passenger carriers are skipped) from the FMCSA daily
-publication PDF, enriches each one via a SAFER lookup, then writes new
-brokers to Supabase. The existing `on_broker_inserted` DB trigger
-auto-creates a 'new'-stage lead for each.
+publication PDF, enriches each one from MOTUS, then writes new brokers to
+Supabase. The existing `on_broker_inserted` DB trigger auto-creates a
+'new'-stage lead for each.
 
 STATUS (verified against real runs, 2026-09-23):
   - PDF discovery + download: WORKING (captures the live pre-signed S3
     URL via browser automation — see find_latest_pdf_url()).
   - PDF parsing: WORKING — verified 33/33 property-broker rows parsed
     correctly from a real REGISTER PDF.
-  - SAFER enrichment: WORKING.
+  - SAFER enrichment: REMOVED. It cost ~4s per broker (fetch plus
+    pacing) to supply an MC number, address and operating status that
+    the MOTUS API below already returns, more authoritatively, in the
+    same call that fetches everything else.
   - MOTUS lookup (email + officials + authority + address): WORKING,
     via MOTUS's own public JSON API (no auth, ~390ms per broker) —
     GET /api/carriers/{usdot}, the same endpoint its account page
@@ -62,7 +65,7 @@ from pathlib import Path
 import pdfplumber
 import requests
 from dotenv import load_dotenv
-from scrapling.fetchers import Fetcher, StealthyFetcher
+from scrapling.fetchers import StealthyFetcher
 from supabase import Client, create_client
 
 # ── Config ───────────────────────────────────────────────────────────────
@@ -78,8 +81,6 @@ MOTUS_INDEX_URL = "https://motus.dot.gov/customer/daily-fmcsa-publications"
 # motus_account_lookup() for why we call this directly.
 MOTUS_API_URL = "https://motus.dot.gov/api/carriers/{usdot}"
 MOTUS_USER_AGENT = "Mozilla/5.0"
-SAFER_SNAPSHOT_URL = "https://safer.fmcsa.dot.gov/CompanySnapshot.aspx?USDOT={usdot}"
-SAFER_DELAY_SECONDS = 2
 # The MOTUS API answers in ~0.4s, so this is politeness pacing for a
 # government endpoint rather than a wait for anything to load.
 MOTUS_DELAY_SECONDS = 1
@@ -99,7 +100,7 @@ SECTION_HEADERS = {
 # with the company name (and sometimes address/officer) wrapping to a
 # following line when it's long — pdfplumber's plain extract_text() does
 # not reliably preserve column order for wrapped multi-line rows, so
-# address/officer are left to the SAFER enrichment step rather than
+# address/officer are left to the MOTUS enrichment step rather than
 # parsed here; only usdot/company_name/filing_date/phone (all on the
 # anchor line) are extracted with confidence.
 DATA_ROW_RE = re.compile(r"^(\d{6,8})\s+(.+?)\s+(\d{2}/\d{2}/\d{4})\s+(.*)$")
@@ -341,7 +342,7 @@ def parse_pdf(pdf_bytes: bytes) -> list[dict]:
                     "filing_date": filing_date,
                     # Address/officer aren't reliably parseable when a row
                     # wraps (column order gets scrambled in plain text
-                    # extraction) — left for the SAFER enrichment step.
+                    # extraction) — left for the MOTUS enrichment step.
                     "address": None,
                     "officer": None,
                     "phone": phone_match.group(1).strip() if phone_match else None,
@@ -351,32 +352,6 @@ def parse_pdf(pdf_bytes: bytes) -> list[dict]:
         i += 1
 
     return records
-
-
-# ── Step 2: SAFER lookup ─────────────────────────────────────────────────────
-
-def safer_lookup(usdot: str) -> dict:
-    url = SAFER_SNAPSHOT_URL.format(usdot=usdot)
-    try:
-        res = Fetcher.get(url)
-    except Exception as e:  # noqa: BLE001 — best-effort, never fatal to the run
-        return {"mc_number": None, "operating_status": None, "address": None, "error": str(e)}
-
-    if res.status != 200:
-        return {"mc_number": None, "operating_status": None, "address": None, "error": f"HTTP {res.status}"}
-
-    text = res.get_all_text()
-
-    mc_match = re.search(r"MC[/\-]MX[\-\s]*(?:Number)?[:\s]*(\d+)", text, re.I)
-    status_match = re.search(r"Operating Status[:\s]*([A-Z\- ]+)", text, re.I)
-    address_match = re.search(r"Physical Address[:\s]*(.+)", text, re.I)
-
-    return {
-        "mc_number": mc_match.group(1) if mc_match else None,
-        "operating_status": status_match.group(1).strip() if status_match else None,
-        "address": address_match.group(1).strip() if address_match else None,
-        "error": None,
-    }
 
 
 # ── Step 3: MOTUS account lookup (email + officials + confirmed address) ────
@@ -576,7 +551,7 @@ def motus_account_lookup(usdot: str) -> dict:
     rendered table left those cells blank, and addresses arrive already
     split into line/city/state/zip instead of needing a regex.
 
-    Best-effort like safer_lookup(): never raises, always returns a dict
+    Best-effort: never raises, always returns a dict
     (with "error" set on failure) so one broken lookup never kills the run.
     """
     try:
@@ -617,9 +592,7 @@ def normalise_date(raw: str | None) -> str | None:
     return None
 
 
-def save_broker(
-    supabase: Client, record: dict, safer: dict, motus: dict, log_id: str
-) -> bool:
+def save_broker(supabase: Client, record: dict, motus: dict, log_id: str) -> bool:
     """Returns True if a new row was inserted, False if it was a duplicate
     (dot_number already existed) and got silently skipped instead."""
     officials = motus.get("officials") or []
@@ -633,13 +606,13 @@ def save_broker(
     # keep all of them rather than just the first.
     contact_name = ", ".join(o["name"] for o in officials) if officials else record.get("officer")
 
-    # Prefer MOTUS's structured address (principal, then mailing) — it comes
-    # already split into line/city/state/zip. Only the SAFER/PDF fallbacks
-    # are single strings that need the regex.
+    # MOTUS's structured address (principal, then mailing) comes already
+    # split into line/city/state/zip. Only the PDF fallback is a single
+    # string that needs the regex.
     address = (
         motus.get("principal_address")
         or motus.get("mailing_address")
-        or parse_motus_address(safer.get("address") or record.get("address"))
+        or parse_motus_address(record.get("address"))
     )
 
     # upsert(..., on_conflict="dot_number", ignore_duplicates=True) instead
@@ -655,9 +628,7 @@ def save_broker(
         .upsert(
             {
                 "dot_number": record["usdot"],
-                # MOTUS reports the docket number straight off the broker's
-                # own authority record; SAFER is the fallback.
-                "mc_number": motus.get("mc_number") or safer.get("mc_number"),
+                "mc_number": motus.get("mc_number"),
                 "company_name": motus.get("legal_name") or record["company_name"],
                 "dba_name": motus.get("dba_name"),
                 "contact_name": contact_name,
@@ -667,7 +638,6 @@ def save_broker(
                 "city": address["city"],
                 "state": address["state"],
                 "zip": address["zip"],
-                "authority_status": safer.get("operating_status"),
                 "usdot_status": motus.get("usdot_status"),
                 "mc_status": motus.get("mc_status"),
                 "authority_type": motus.get("authority_type"),
@@ -727,7 +697,7 @@ def main() -> None:
     # motus.dot.gov. Defaults to "most recent available" when unset.
     # PDF_FILE_PATH (optional): skip discovery/download entirely and parse
     # this local PDF instead — set by the "Upload PDF" flow in the UI,
-    # which runs this exact same pipeline (SAFER + MOTUS enrichment +
+    # which runs this exact same pipeline (MOTUS enrichment +
     # Supabase save) against a manually-uploaded REGISTER PDF.
     pdf_date_str = os.environ.get("PDF_DATE")
     pdf_file_path = os.environ.get("PDF_FILE_PATH")
@@ -806,11 +776,6 @@ def main() -> None:
         for i, record in enumerate(new_records, 1):
             log(f"[{i}/{len(new_records)}] USDOT {record['usdot']} — {record['company_name']}")
 
-            safer = safer_lookup(record["usdot"])
-            if safer.get("error"):
-                log(f"  SAFER lookup failed: {safer['error']}")
-            time.sleep(SAFER_DELAY_SECONDS)
-
             motus = motus_account_lookup(record["usdot"])
             if motus.get("error"):
                 log(f"  MOTUS account lookup failed: {motus['error']}")
@@ -838,7 +803,7 @@ def main() -> None:
             elif mc_status == "pending":
                 pending_count += 1
 
-            was_new = save_broker(supabase, record, safer, motus, log_id)
+            was_new = save_broker(supabase, record, motus, log_id)
             if was_new:
                 inserted += 1
             else:
