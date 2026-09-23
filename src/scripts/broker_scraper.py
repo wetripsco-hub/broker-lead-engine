@@ -55,10 +55,8 @@ SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 MOTUS_INDEX_URL = "https://motus.dot.gov/customer/daily-fmcsa-publications"
 SAFER_SNAPSHOT_URL = "https://safer.fmcsa.dot.gov/CompanySnapshot.aspx?USDOT={usdot}"
 SAFER_DELAY_SECONDS = 2
-# Google rate-limits/CAPTCHAs aggressively with no pacing between searches
-# (confirmed: 429s starting a few requests in during a real run). This is
-# on top of SAFER_DELAY_SECONDS, i.e. real spacing between brokers.
-EMAIL_SEARCH_DELAY_SECONDS = 6
+# Polite pacing between DuckDuckGo searches (on top of SAFER_DELAY_SECONDS).
+EMAIL_SEARCH_DELAY_SECONDS = 3
 
 SECTION_HEADERS = {
     "property": "BROKER OF PROPERTY (EXCEPT HOUSEHOLD GOODS)",
@@ -356,38 +354,51 @@ def find_email(
     company_name: str, city: str | None, state: str | None, officer: str | None
 ) -> tuple[str | None, str]:
     """
-    Best-effort. Google aggressively blocks/CAPTCHAs automated search
-    traffic, so a high 'not_found' rate is expected even with Scrapling's
-    stealth fetcher — this is the weakest link in the pipeline by design.
+    Best-effort. CONFIRMED against a live run: Google returns HTTP 429
+    ("/sorry/index" bot-check) on essentially every request regardless of
+    pacing — it detects the automated browser itself, not just request
+    frequency, so it was never usable here. Switched to DuckDuckGo's
+    no-JS HTML endpoint (html.duckduckgo.com/html/) via the plain Fetcher
+    instead of a full browser — much less aggressive bot detection, though
+    still best-effort (a high 'not_found' rate is expected regardless of
+    search engine — see EMAIL_PREFIXES fallback below).
     Returns (email, confidence).
     """
     query = f"{company_name} {city or ''} {state or ''} email contact"
-    search_url = f"https://www.google.com/search?q={quote_plus(query)}"
+    search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
 
     try:
-        res = StealthyFetcher.fetch(search_url, headless=True, network_idle=True)
+        res = Fetcher.get(search_url)
     except Exception as e:  # noqa: BLE001
         log(f"  email search failed: {e}")
         return None, "not_found"
 
-    links = res.css("a::attr(href)").getall()
+    if res.status != 200:
+        log(f"  email search returned HTTP {res.status}")
+        return None, "not_found"
+
+    # DuckDuckGo's HTML results use class="result__a"; fall back to any
+    # link on the page if that selector ever changes.
+    links = res.css("a.result__a::attr(href)").getall() or res.css("a::attr(href)").getall()
     website = None
     name_tokens = [t.lower() for t in re.split(r"\W+", company_name) if len(t) > 3]
 
     for href in links:
-        if not href.startswith("http"):
-            continue
-        if "google.com/url" in href:
-            # Google sometimes wraps organic results as a /url?q=<real>
-            # redirect rather than a direct href — unwrap it instead of
-            # discarding it outright.
+        if href.startswith("//"):
+            href = "https:" + href
+        if "duckduckgo.com/l/" in href:
+            # DDG wraps click-tracked results as /l/?uddg=<real>&... —
+            # unwrap instead of discarding.
             qs = parse_qs(urlparse(href).query)
-            real = qs.get("q", [None])[0]
+            real = qs.get("uddg", [None])[0]
             if not real:
                 continue
             href = real
-        elif "google.com" in href:
-            continue  # other google.com-internal links (images, maps, ...)
+        elif "duckduckgo.com" in href:
+            continue  # other DDG-internal links
+
+        if not href.startswith("http"):
+            continue
 
         domain = urlparse(href).netloc.lower()
         if any(tok in domain for tok in name_tokens):
