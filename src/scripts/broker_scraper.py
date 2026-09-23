@@ -64,14 +64,26 @@ SECTION_HEADERS = {
 EMAIL_PREFIXES = ["info", "contact", "sales"]
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
-FIELD_PATTERNS = {
-    "usdot": re.compile(r"USDOT Number[:\s]+(\d+)", re.I),
-    "legal_name": re.compile(r"Legal Business Name[:\s]+(.+)", re.I),
-    "filing_date": re.compile(r"Filing Date[:\s]+([\d/\-]+)", re.I),
-    "address": re.compile(r"Business Mailing Address[:\s]+(.+)", re.I),
-    "officer": re.compile(r"Company Officer[:\s]+(.+)", re.I),
-    "phone": re.compile(r"Business Telephone[:\s]+([\d\-() ]+)", re.I),
-}
+# CONFIRMED against a real REGISTER PDF (2026-09-16). This is a plain table
+# — NOT labeled fields — with columns:
+#   USDOT Number | Legal Business Name | Filing Date | Business Mailing
+#   Address | Company Officer | Business Telephone
+# repeated as a page-header row every page. A data row looks like:
+#   "5155245 TOAPANTA 09/15/2026 1056 N Ridgeway, Chicago, IL 60651 US
+#    Marco Toaquiza +1 (312) 487-7057"
+# with the company name (and sometimes address/officer) wrapping to a
+# following line when it's long — pdfplumber's plain extract_text() does
+# not reliably preserve column order for wrapped multi-line rows, so
+# address/officer are left to the SAFER enrichment step rather than
+# parsed here; only usdot/company_name/filing_date/phone (all on the
+# anchor line) are extracted with confidence.
+DATA_ROW_RE = re.compile(r"^(\d{6,8})\s+(.+?)\s+(\d{2}/\d{2}/\d{4})\s+(.*)$")
+PHONE_TAIL_RE = re.compile(r"(\+?1?\s?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})\s*$")
+# A continuation line is almost certainly just the company name wrapping
+# (e.g. "TRANSPORTATION LLC", "GROUP") when it's pure text with no digits —
+# a line WITH digits is address/zip overflow that got reordered by column
+# wrapping, which is unsafe to blindly merge into the name.
+NAME_CONTINUATION_RE = re.compile(r"^[A-Za-z .,&'\-]+$")
 
 
 def log(msg: str) -> None:
@@ -226,68 +238,85 @@ def download_pdf(url: str) -> bytes:
     return resp.content
 
 
-def parse_broker_block(block: str, broker_type: str) -> dict | None:
-    def extract(pattern: re.Pattern) -> str | None:
-        m = pattern.search(block)
-        return m.group(1).strip() if m else None
-
-    usdot = extract(FIELD_PATTERNS["usdot"])
-    legal_name = extract(FIELD_PATTERNS["legal_name"])
-    if not usdot or not legal_name:
-        return None
-
-    return {
-        "usdot": usdot,
-        "company_name": legal_name,
-        "filing_date": extract(FIELD_PATTERNS["filing_date"]),
-        "address": extract(FIELD_PATTERNS["address"]),
-        "officer": extract(FIELD_PATTERNS["officer"]),
-        "phone": extract(FIELD_PATTERNS["phone"]),
-        "broker_type": broker_type,
-    }
-
-
 def parse_pdf(pdf_bytes: bytes) -> list[dict]:
     """Extracts broker records from the two target sections only."""
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         full_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
 
+    lines = full_text.split("\n")
     records: list[dict] = []
     current_section: str | None = None
-    buffer: list[str] = []
 
-    def flush_buffer() -> None:
-        nonlocal buffer
-        if buffer and current_section:
-            record = parse_broker_block("\n".join(buffer), current_section)
-            if record:
-                records.append(record)
-        buffer = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        upper = stripped.upper()
 
-    for line in full_text.split("\n"):
-        stripped = line.strip().upper()
-
-        if SECTION_HEADERS["property"] in stripped:
-            flush_buffer()
+        if SECTION_HEADERS["property"] in upper:
             current_section = "property"
+            i += 1
             continue
-        if SECTION_HEADERS["household_goods"] in stripped:
-            flush_buffer()
+        if SECTION_HEADERS["household_goods"] in upper:
             current_section = "household_goods"
+            i += 1
             continue
-        # Any other all-caps section header (truckers, forwarders, passenger
-        # carriers, ...) ends our section until a broker header appears again
-        if stripped.isupper() and len(stripped) > 15 and "BROKER" not in stripped and current_section:
-            flush_buffer()
+        # Any other all-caps heading (a different entity type — e.g.
+        # "ENTERPRISE MOTOR CARRIER OF..." / "FREIGHT FORWARDER OF...",
+        # which also mention "PROPERTY (EXCEPT HOUSEHOLD GOODS)" but are
+        # NOT brokers) ends our section until a broker header reappears.
+        # Must exclude both data rows AND wrapped continuation/overflow
+        # lines: officer names / cities in this PDF are often ALL CAPS
+        # too (e.g. "...RASHID FAYEQ 510..."), and multi-line rows leave
+        # junk fragments like "CARRIERS LLC CA 94513-7505 US TAWFIQ
+        # RASHID" that are neither a real heading nor a new record start.
+        # Every real entity-type heading in this PDF contains " OF ".
+        if (
+            stripped.isupper()
+            and len(stripped) > 15
+            and "BROKER OF" not in upper
+            and " OF " in upper
+            and not stripped[:1].isdigit()
+        ):
             current_section = None
+            i += 1
             continue
 
         if current_section:
-            buffer.append(line)
-            if not line.strip() and any("USDOT" in b.upper() for b in buffer):
-                flush_buffer()
+            m = DATA_ROW_RE.match(stripped)
+            if m:
+                usdot, name, filing_date, rest = m.groups()
 
-    flush_buffer()
+                # Merge a pure-text continuation line (no digits) into the
+                # company name — it's almost always the name wrapping.
+                if i + 1 < len(lines):
+                    nxt = lines[i + 1].strip()
+                    nxt_upper = nxt.upper()
+                    is_section_header = (
+                        SECTION_HEADERS["property"] in nxt_upper
+                        or SECTION_HEADERS["household_goods"] in nxt_upper
+                    )
+                    if nxt and NAME_CONTINUATION_RE.match(nxt) and not is_section_header:
+                        name = f"{name} {nxt}"
+                        i += 1  # consumed the continuation line
+
+                name = re.sub(r"\s+US$", "", name).strip()
+                phone_match = PHONE_TAIL_RE.search(rest)
+
+                records.append({
+                    "usdot": usdot,
+                    "company_name": name,
+                    "filing_date": filing_date,
+                    # Address/officer aren't reliably parseable when a row
+                    # wraps (column order gets scrambled in plain text
+                    # extraction) — left for the SAFER enrichment step.
+                    "address": None,
+                    "officer": None,
+                    "phone": phone_match.group(1).strip() if phone_match else None,
+                    "broker_type": current_section,
+                })
+
+        i += 1
+
     return records
 
 
