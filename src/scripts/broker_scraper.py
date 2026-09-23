@@ -46,6 +46,14 @@ import os
 import re
 import sys
 import time
+
+# Windows' default console codepage (cp1252) can't encode characters this
+# script logs (→, —, …) — confirmed on a real run: it either crashed with
+# UnicodeEncodeError mid-step (making a successful step look like a failure)
+# or silently mangled them into "�". Force UTF-8 on stdout/stderr so log
+# output is always correct regardless of the host console's codepage.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
