@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CensusUpload } from "@/components/ingestion/census-upload"
 import { ScraperRunner } from "@/components/ingestion/scraper-runner"
+import { PdfUploadRunner } from "@/components/ingestion/pdf-upload-runner"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { triggerManualIngest, deleteIngestionLog } from "./actions"
@@ -215,6 +216,7 @@ export function IngestionLogClient({ logs: initialLogs, isAdmin, censusFileInfo 
 
       {isAdmin && <CensusUpload initialInfo={censusFileInfo} />}
       {isAdmin && <ScraperRunner onFinished={() => router.refresh()} />}
+      {isAdmin && <PdfUploadRunner onFinished={() => router.refresh()} />}
 
       <div className="rounded-lg border bg-card">
         {logs.length === 0 ? (

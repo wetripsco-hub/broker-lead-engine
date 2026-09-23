@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { spawn } from "child_process"
+import { randomUUID } from "crypto"
+import { mkdir, writeFile, unlink } from "fs/promises"
 import path from "path"
 import { createClient } from "@/lib/supabase/server"
 
-// This route spawns a local Python process (src/scripts/broker_scraper.py)
-// using Scrapling's StealthyFetcher, which needs a real Camoufox/Firefox
-// browser binary. Vercel's serverless functions have no Python runtime and
-// cannot install/run a browser binary, so this only works when Next.js and
-// the Python environment are running on the SAME machine — i.e. `next dev`
-// on your own computer, not the deployed Vercel app. Detect and refuse
-// early rather than let it fail confusingly mid-stream.
+// Same pipeline as /api/scrape/run (SAFER + MOTUS enrichment + Supabase
+// save), but sourced from a manually-uploaded REGISTER PDF instead of
+// auto-discovering it from motus.dot.gov — for when the automated PDF
+// discovery is blocked/down, or you already have the file. Same Vercel
+// restriction applies: local Python + browser environment only.
 const IS_VERCEL = Boolean(process.env.VERCEL)
 
 export async function POST(req: NextRequest) {
@@ -32,10 +32,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 })
   }
 
-  // Optional: which day's FMCSA register to fetch (YYYY-MM-DD). Defaults to
-  // "most recent available" in the Python script when omitted.
-  const body = await req.json().catch(() => ({}) as { date?: string })
-  const pdfDate = typeof body.date === "string" && body.date ? body.date : undefined
+  const formData = await req.formData()
+  const file = formData.get("file")
+  const pdfDate = formData.get("date")
+
+  if (!(file instanceof File) || file.type !== "application/pdf") {
+    return NextResponse.json({ error: "Upload a .pdf file" }, { status: 400 })
+  }
+
+  const uploadsDir = path.join(process.cwd(), "src", "scripts", "uploads")
+  await mkdir(uploadsDir, { recursive: true })
+  const pdfPath = path.join(uploadsDir, `${randomUUID()}.pdf`)
+  await writeFile(pdfPath, Buffer.from(await file.arrayBuffer()))
 
   const scriptPath = path.join(process.cwd(), "src", "scripts", "broker_scraper.py")
   const pythonBin = process.env.PYTHON_BIN || (process.platform === "win32" ? "python" : "python3")
@@ -46,7 +54,11 @@ export async function POST(req: NextRequest) {
     start(controller) {
       const child = spawn(pythonBin, [scriptPath], {
         cwd: process.cwd(),
-        env: { ...process.env, ...(pdfDate ? { PDF_DATE: pdfDate } : {}) },
+        env: {
+          ...process.env,
+          PDF_FILE_PATH: pdfPath,
+          ...(typeof pdfDate === "string" && pdfDate ? { PDF_DATE: pdfDate } : {}),
+        },
       })
 
       child.stdout.on("data", (chunk: Buffer) => {
@@ -66,6 +78,7 @@ export async function POST(req: NextRequest) {
       child.on("close", (code) => {
         controller.enqueue(encoder.encode(`[scraper] Process exited with code ${code}\n`))
         controller.close()
+        unlink(pdfPath).catch(() => {})
       })
     },
   })

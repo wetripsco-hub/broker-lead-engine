@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Bot, Play } from "lucide-react"
+import { FileUp, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
@@ -9,26 +9,30 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
+// Runs the exact same pipeline as ScraperRunner (SAFER + MOTUS enrichment +
+// Supabase save) but sourced from a manually-uploaded REGISTER PDF instead
+// of auto-discovering it from motus.dot.gov.
+export function PdfUploadRunner({ onFinished }: { onFinished: () => void }) {
   const [running, setRunning] = useState(false)
   const [lines, setLines] = useState<string[]>([])
   const [date, setDate] = useState(todayIso())
   const logRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  async function handleRun() {
+  async function handleFile(file: File) {
     setRunning(true)
     setLines([])
 
     try {
-      const res = await fetch("/api/scrape/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }),
-      })
+      const formData = new FormData()
+      formData.set("file", file)
+      formData.set("date", date)
+
+      const res = await fetch("/api/scrape/upload", { method: "POST", body: formData })
 
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({ error: "Unknown error" }))
-        toast.error(data.error ?? "Failed to start scraper")
+        toast.error(data.error ?? "Failed to process PDF")
         setRunning(false)
         return
       }
@@ -46,12 +50,13 @@ export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
         })
       }
 
-      toast.success(`Scraper run finished — register date ${date}`)
+      toast.success(`PDF processed — register date ${date}`)
       onFinished()
     } catch (err) {
-      toast.error(`Scraper error: ${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Upload error: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setRunning(false)
+      if (inputRef.current) inputRef.current.value = ""
     }
   }
 
@@ -60,12 +65,13 @@ export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <p className="text-sm font-medium flex items-center gap-1.5">
-            <Bot className="size-3.5" />
-            Broker scraper (Scrapling)
+            <FileUp className="size-3.5" />
+            Upload broker register PDF
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Runs locally only — needs `next dev` + Python on this machine. Won't work on the deployed
-            Vercel app.
+            Already have a REGISTER PDF from motus.dot.gov? Upload it here — runs the same
+            parse → SAFER → MOTUS enrichment → Supabase save pipeline as "Run scraper now",
+            without needing live discovery.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -82,11 +88,21 @@ export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
             size="sm"
             className="gap-2 shrink-0"
             disabled={running}
-            onClick={handleRun}
+            onClick={() => inputRef.current?.click()}
           >
-            <Play className="size-3.5" />
-            {running ? "Running…" : "Run scraper now"}
+            <Upload className="size-3.5" />
+            {running ? "Processing…" : "Upload PDF"}
           </Button>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleFile(file)
+            }}
+          />
         </div>
       </div>
 

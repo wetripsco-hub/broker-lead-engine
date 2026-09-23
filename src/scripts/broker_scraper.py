@@ -110,7 +110,7 @@ def log(msg: str) -> None:
 
 # ── Step 1: PDF discovery + parsing ─────────────────────────────────────────
 
-def find_latest_pdf_url() -> str:
+def find_latest_pdf_url(target_date: "date | None" = None) -> str:
     """
     motus.dot.gov's publications page is a client-rendered app backed by a
     PRIVATE S3 bucket (motus-document-storage-prod) — confirmed unsigned
@@ -118,6 +118,11 @@ def find_latest_pdf_url() -> str:
     (Daily_FMCSA_Publications/REGISTER{YYYYMMDD}.pdf) but only reachable via
     a short-lived (900s) pre-signed URL, so the URL must be captured live
     from the rendered page rather than constructed.
+
+    If target_date is given, the From/To range is narrowed to that single
+    day so the specific day's register is picked (rather than "whatever is
+    most recent"). Otherwise defaults to the last 7 days, picking the most
+    recent one available.
 
     Strategy, in order:
       (a) the pre-signed href might already be in the DOM once JS renders —
@@ -140,9 +145,12 @@ def find_latest_pdf_url() -> str:
         # and getting nothing back. Fill both dates explicitly (8-day max
         # window per the page's own note) before checking the box and
         # clicking Apply.
-        today = date.today()
-        from_date = (today - timedelta(days=7)).strftime("%m/%d/%Y")
-        to_date = today.strftime("%m/%d/%Y")
+        if target_date is not None:
+            from_date = to_date = target_date.strftime("%m/%d/%Y")
+        else:
+            today = date.today()
+            from_date = (today - timedelta(days=7)).strftime("%m/%d/%Y")
+            to_date = today.strftime("%m/%d/%Y")
 
         try:
             date_inputs = page.locator("input[placeholder='MM/DD/YYYY']")
@@ -624,11 +632,21 @@ def main() -> None:
         log("ERROR: NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing from .env.local")
         sys.exit(1)
 
+    # PDF_DATE (YYYY-MM-DD, optional): which day's register to fetch from
+    # motus.dot.gov. Defaults to "most recent available" when unset.
+    # PDF_FILE_PATH (optional): skip discovery/download entirely and parse
+    # this local PDF instead — set by the "Upload PDF" flow in the UI,
+    # which runs this exact same pipeline (SAFER + MOTUS enrichment +
+    # Supabase save) against a manually-uploaded REGISTER PDF.
+    pdf_date_str = os.environ.get("PDF_DATE")
+    pdf_file_path = os.environ.get("PDF_FILE_PATH")
+    run_date_str = pdf_date_str or date.today().isoformat()
+
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     log_row = (
         supabase.table("daily_ingestion_log")
-        .insert({"run_date": date.today().isoformat(), "status": "running"})
+        .insert({"run_date": run_date_str, "status": "running"})
         .execute()
     )
     log_id = log_row.data[0]["id"]
@@ -638,10 +656,21 @@ def main() -> None:
     emails_found = 0
 
     try:
-        log("Fetching latest FMCSA daily publication index…")
-        pdf_url = find_latest_pdf_url()
-        log(f"Downloading {pdf_url}")
-        pdf_bytes = download_pdf(pdf_url)
+        if pdf_file_path:
+            log(f"Using uploaded PDF: {pdf_file_path}")
+            pdf_bytes = Path(pdf_file_path).read_bytes()
+        else:
+            target_date = (
+                datetime.strptime(pdf_date_str, "%Y-%m-%d").date() if pdf_date_str else None
+            )
+            log(
+                f"Fetching FMCSA daily publication for {pdf_date_str}…"
+                if target_date
+                else "Fetching latest FMCSA daily publication index…"
+            )
+            pdf_url = find_latest_pdf_url(target_date)
+            log(f"Downloading {pdf_url}")
+            pdf_bytes = download_pdf(pdf_url)
 
         log("Parsing PDF (broker sections only — property + household goods)…")
         records = parse_pdf(pdf_bytes)
