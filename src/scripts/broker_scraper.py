@@ -34,7 +34,7 @@ import os
 import re
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote_plus, urljoin, urlparse
 
@@ -105,11 +105,24 @@ def find_latest_pdf_url() -> str:
 
         # This is a Material-UI React form: a document-type CHECKBOX
         # ("FMCSA Daily Register"), a From/To date range, and an Apply
-        # button. The prior attempt clicked Apply without ever checking the
-        # box — the results grid rendered but stayed empty, which matches
-        # that: no document type was selected, so there was nothing to
-        # return. Check the box, then click Apply, then give the results a
-        # real amount of time to load before giving up.
+        # button. The From/To inputs came back empty (value="") in this
+        # automated session — unlike a real browser, nothing auto-fills a
+        # default range here, so Apply was submitting an empty date range
+        # and getting nothing back. Fill both dates explicitly (8-day max
+        # window per the page's own note) before checking the box and
+        # clicking Apply.
+        today = date.today()
+        from_date = (today - timedelta(days=7)).strftime("%m/%d/%Y")
+        to_date = today.strftime("%m/%d/%Y")
+
+        try:
+            date_inputs = page.locator("input[placeholder='MM/DD/YYYY']")
+            date_inputs.nth(0).fill(from_date, timeout=5000)
+            date_inputs.nth(1).fill(to_date, timeout=5000)
+            log(f"  set date range {from_date} → {to_date}")
+        except Exception as e:  # noqa: BLE001
+            log(f"  could not fill date range: {e}")
+
         try:
             page.locator("label:has-text('FMCSA Daily Register')").first.click(timeout=5000)
             log("  checked 'FMCSA Daily Register' checkbox")
