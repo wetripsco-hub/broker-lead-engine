@@ -40,8 +40,12 @@ def main() -> None:
         .select("id, dot_number, company_name, email, contact_name")
         .execute()
     )
-    rows = [r for r in result.data if r.get("dot_number") and not r.get("email")]
-    log(f"{len(rows)} brokers missing an email — backfilling from MOTUS account pages")
+    rows = [
+        r
+        for r in result.data
+        if r.get("dot_number") and (not r.get("email") or not r.get("contact_name"))
+    ]
+    log(f"{len(rows)} brokers missing an email or contact name — backfilling from MOTUS account pages")
 
     updated = 0
     for i, row in enumerate(rows, 1):
