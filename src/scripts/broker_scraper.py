@@ -103,6 +103,18 @@ def find_latest_pdf_url() -> str:
     def page_action(page):
         page.wait_for_load_state("networkidle")
 
+        # This is a Material-UI React form (checkboxes for document type,
+        # a From/To date range, an "Apply" button). The results list
+        # (the actual clickable date links) may only render after Apply is
+        # clicked — click it explicitly rather than assume default results
+        # are already present, then give the results a moment to render.
+        try:
+            page.locator("button:has-text('Apply')").first.click(timeout=5000)
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(2000)
+        except Exception:  # noqa: BLE001 — proceed with whatever is already rendered
+            pass
+
         # (a) the pre-signed href might already be in the DOM once JS renders
         for el in page.locator("a").all():
             href = el.get_attribute("href") or ""
@@ -141,7 +153,10 @@ def find_latest_pdf_url() -> str:
         # to a local file for inspection instead of guessing blind again.
         try:
             full_html = page.content()
-            idx = full_html.find("Daily Register")
+            # "Daily Register" also appears as a checkbox label earlier in
+            # the form — the results heading (with the actual date links)
+            # is the LAST occurrence, if results rendered at all.
+            idx = full_html.rfind("Daily Register")
             snippet = full_html[max(0, idx - 200): idx + 3000] if idx != -1 else full_html[:3000]
             debug_path = REPO_ROOT / "src" / "scripts" / "debug_page.html"
             debug_path.write_text(full_html, encoding="utf-8")
