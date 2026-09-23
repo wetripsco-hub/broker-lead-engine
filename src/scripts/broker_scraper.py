@@ -439,14 +439,16 @@ def motus_account_lookup(usdot: str) -> dict:
     def page_action(page):
         page.wait_for_load_state("networkidle")
         # The Company Officials grid (header row AND data) mounts together
-        # as one lazy-loaded unit, well after "networkidle" fires — CONFIRMED
-        # on a real page it can take ~8s of grey skeleton placeholder before
-        # "Official Name" actually appears. Wait for that literal text
-        # directly (not the grid role, which the skeleton also carries) so
-        # this only proceeds once real data has landed. If a broker genuinely
-        # has zero officials this just times out harmlessly and we move on.
+        # as one lazy-loaded unit, well after "networkidle" fires — its
+        # backing API call is slow and its latency varies a lot. CONFIRMED
+        # on real pages: one broker's grid appeared after ~8s, another after
+        # ~20s, both showing a grey skeleton placeholder the whole time. Wait
+        # for the literal "Official Name" text directly (not the grid role,
+        # which the skeleton also carries) with a generous timeout so this
+        # only proceeds once real data has landed. If a broker genuinely has
+        # zero officials this just times out harmlessly and we move on.
         try:
-            page.wait_for_selector("text=Official Name", timeout=15000)
+            page.wait_for_selector("text=Official Name", timeout=30000)
         except Exception:  # noqa: BLE001
             pass
         page.wait_for_timeout(500)
