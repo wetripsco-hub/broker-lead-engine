@@ -46,3 +46,4 @@ __pycache__/
 .venv/
 venv/
 src/scripts/debug_page.html
+src/scripts/debug_pdf_text.txt

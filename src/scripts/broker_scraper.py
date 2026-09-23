@@ -450,6 +450,19 @@ def main() -> None:
         fetched = len(records)
         log(f"Found {fetched} broker records")
 
+        if fetched == 0:
+            # FIELD_PATTERNS/SECTION_HEADERS were unverified guesses — dump
+            # the raw extracted text so they can be corrected against the
+            # PDF's real layout instead of guessing again.
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as _pdf:
+                raw_text = "\n".join(p.extract_text() or "" for p in _pdf.pages)
+            debug_path = REPO_ROOT / "src" / "scripts" / "debug_pdf_text.txt"
+            debug_path.write_text(raw_text, encoding="utf-8")
+            log(f"  0 records — raw PDF text saved to {debug_path} ({len(raw_text)} chars)")
+            has_property = SECTION_HEADERS["property"] in raw_text.upper()
+            has_hhg = SECTION_HEADERS["household_goods"] in raw_text.upper()
+            log(f"  section header found — property: {has_property}, household_goods: {has_hhg}")
+
         existing = get_existing_usdots(supabase)
         new_records = [r for r in records if r["usdot"] not in existing]
         log(f"{len(new_records)} new USDOT numbers ({fetched - len(new_records)} already processed, skipped)")
