@@ -36,7 +36,7 @@ import sys
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import quote_plus, urljoin, urlparse
+from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 
 import pdfplumber
 import requests
@@ -55,6 +55,10 @@ SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 MOTUS_INDEX_URL = "https://motus.dot.gov/customer/daily-fmcsa-publications"
 SAFER_SNAPSHOT_URL = "https://safer.fmcsa.dot.gov/CompanySnapshot.aspx?USDOT={usdot}"
 SAFER_DELAY_SECONDS = 2
+# Google rate-limits/CAPTCHAs aggressively with no pacing between searches
+# (confirmed: 429s starting a few requests in during a real run). This is
+# on top of SAFER_DELAY_SECONDS, i.e. real spacing between brokers.
+EMAIL_SEARCH_DELAY_SECONDS = 6
 
 SECTION_HEADERS = {
     "property": "BROKER OF PROPERTY (EXCEPT HOUSEHOLD GOODS)",
@@ -371,8 +375,20 @@ def find_email(
     name_tokens = [t.lower() for t in re.split(r"\W+", company_name) if len(t) > 3]
 
     for href in links:
-        if not href.startswith("http") or "google.com" in href:
+        if not href.startswith("http"):
             continue
+        if "google.com/url" in href:
+            # Google sometimes wraps organic results as a /url?q=<real>
+            # redirect rather than a direct href — unwrap it instead of
+            # discarding it outright.
+            qs = parse_qs(urlparse(href).query)
+            real = qs.get("q", [None])[0]
+            if not real:
+                continue
+            href = real
+        elif "google.com" in href:
+            continue  # other google.com-internal links (images, maps, ...)
+
         domain = urlparse(href).netloc.lower()
         if any(tok in domain for tok in name_tokens):
             website = href
@@ -509,6 +525,7 @@ def main() -> None:
             city = parts[-2] if len(parts) >= 2 else None
             state = parts[-1] if parts else None
 
+            time.sleep(EMAIL_SEARCH_DELAY_SECONDS)
             email, confidence = find_email(record["company_name"], city, state, record.get("officer"))
             if confidence == "found":
                 emails_found += 1
