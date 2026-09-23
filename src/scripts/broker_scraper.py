@@ -137,6 +137,19 @@ def find_latest_pdf_url() -> str:
             except Exception:  # noqa: BLE001 — try the next candidate
                 continue
 
+        # Nothing matched — dump the rendered HTML around "Daily Register"
+        # to a local file for inspection instead of guessing blind again.
+        try:
+            full_html = page.content()
+            idx = full_html.find("Daily Register")
+            snippet = full_html[max(0, idx - 200): idx + 3000] if idx != -1 else full_html[:3000]
+            debug_path = REPO_ROOT / "src" / "scripts" / "debug_page.html"
+            debug_path.write_text(full_html, encoding="utf-8")
+            captured["debug_snippet"] = snippet
+            captured["debug_path"] = str(debug_path)
+        except Exception:  # noqa: BLE001
+            pass
+
         return page
 
     res = StealthyFetcher.fetch(
@@ -147,6 +160,13 @@ def find_latest_pdf_url() -> str:
 
     if "url" in captured:
         return captured["url"]
+
+    if "debug_snippet" in captured:
+        raise RuntimeError(
+            "Could not find or trigger the FMCSA Daily Register PDF link. "
+            f"Full page HTML saved to {captured['debug_path']} — share the "
+            f"snippet below (or that file) to fix this:\n{captured['debug_snippet']}"
+        )
 
     all_links = res.css("a::attr(href)").getall()
     sample = "\n".join(f"  {h}" for h in all_links[:60])

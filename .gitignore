@@ -45,3 +45,4 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+src/scripts/debug_page.html
