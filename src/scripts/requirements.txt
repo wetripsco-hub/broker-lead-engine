@@ -1,6 +1,7 @@
 # pip install -r src/scripts/requirements.txt
-# then: scrapling install   (downloads the Camoufox browser StealthyFetcher needs)
-scrapling>=0.4
+#
+# No browser needed: every MOTUS step is a plain JSON API call now, so
+# Scrapling/Camoufox are no longer a dependency.
 requests>=2.31
 pdfplumber>=0.11
 python-dotenv>=1.0

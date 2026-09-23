@@ -8,8 +8,13 @@ Supabase. The existing `on_broker_inserted` DB trigger auto-creates a
 'new'-stage lead for each.
 
 STATUS (verified against real runs, 2026-09-23):
-  - PDF discovery + download: WORKING (captures the live pre-signed S3
-    URL via browser automation — see find_latest_pdf_url()).
+  - PDF discovery + download: WORKING, via MOTUS's own public JSON
+    API (no auth, ~450ms) — GET
+    /api/report/getSignedUrlByTypeAndDateRange/REGISTER/{start}/{end}
+    returns the pre-signed S3 URL for every register published in a
+    date range. Replaced driving the publications page's Material-UI
+    form in a browser. Dates with no publication are simply absent
+    from the response: FMCSA only publishes on business days.
   - PDF parsing: WORKING — verified 33/33 property-broker rows parsed
     correctly from a real REGISTER PDF.
   - SAFER enrichment: REMOVED. It cost ~4s per broker (fetch plus
@@ -33,9 +38,10 @@ STATUS (verified against real runs, 2026-09-23):
     than kept unused. If MOTUS ever gets locked down, a paid provider
     (Hunter.io, SerpAPI, ...) would need wiring in here instead.
 
-RUN LOCALLY ONLY — see the architecture note in app/api/scrape/run/route.ts
-for why this cannot run on Vercel (no Python runtime, no browser binary
-for Scrapling's StealthyFetcher, and FMCSA blocks cloud IPs).
+RUN LOCALLY ONLY — Vercel has no Python runtime; see the architecture
+note in app/api/scrape/run/route.ts. Note that the browser requirement
+is gone: every step is now a plain HTTP call, so this could be ported to
+TypeScript and run on Vercel Cron if that's ever wanted.
 
 Usage:
     pip install -r src/scripts/requirements.txt
@@ -65,7 +71,6 @@ from pathlib import Path
 import pdfplumber
 import requests
 from dotenv import load_dotenv
-from scrapling.fetchers import StealthyFetcher
 from supabase import Client, create_client
 
 # ── Config ───────────────────────────────────────────────────────────────
@@ -76,9 +81,12 @@ load_dotenv(REPO_ROOT / ".env.local")
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
-MOTUS_INDEX_URL = "https://motus.dot.gov/customer/daily-fmcsa-publications"
-# The JSON API behind the /customer/{usdot}/account page — see
-# motus_account_lookup() for why we call this directly.
+# The JSON APIs behind MOTUS's own pages — see find_register_pdf() and
+# motus_account_lookup() for why we call these directly instead of
+# rendering the pages that call them.
+MOTUS_REPORTS_URL = (
+    "https://motus.dot.gov/api/report/getSignedUrlByTypeAndDateRange/REGISTER/{start}/{end}"
+)
 MOTUS_API_URL = "https://motus.dot.gov/api/carriers/{usdot}"
 MOTUS_USER_AGENT = "Mozilla/5.0"
 # The MOTUS API answers in ~0.4s, so this is politeness pacing for a
@@ -119,152 +127,69 @@ def log(msg: str) -> None:
 
 # ── Step 1: PDF discovery + parsing ─────────────────────────────────────────
 
-def find_latest_pdf_url(target_date: "date | None" = None) -> str:
+def list_registers(start: "date", end: "date") -> list[dict]:
     """
-    motus.dot.gov's publications page is a client-rendered app backed by a
-    PRIVATE S3 bucket (motus-document-storage-prod) — confirmed unsigned
-    requests return 403. Files are named predictably
-    (Daily_FMCSA_Publications/REGISTER{YYYYMMDD}.pdf) but only reachable via
-    a short-lived (900s) pre-signed URL, so the URL must be captured live
-    from the rendered page rather than constructed.
+    Every daily register published between start and end (inclusive), as
+    [{"date": "YYYY-MM-DD", "url": <pre-signed S3 URL>}], oldest first.
 
-    If target_date is given, the From/To range is narrowed to that single
-    day so the specific day's register is picked (rather than "whatever is
-    most recent"). Otherwise defaults to the last 7 days, picking the most
-    recent one available.
-
-    Strategy, in order:
-      (a) the pre-signed href might already be in the DOM once JS renders —
-          scan all links for the REGISTER filename pattern.
-      (b) otherwise, click the most recent date link under "FMCSA Daily
-          Register" and capture the resulting network request's URL.
+    Dates with no publication are simply absent from the response — FMCSA
+    only publishes on business days, so weekends and federal holidays have
+    no register at all.
     """
-    import re as _re
-
-    captured: dict[str, str] = {}
-
-    def page_action(page):
-        page.wait_for_load_state("networkidle")
-
-        # This is a Material-UI React form: a document-type CHECKBOX
-        # ("FMCSA Daily Register"), a From/To date range, and an Apply
-        # button. The From/To inputs came back empty (value="") in this
-        # automated session — unlike a real browser, nothing auto-fills a
-        # default range here, so Apply was submitting an empty date range
-        # and getting nothing back. Fill both dates explicitly (8-day max
-        # window per the page's own note) before checking the box and
-        # clicking Apply.
-        if target_date is not None:
-            from_date = to_date = target_date.strftime("%m/%d/%Y")
-        else:
-            today = date.today()
-            from_date = (today - timedelta(days=7)).strftime("%m/%d/%Y")
-            to_date = today.strftime("%m/%d/%Y")
-
-        try:
-            date_inputs = page.locator("input[placeholder='MM/DD/YYYY']")
-            date_inputs.nth(0).fill(from_date, timeout=5000)
-            date_inputs.nth(1).fill(to_date, timeout=5000)
-            log(f"  set date range {from_date} → {to_date}")
-        except Exception as e:  # noqa: BLE001
-            log(f"  could not fill date range: {e}")
-
-        try:
-            page.locator("label:has-text('FMCSA Daily Register')").first.click(timeout=5000)
-            log("  checked 'FMCSA Daily Register' checkbox")
-        except Exception as e:  # noqa: BLE001
-            log(f"  could not check the document-type checkbox: {e}")
-
-        try:
-            page.locator("button:has-text('Apply')").first.click(timeout=5000)
-            log("  clicked Apply button")
-        except Exception as e:  # noqa: BLE001 — proceed with whatever is already rendered
-            log(f"  could not click Apply button: {e}")
-
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(5000)
-
-        # (a) the pre-signed href might already be in the DOM once JS renders
-        for el in page.locator("a").all():
-            href = el.get_attribute("href") or ""
-            if "REGISTER" in href and ".pdf" in href:
-                captured["url"] = href
-                return page
-
-        # (b) find clickable-looking elements whose visible text is a bare
-        # date (MM/DD/YYYY). Matching is done in Python (not via Playwright's
-        # own regex locators — patchright's regex-to-selector conversion
-        # chokes on "\d" patterns) to sidestep that entirely.
-        date_re = _re.compile(r"^\d{2}/\d{2}/\d{4}$")
-        candidates = []
-        for el in page.locator("a, button, span, div").all():
-            try:
-                text = el.inner_text().strip()
-            except Exception:  # noqa: BLE001
-                continue
-            if date_re.match(text):
-                candidates.append(el)
-
-        # The "FMCSA Daily Register" section's links appear first in the
-        # DOM, so try the last date-text element first and walk backwards.
-        for el in reversed(candidates):
-            try:
-                with page.expect_response(
-                    lambda r: "REGISTER" in r.url and ".pdf" in r.url, timeout=8000
-                ) as resp_info:
-                    el.click()
-                captured["url"] = resp_info.value.url
-                return page
-            except Exception:  # noqa: BLE001 — try the next candidate
-                continue
-
-        # Nothing matched — dump HTML around the first real date pattern
-        # found anywhere in the page (not the word "Daily Register", which
-        # only ever appears once, as the checkbox label) to a local file.
-        try:
-            full_html = page.content()
-            debug_path = REPO_ROOT / "src" / "scripts" / "debug_page.html"
-            debug_path.write_text(full_html, encoding="utf-8")
-            captured["debug_path"] = str(debug_path)
-
-            date_match = _re.search(r"\d{2}/\d{2}/202\d", full_html)
-            if date_match:
-                idx = date_match.start()
-                captured["debug_snippet"] = full_html[max(0, idx - 500): idx + 1000]
-                captured["debug_note"] = f"Found date text at offset {idx}"
-            else:
-                captured["debug_snippet"] = full_html[:2000]
-                captured["debug_note"] = "No MM/DD/YYYY-shaped text found anywhere in the rendered page"
-        except Exception:  # noqa: BLE001
-            pass
-
-        return page
-
-    res = StealthyFetcher.fetch(
-        MOTUS_INDEX_URL, headless=True, network_idle=True, page_action=page_action
+    resp = requests.get(
+        MOTUS_REPORTS_URL.format(start=start.isoformat(), end=end.isoformat()),
+        timeout=30,
+        headers={"User-Agent": MOTUS_USER_AGENT, "Accept": "application/json"},
     )
-    if res.status != 200:
-        raise RuntimeError(f"Failed to load {MOTUS_INDEX_URL}: HTTP {res.status}")
+    resp.raise_for_status()
+    entries = resp.json().get("Register") or []
+    return sorted(
+        ({"date": e["date"], "url": e["url"]} for e in entries if e.get("url")),
+        key=lambda e: e["date"],
+    )
 
-    if "url" in captured:
-        return captured["url"]
 
-    if "debug_snippet" in captured:
+def find_register_pdf(target_date: "date | None" = None) -> tuple[str, str]:
+    """
+    Returns (register_date, pdf_url) for the requested day, or for the most
+    recent published day when target_date is None.
+
+    Uses the same endpoint the publications page itself calls:
+    GET /api/report/getSignedUrlByTypeAndDateRange/REGISTER/{start}/{end},
+    public and no auth. This replaced driving that page's Material-UI form
+    in a browser (fill both date fields, tick the document-type checkbox,
+    click Apply, then intercept the download request) — the endpoint hands
+    back the same pre-signed S3 URLs directly in ~450ms.
+
+    The S3 bucket itself is private, so the URL still has to come from
+    MOTUS rather than being constructed; the signature expires in 900s,
+    which is plenty since we download immediately.
+    """
+    if target_date is not None:
+        registers = list_registers(target_date, target_date)
+        if registers:
+            return registers[0]["date"], registers[0]["url"]
+
+        # Nothing published that day. Look around it so the error can say
+        # which dates DO work instead of just failing — the usual cause is
+        # picking a weekend or a federal holiday.
+        nearby = list_registers(target_date - timedelta(days=7), target_date + timedelta(days=2))
+        available = ", ".join(r["date"] for r in nearby) or "none in the surrounding week"
         raise RuntimeError(
-            "Could not find or trigger the FMCSA Daily Register PDF link. "
-            f"{captured.get('debug_note', '')} Full page HTML saved to "
-            f"{captured['debug_path']} — share the snippet below (or that "
-            f"file) to fix this:\n{captured['debug_snippet']}"
+            f"FMCSA published no daily register for {target_date.isoformat()} "
+            f"({target_date.strftime('%A')}) — registers only exist for business "
+            f"days. Dates near it that do have one: {available}"
         )
 
-    all_links = res.css("a::attr(href)").getall()
-    sample = "\n".join(f"  {h}" for h in all_links[:60])
-    raise RuntimeError(
-        "Could not find or trigger the FMCSA Daily Register PDF link. "
-        f"Links on page after render:\n{sample}\n"
-        "Share this output to adjust find_latest_pdf_url()."
-    )
-
+    today = date.today()
+    registers = list_registers(today - timedelta(days=7), today)
+    if not registers:
+        raise RuntimeError(
+            f"FMCSA published no daily register between "
+            f"{(today - timedelta(days=7)).isoformat()} and {today.isoformat()}"
+        )
+    latest = registers[-1]
+    return latest["date"], latest["url"]
 
 def download_pdf(url: str) -> bytes:
     resp = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
@@ -728,12 +653,13 @@ def main() -> None:
                 datetime.strptime(pdf_date_str, "%Y-%m-%d").date() if pdf_date_str else None
             )
             log(
-                f"Fetching FMCSA daily publication for {pdf_date_str}…"
+                f"Looking up the FMCSA daily register for {pdf_date_str}…"
                 if target_date
-                else "Fetching latest FMCSA daily publication index…"
+                else "Looking up the most recent FMCSA daily register…"
             )
-            pdf_url = find_latest_pdf_url(target_date)
-            log(f"Downloading {pdf_url}")
+            register_date, pdf_url = find_register_pdf(target_date)
+            run_date_str = register_date
+            log(f"Downloading the {register_date} register…")
             pdf_bytes = download_pdf(pdf_url)
 
         log("Parsing PDF (broker sections only — property + household goods)…")
@@ -812,6 +738,9 @@ def main() -> None:
         supabase.table("daily_ingestion_log").update(
             {
                 "status": "success",
+                # The register we actually got may not be the requested
+                # date (the "latest available" path picks its own).
+                "run_date": run_date_str,
                 "fetched_count": fetched,
                 "new_count": inserted,
                 "updated_count": 0,

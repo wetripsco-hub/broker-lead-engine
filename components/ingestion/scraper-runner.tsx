@@ -9,10 +9,18 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
 
+// FMCSA only publishes a register on business days, so defaulting the
+// picker to a Saturday or Sunday would guarantee a failed run.
+function lastWeekdayIso() {
+  const d = new Date()
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
 export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
   const [running, setRunning] = useState(false)
   const [lines, setLines] = useState<string[]>([])
-  const [date, setDate] = useState(todayIso())
+  const [date, setDate] = useState(lastWeekdayIso())
   const logRef = useRef<HTMLDivElement>(null)
 
   async function handleRun() {

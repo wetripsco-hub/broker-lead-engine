@@ -3,13 +3,13 @@ import { spawn } from "child_process"
 import path from "path"
 import { createClient } from "@/lib/supabase/server"
 
-// This route spawns a local Python process (src/scripts/broker_scraper.py)
-// using Scrapling's StealthyFetcher, which needs a real Camoufox/Firefox
-// browser binary. Vercel's serverless functions have no Python runtime and
-// cannot install/run a browser binary, so this only works when Next.js and
-// the Python environment are running on the SAME machine — i.e. `next dev`
-// on your own computer, not the deployed Vercel app. Detect and refuse
-// early rather than let it fail confusingly mid-stream.
+// This route spawns a local Python process (src/scripts/broker_scraper.py).
+// Vercel's serverless functions have no Python runtime, so this only works
+// when Next.js and Python run on the SAME machine — i.e. `next dev` on your
+// own computer, not the deployed app. Detect and refuse early rather than
+// let it fail confusingly mid-stream. (The scraper no longer needs a
+// browser — every step is a plain HTTP call — so porting it to TypeScript
+// would let it run on Vercel Cron.)
 const IS_VERCEL = Boolean(process.env.VERCEL)
 
 export async function POST(req: NextRequest) {
