@@ -103,18 +103,27 @@ def find_latest_pdf_url() -> str:
     def page_action(page):
         page.wait_for_load_state("networkidle")
 
-        # This is a Material-UI React form (checkboxes for document type,
-        # a From/To date range, an "Apply" button). The results list
-        # (the actual clickable date links) may only render after Apply is
-        # clicked — click it explicitly rather than assume default results
-        # are already present, then give the results a moment to render.
+        # This is a Material-UI React form: a document-type CHECKBOX
+        # ("FMCSA Daily Register"), a From/To date range, and an Apply
+        # button. The prior attempt clicked Apply without ever checking the
+        # box — the results grid rendered but stayed empty, which matches
+        # that: no document type was selected, so there was nothing to
+        # return. Check the box, then click Apply, then give the results a
+        # real amount of time to load before giving up.
+        try:
+            page.locator("label:has-text('FMCSA Daily Register')").first.click(timeout=5000)
+            log("  checked 'FMCSA Daily Register' checkbox")
+        except Exception as e:  # noqa: BLE001
+            log(f"  could not check the document-type checkbox: {e}")
+
         try:
             page.locator("button:has-text('Apply')").first.click(timeout=5000)
             log("  clicked Apply button")
-            page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(2000)
         except Exception as e:  # noqa: BLE001 — proceed with whatever is already rendered
             log(f"  could not click Apply button: {e}")
+
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(5000)
 
         # (a) the pre-signed href might already be in the DOM once JS renders
         for el in page.locator("a").all():
