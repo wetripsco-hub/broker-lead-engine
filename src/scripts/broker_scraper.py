@@ -82,43 +82,68 @@ def log(msg: str) -> None:
 # ── Step 1: PDF discovery + parsing ─────────────────────────────────────────
 
 def find_latest_pdf_url() -> str:
-    # This page renders its content via JS (a plain HTTP fetch found zero
-    # anchor tags at all) — use the real-browser StealthyFetcher instead of
-    # the static Fetcher so client-side rendering actually happens.
-    res = StealthyFetcher.fetch(MOTUS_INDEX_URL, headless=True, network_idle=True)
+    """
+    motus.dot.gov's publications page is a client-rendered app backed by a
+    PRIVATE S3 bucket (motus-document-storage-prod) — confirmed unsigned
+    requests return 403. Files are named predictably
+    (Daily_FMCSA_Publications/REGISTER{YYYYMMDD}.pdf) but only reachable via
+    a short-lived (900s) pre-signed URL, so the URL must be captured live
+    from the rendered page rather than constructed.
+
+    Strategy, in order:
+      (a) the pre-signed href might already be in the DOM once JS renders —
+          scan all links for the REGISTER filename pattern.
+      (b) otherwise, click the most recent date link under "FMCSA Daily
+          Register" and capture the resulting network request's URL.
+    """
+    import re as _re
+
+    captured: dict[str, str] = {}
+
+    def page_action(page):
+        page.wait_for_load_state("networkidle")
+
+        links = page.locator("a")
+        for i in range(links.count()):
+            href = links.nth(i).get_attribute("href") or ""
+            if "REGISTER" in href and ".pdf" in href:
+                captured["url"] = href
+                return page
+
+        # Fall back to clicking date links (text like "09/23/2026") — the
+        # "FMCSA Daily Register" section's links appear first in the DOM,
+        # so try the last date link first and walk backwards.
+        date_links = page.get_by_role("link", name=_re.compile(r"^\d{2}/\d{2}/\d{4}$"))
+        count = date_links.count()
+        for idx in range(count - 1, -1, -1):
+            try:
+                with page.expect_response(
+                    lambda r: "REGISTER" in r.url and ".pdf" in r.url, timeout=8000
+                ) as resp_info:
+                    date_links.nth(idx).click()
+                captured["url"] = resp_info.value.url
+                return page
+            except Exception:  # noqa: BLE001 — try the next link
+                continue
+
+        return page
+
+    res = StealthyFetcher.fetch(
+        MOTUS_INDEX_URL, headless=True, network_idle=True, page_action=page_action
+    )
     if res.status != 200:
         raise RuntimeError(f"Failed to load {MOTUS_INDEX_URL}: HTTP {res.status}")
 
-    # Primary guess: a direct <a href="....pdf"> link
-    pdf_links = res.css("a[href$='.pdf']::attr(href)").getall()
+    if "url" in captured:
+        return captured["url"]
 
-    # Fallback: some FMCSA pages serve PDFs via a download/redirect endpoint
-    # without a literal ".pdf" in the href (e.g. "?file=..." or "/download/").
-    if not pdf_links:
-        all_links = res.css("a::attr(href)").getall()
-        pdf_links = [
-            href for href in all_links
-            if href and ("pdf" in href.lower() or "download" in href.lower())
-        ]
-
-    if not pdf_links:
-        # Couldn't find anything — dump every link on the page so the real
-        # structure can be inspected instead of guessing again blind.
-        all_links = res.css("a::attr(href)").getall()
-        sample = "\n".join(f"  {h}" for h in all_links[:60])
-        detail = f"Found {len(all_links)} total links; first 60:\n{sample}"
-
-        if not all_links:
-            # Even with JS rendering, zero links — likely an auth wall,
-            # iframe, or a click-to-expand UI. Dump visible page text instead.
-            text_sample = res.get_all_text()[:1500]
-            detail = f"Zero links even after JS render. Page text sample:\n{text_sample}"
-
-        raise RuntimeError(
-            f"No PDF links found on the motus.dot.gov publications page. {detail}\n"
-            "Share this output to fix find_latest_pdf_url()."
-        )
-    return urljoin(MOTUS_INDEX_URL, pdf_links[0])
+    all_links = res.css("a::attr(href)").getall()
+    sample = "\n".join(f"  {h}" for h in all_links[:60])
+    raise RuntimeError(
+        "Could not find or trigger the FMCSA Daily Register PDF link. "
+        f"Links on page after render:\n{sample}\n"
+        "Share this output to adjust find_latest_pdf_url()."
+    )
 
 
 def download_pdf(url: str) -> bytes:
