@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# python (src/scripts/broker_scraper.py)
+__pycache__/
+*.pyc
+.venv/
+venv/

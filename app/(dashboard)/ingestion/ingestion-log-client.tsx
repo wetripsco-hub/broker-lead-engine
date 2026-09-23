@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { ChevronDown, ChevronRight, RefreshCw, CheckCircle, XCircle, Loader2, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CensusUpload } from "@/components/ingestion/census-upload"
+import { ScraperRunner } from "@/components/ingestion/scraper-runner"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { triggerManualIngest, deleteIngestionLog } from "./actions"
 import type { CensusFileInfo } from "./upload-actions"
@@ -166,6 +168,9 @@ export function IngestionLogClient({ logs: initialLogs, isAdmin, censusFileInfo 
   const [logs, setLogs] = useState(initialLogs)
   const [isPending, startTransition] = useTransition()
   const [result, setResult] = useState<string | null>(null)
+  const router = useRouter()
+
+  useEffect(() => setLogs(initialLogs), [initialLogs])
 
   function handleDeleted(id: string) {
     setLogs((prev) => prev.filter((l) => l.id !== id))
@@ -209,6 +214,7 @@ export function IngestionLogClient({ logs: initialLogs, isAdmin, censusFileInfo 
       )}
 
       {isAdmin && <CensusUpload initialInfo={censusFileInfo} />}
+      {isAdmin && <ScraperRunner onFinished={() => router.refresh()} />}
 
       <div className="rounded-lg border bg-card">
         {logs.length === 0 ? (

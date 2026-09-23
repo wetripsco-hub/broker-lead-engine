@@ -48,7 +48,7 @@ export interface Database {
       brokers: {
         Row: {
           id: string
-          mc_number: string
+          mc_number: string | null
           dot_number: string | null
           company_name: string
           contact_name: string | null
@@ -62,12 +62,14 @@ export interface Database {
           authority_status: string | null
           registration_date: string | null
           ingestion_run_id: string | null
+          broker_type: "property" | "household_goods" | null
+          email_confidence: "found" | "guessed" | "not_found" | null
           first_seen_at: string
           updated_at: string
         }
         Insert: {
           id?: string
-          mc_number: string
+          mc_number?: string | null
           dot_number?: string | null
           company_name: string
           contact_name?: string | null
@@ -81,6 +83,8 @@ export interface Database {
           authority_status?: string | null
           registration_date?: string | null
           ingestion_run_id?: string | null
+          broker_type?: "property" | "household_goods" | null
+          email_confidence?: "found" | "guessed" | "not_found" | null
           first_seen_at?: string
           updated_at?: string
         }
