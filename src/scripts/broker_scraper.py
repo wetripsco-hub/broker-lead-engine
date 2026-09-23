@@ -86,12 +86,30 @@ def find_latest_pdf_url() -> str:
     if res.status != 200:
         raise RuntimeError(f"Failed to load {MOTUS_INDEX_URL}: HTTP {res.status}")
 
+    # Primary guess: a direct <a href="....pdf"> link
     pdf_links = res.css("a[href$='.pdf']::attr(href)").getall()
+
+    # Fallback: some FMCSA pages serve PDFs via a download/redirect endpoint
+    # without a literal ".pdf" in the href (e.g. "?file=..." or "/download/").
+    # Loosely match anchor text or href containing "pdf"/"daily"/"publication".
     if not pdf_links:
+        all_links = res.css("a::attr(href)").getall()
+        pdf_links = [
+            href for href in all_links
+            if href and ("pdf" in href.lower() or "download" in href.lower())
+        ]
+
+    if not pdf_links:
+        # Couldn't find anything — dump every link on the page so the real
+        # structure can be inspected instead of guessing again blind.
+        all_links = res.css("a::attr(href)").getall()
+        sample = "\n".join(f"  {h}" for h in all_links[:60])
         raise RuntimeError(
-            "No PDF links found on the motus.dot.gov publications page — "
-            "the page structure may differ from what this script expects; "
-            "inspect the live page and adjust find_latest_pdf_url()."
+            "No PDF links found on the motus.dot.gov publications page. "
+            f"Found {len(all_links)} total links on the page; first 60:\n{sample}\n"
+            "The page likely needs JS to render the download link, or uses a "
+            "different pattern than 'pdf'/'download' in the href — share this "
+            "list to fix find_latest_pdf_url()."
         )
     return urljoin(MOTUS_INDEX_URL, pdf_links[0])
 
