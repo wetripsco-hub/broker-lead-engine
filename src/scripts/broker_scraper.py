@@ -591,7 +591,9 @@ def save_broker(
     confidence = "found" if email else "not_found"
 
     officials = motus.get("officials") or []
-    contact_name = officials[0]["name"] if officials else record.get("officer")
+    # Company Officials table can list more than one (e.g. co-owners) —
+    # keep all of them rather than just the first.
+    contact_name = ", ".join(o["name"] for o in officials) if officials else record.get("officer")
 
     # Prefer the confirmed MOTUS address (principal, then mailing) over the
     # SAFER snapshot address, over whatever the PDF row itself had.

@@ -55,7 +55,9 @@ def main() -> None:
             continue
 
         officials = motus.get("officials") or []
-        contact_name = officials[0]["name"] if officials else row.get("contact_name")
+        # Company Officials table can list more than one (e.g. co-owners) —
+        # keep all of them rather than just the first.
+        contact_name = ", ".join(o["name"] for o in officials) if officials else row.get("contact_name")
         email = motus.get("email")
 
         raw_address = motus.get("principal_address") or motus.get("mailing_address")

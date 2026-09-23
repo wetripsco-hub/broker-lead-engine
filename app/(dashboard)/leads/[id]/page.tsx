@@ -8,7 +8,7 @@ import { EmailCompose } from "@/components/leads/email-compose"
 import { CallButton } from "@/components/leads/call-button"
 import { SmsThread } from "@/components/leads/sms-thread"
 import { OutreachTimeline } from "@/components/leads/outreach-timeline"
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Hash } from "lucide-react"
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Hash, User } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { LeadStage } from "@/types/database"
 
@@ -182,6 +182,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <div className="rounded-lg border bg-card p-4 space-y-2.5">
               <InfoRow icon={Hash}     label="MC#"        value={b?.mc_number ? `MC-${b.mc_number}` : null} />
               <InfoRow icon={Hash}     label="DOT#"       value={b?.dot_number} />
+              <InfoRow icon={User}     label="Contact"    value={b?.contact_name} />
               <InfoRow icon={Phone}    label="Phone"      value={b?.phone} />
               <InfoRow icon={Mail}     label="Email"      value={b?.email} />
               <InfoRow
