@@ -34,7 +34,7 @@ import os
 import re
 import sys
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus, urljoin, urlparse
 
@@ -52,7 +52,7 @@ load_dotenv(REPO_ROOT / ".env.local")
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
-MOTUS_INDEX_URL = "https://www.motus.dot.gov/customer/daily-fmcsa-publications"
+MOTUS_INDEX_URL = "https://motus.dot.gov/customer/daily-fmcsa-publications"
 SAFER_SNAPSHOT_URL = "https://safer.fmcsa.dot.gov/CompanySnapshot.aspx?USDOT={usdot}"
 SAFER_DELAY_SECONDS = 2
 
@@ -357,7 +357,7 @@ def main() -> None:
                 "fetched_count": fetched,
                 "new_count": inserted,
                 "updated_count": 0,
-                "finished_at": datetime.utcnow().isoformat(),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
             }
         ).eq("id", log_id).execute()
 
@@ -368,7 +368,7 @@ def main() -> None:
             {
                 "status": "error",
                 "error_message": str(e),
-                "finished_at": datetime.utcnow().isoformat(),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
             }
         ).eq("id", log_id).execute()
         log(f"ERROR: {e}")
