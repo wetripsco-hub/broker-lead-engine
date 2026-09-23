@@ -416,6 +416,14 @@ def motus_account_lookup(usdot: str) -> dict:
     official also has a phone/email filled in, the pairing can drift for
     that row — acceptable here since the primary goal (name of the top
     officer, i.e. the CEO/contact) is the first pair, which is reliable.
+
+    The COMPANY OFFICIALS table is a MUI DataGrid whose row data loads
+    slightly AFTER the rest of the page (confirmed on a real run: the
+    column headers and the officer's name/title were both missing from
+    get_all_text() even though "networkidle" had already fired — the grid
+    populates its rows via a client-side render pass that lands a beat
+    later). page_action waits for the grid's column headers to actually
+    mount, then gives it a fixed settle window for the row(s) to follow.
     """
     url = MOTUS_ACCOUNT_URL.format(usdot=usdot)
     empty = {
@@ -428,8 +436,19 @@ def motus_account_lookup(usdot: str) -> dict:
         "error": None,
     }
 
+    def page_action(page):
+        page.wait_for_load_state("networkidle")
+        try:
+            page.wait_for_selector('[role="columnheader"]', timeout=8000)
+        except Exception:  # noqa: BLE001 — no officials table at all is fine
+            pass
+        page.wait_for_timeout(2000)
+        return page
+
     try:
-        res = StealthyFetcher.fetch(url, headless=True, network_idle=True)
+        res = StealthyFetcher.fetch(
+            url, headless=True, network_idle=True, page_action=page_action
+        )
     except Exception as e:  # noqa: BLE001
         return {**empty, "error": str(e)}
 
