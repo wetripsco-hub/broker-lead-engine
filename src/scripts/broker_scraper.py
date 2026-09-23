@@ -82,7 +82,10 @@ def log(msg: str) -> None:
 # ── Step 1: PDF discovery + parsing ─────────────────────────────────────────
 
 def find_latest_pdf_url() -> str:
-    res = Fetcher.get(MOTUS_INDEX_URL)
+    # This page renders its content via JS (a plain HTTP fetch found zero
+    # anchor tags at all) — use the real-browser StealthyFetcher instead of
+    # the static Fetcher so client-side rendering actually happens.
+    res = StealthyFetcher.fetch(MOTUS_INDEX_URL, headless=True, network_idle=True)
     if res.status != 200:
         raise RuntimeError(f"Failed to load {MOTUS_INDEX_URL}: HTTP {res.status}")
 
@@ -91,7 +94,6 @@ def find_latest_pdf_url() -> str:
 
     # Fallback: some FMCSA pages serve PDFs via a download/redirect endpoint
     # without a literal ".pdf" in the href (e.g. "?file=..." or "/download/").
-    # Loosely match anchor text or href containing "pdf"/"daily"/"publication".
     if not pdf_links:
         all_links = res.css("a::attr(href)").getall()
         pdf_links = [
@@ -104,12 +106,17 @@ def find_latest_pdf_url() -> str:
         # structure can be inspected instead of guessing again blind.
         all_links = res.css("a::attr(href)").getall()
         sample = "\n".join(f"  {h}" for h in all_links[:60])
+        detail = f"Found {len(all_links)} total links; first 60:\n{sample}"
+
+        if not all_links:
+            # Even with JS rendering, zero links — likely an auth wall,
+            # iframe, or a click-to-expand UI. Dump visible page text instead.
+            text_sample = res.get_all_text()[:1500]
+            detail = f"Zero links even after JS render. Page text sample:\n{text_sample}"
+
         raise RuntimeError(
-            "No PDF links found on the motus.dot.gov publications page. "
-            f"Found {len(all_links)} total links on the page; first 60:\n{sample}\n"
-            "The page likely needs JS to render the download link, or uses a "
-            "different pattern than 'pdf'/'download' in the href — share this "
-            "list to fix find_latest_pdf_url()."
+            f"No PDF links found on the motus.dot.gov publications page. {detail}\n"
+            "Share this output to fix find_latest_pdf_url()."
         )
     return urljoin(MOTUS_INDEX_URL, pdf_links[0])
 
