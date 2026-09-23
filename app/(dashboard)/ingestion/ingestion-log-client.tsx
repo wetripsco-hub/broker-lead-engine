@@ -124,6 +124,19 @@ function LogEntry({
         )}
       </button>
 
+      {/* Per-run breakdown from the MOTUS enrichment step */}
+      {(log.active_count > 0 ||
+        log.pending_count > 0 ||
+        log.skipped_count > 0 ||
+        log.email_count > 0) && (
+        <div className="px-11 pb-2.5 -mt-1 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+          <span className="text-green-700 dark:text-green-400">{log.active_count} active</span>
+          <span className="text-amber-700 dark:text-amber-400">{log.pending_count} pending</span>
+          <span>{log.skipped_count} rejected/withdrawn skipped</span>
+          <span>{log.email_count} emails found</span>
+        </div>
+      )}
+
       {/* Error message */}
       {log.status === "error" && log.error_message && (
         <div className="px-11 pb-3">

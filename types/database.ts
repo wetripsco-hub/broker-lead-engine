@@ -64,6 +64,12 @@ export interface Database {
           ingestion_run_id: string | null
           broker_type: "property" | "household_goods" | null
           email_confidence: "found" | "guessed" | "not_found" | null
+          dba_name: string | null
+          business_email: string | null
+          usdot_status: string | null
+          // Free text: MOTUS can report a status we haven't catalogued yet.
+          mc_status: string | null
+          authority_type: "property" | "household_goods" | null
           first_seen_at: string
           updated_at: string
         }
@@ -85,10 +91,36 @@ export interface Database {
           ingestion_run_id?: string | null
           broker_type?: "property" | "household_goods" | null
           email_confidence?: "found" | "guessed" | "not_found" | null
+          dba_name?: string | null
+          business_email?: string | null
+          usdot_status?: string | null
+          mc_status?: string | null
+          authority_type?: "property" | "household_goods" | null
           first_seen_at?: string
           updated_at?: string
         }
         Update: Partial<Database["public"]["Tables"]["brokers"]["Insert"]>
+      }
+      broker_officials: {
+        Row: {
+          id: string
+          broker_id: string
+          official_name: string
+          title: string | null
+          telephone: string | null
+          email: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          broker_id: string
+          official_name: string
+          title?: string | null
+          telephone?: string | null
+          email?: string | null
+          created_at?: string
+        }
+        Update: Partial<Database["public"]["Tables"]["broker_officials"]["Insert"]>
       }
       daily_ingestion_log: {
         Row: {
@@ -99,6 +131,10 @@ export interface Database {
           updated_count: number
           status: "running" | "success" | "error"
           error_message: string | null
+          active_count: number
+          pending_count: number
+          skipped_count: number
+          email_count: number
           started_at: string
           finished_at: string | null
         }
@@ -110,6 +146,10 @@ export interface Database {
           updated_count?: number
           status: "running" | "success" | "error"
           error_message?: string | null
+          active_count?: number
+          pending_count?: number
+          skipped_count?: number
+          email_count?: number
           started_at?: string
           finished_at?: string | null
         }

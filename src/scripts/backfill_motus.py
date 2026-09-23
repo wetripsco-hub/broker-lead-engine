@@ -24,6 +24,7 @@ from broker_scraper import (  # noqa: E402
     log,
     motus_account_lookup,
     parse_motus_address,
+    save_officials,
 )
 from supabase import create_client  # noqa: E402
 
@@ -62,7 +63,9 @@ def main() -> None:
         # Company Officials table can list more than one (e.g. co-owners) —
         # keep all of them rather than just the first.
         contact_name = ", ".join(o["name"] for o in officials) if officials else row.get("contact_name")
-        email = motus.get("email")
+        # Same precedence as the main pipeline: business email first, then
+        # the first official who listed their own.
+        email = motus.get("email") or next((o["email"] for o in officials if o.get("email")), None)
 
         raw_address = motus.get("principal_address") or motus.get("mailing_address")
 
@@ -70,7 +73,14 @@ def main() -> None:
             "contact_name": contact_name,
             "email": email,
             "email_confidence": "found" if email else "not_found",
+            "business_email": motus.get("email"),
+            "usdot_status": motus.get("usdot_status"),
+            "dba_name": motus.get("dba_name"),
+            "mc_status": motus.get("mc_status"),
+            "authority_type": motus.get("authority_type"),
         }
+        if motus.get("mc_number"):
+            update["mc_number"] = motus["mc_number"]
         if motus.get("phone"):
             update["phone"] = motus["phone"]
         if raw_address:
@@ -85,7 +95,11 @@ def main() -> None:
             )
 
         supabase.table("brokers").update(update).eq("id", row["id"]).execute()
-        log(f"  email: {email or '—'}  officer: {contact_name or '—'}")
+        save_officials(supabase, row["id"], officials)
+        log(
+            f"  email: {email or '—'}  officer: {contact_name or '—'}  "
+            f"MC-{motus.get('mc_number') or '—'} ({motus.get('mc_status') or 'unknown'})"
+        )
         if email:
             updated += 1
 

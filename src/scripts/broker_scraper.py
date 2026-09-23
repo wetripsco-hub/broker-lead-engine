@@ -396,60 +396,184 @@ def parse_motus_address(raw: str | None) -> dict:
     }
 
 
+MOTUS_EMPTY_RECORD = {
+    "usdot_status": None,
+    "legal_name": None,
+    "dba_name": None,
+    "principal_address": None,
+    "mailing_address": None,
+    "phone": None,
+    "email": None,
+    "officials": [],
+    "authorities": [],
+    "authority_type": None,
+    "mc_number": None,
+    "mc_status": None,
+    "error": None,
+}
+
+# Status preference when a broker holds several operating authorities:
+# an active one describes the business better than a pending one, and
+# both beat a rejected/withdrawn record.
+MC_STATUS_RANK = {"active": 0, "pending": 1}
+
+# Statuses that mean "this broker never actually got authority" — STEP 3
+# of the pipeline spec: no lead is created for these.
+MC_STATUS_SKIP = {"rejected", "withdrawn"}
+
+# Waits until BOTH MUI DataGrids on the page have settled: either a real
+# cell value has rendered, or the grid says "No rows" (legitimately empty).
+# Polling on textContent rather than a visible-text selector is deliberate —
+# the Operating Authority accordion is COLLAPSED by default, so its text is
+# present in the DOM but invisible, and any visible-text wait would hang
+# until the timeout on every single broker.
+GRIDS_READY_JS = """() => {
+    const settled = (field) => {
+        const grid = [...document.querySelectorAll('[role="grid"]')]
+            .find(g => g.querySelector(`[data-field="${field}"]`));
+        if (!grid) return false;
+        if (/No rows/i.test(grid.textContent)) return true;
+        const cell = grid.querySelector(`[role="gridcell"][data-field="${field}"]`);
+        return !!(cell && cell.textContent.trim());
+    };
+    return settled('name') && settled('docketNumber');
+}"""
+
+
+def _node_text(node) -> str | None:
+    try:
+        text = node.get_all_text(strip=True)
+    except AttributeError:  # plain parsel Selector without Scrapling's helper
+        text = "".join(node.css("::text").getall()).strip()
+    return text or None
+
+
+def _labelled_value(sel, label: str) -> str | None:
+    """
+    Each business-info field renders as a two-div row: a label div holding
+    a <p>, then a sibling value div. Walking label → parent → next sibling
+    is deliberate: reading the page's flat text instead breaks on EMPTY
+    fields, which contribute no text at all, so a text-order parser
+    silently returns the NEXT field's label as this field's value (e.g. an
+    empty "Doing Business As (DBA) Name" would come back as "Principal
+    Place of Business").
+    """
+    nodes = sel.xpath(f'//p[normalize-space(text())="{label}"]/../following-sibling::div[1]')
+    return _node_text(nodes[0]) if nodes else None
+
+
+def _grid_rows(sel, fields: tuple[str, ...]) -> list[dict]:
+    """
+    Reads MUI DataGrid rows by their data-field attributes. Selecting on
+    role="gridcell" excludes the header row (role="columnheader"), and
+    keying on data-field means column order/labels can change without
+    breaking this. Rows from an unrelated grid are skipped automatically
+    because they carry different data-field names.
+    """
+    rows: list[dict] = []
+    for row in sel.css('div[role="row"]'):
+        cells = {}
+        for field in fields:
+            cell = row.css(f'div[role="gridcell"][data-field="{field}"]')
+            if cell:
+                cells[field] = _node_text(cell[0])
+        if cells and any(cells.values()):
+            rows.append(cells)
+    return rows
+
+
+def _normalise_authority(raw_type: str | None, docket: str | None, status: str | None) -> dict:
+    lowered = (raw_type or "").lower()
+    if "broker" in lowered:
+        # "Broker of Property (Except Household Goods)" also contains the
+        # word "household" — the "except" is what distinguishes it from a
+        # genuine "Broker of Household Goods" authority.
+        is_hhg = "household" in lowered and "except" not in lowered
+        authority_type = "household_goods" if is_hhg else "property"
+    else:
+        # Motor-carrier / freight-forwarder authorities on the same USDOT —
+        # kept for reference but never used to pick the primary authority.
+        authority_type = None
+    return {
+        "authority_type": authority_type,
+        "raw_type": raw_type,
+        "mc_number": re.sub(r"^MC[-\s]*", "", docket or "", flags=re.I).strip() or None,
+        "mc_status": (status or "").strip().lower() or None,
+    }
+
+
+def parse_motus_account(sel) -> dict:
+    """Pure parser — split out from the fetch so it can be tested offline
+    against saved page HTML."""
+    officials = [
+        {
+            "name": r.get("name"),
+            "title": r.get("title"),
+            "phone": r.get("phoneNumber"),
+            "email": r.get("email"),
+        }
+        for r in _grid_rows(sel, ("name", "title", "phoneNumber", "email"))
+        if r.get("name")
+    ]
+
+    authorities = [
+        _normalise_authority(r.get("operatingAuthorityType"), r.get("docketNumber"), r.get("status"))
+        for r in _grid_rows(sel, ("operatingAuthorityType", "docketNumber", "status"))
+    ]
+
+    broker_authorities = [a for a in authorities if a["authority_type"]]
+    primary = min(
+        broker_authorities,
+        key=lambda a: MC_STATUS_RANK.get(a["mc_status"] or "", 2),
+        default=None,
+    )
+
+    status_nodes = sel.xpath('//h4[starts-with(normalize-space(), "USDOT #")]/following-sibling::h4[1]')
+
+    return {
+        "usdot_status": _node_text(status_nodes[0]) if status_nodes else None,
+        "legal_name": _labelled_value(sel, "Legal Business Name"),
+        "dba_name": _labelled_value(sel, "Doing Business As (DBA) Name"),
+        "principal_address": _labelled_value(sel, "Principal Place of Business"),
+        "mailing_address": _labelled_value(sel, "Mailing Address"),
+        "phone": _labelled_value(sel, "Business Telephone No."),
+        "email": _labelled_value(sel, "Business Email"),
+        "officials": officials,
+        "authorities": authorities,
+        "authority_type": primary["authority_type"] if primary else None,
+        "mc_number": primary["mc_number"] if primary else None,
+        "mc_status": primary["mc_status"] if primary else None,
+        "error": None,
+    }
+
+
 def motus_account_lookup(usdot: str) -> dict:
     """
     https://motus.dot.gov/customer/{usdot}/account is a PUBLIC, no-login
-    per-USDOT record page — CONFIRMED via a live test that it returns the
-    full business record directly: Legal Business Name, Principal Place of
-    Business, Mailing Address, Business Telephone, Business Email, and a
-    COMPANY OFFICIALS table (name + title — the CEO / beneficial owner /
-    contact person). This is a client-rendered MUI app like the daily
-    publications page, so it needs StealthyFetcher (a real browser), not
-    the plain Fetcher.
+    per-USDOT record page — CONFIRMED via live tests that it returns the
+    full business record directly: USDOT status, Legal/DBA name, Principal
+    and Mailing addresses, Business Telephone, Business Email, a COMPANY
+    OFFICIALS table (name/title/phone/email) and an OPERATING AUTHORITY
+    REGISTRATION(S) table (authority type, MC number, current status).
+    This is a client-rendered MUI app, so it needs StealthyFetcher (a real
+    browser), not the plain Fetcher.
 
     Best-effort like safer_lookup(): never raises, always returns a dict
     (with "error" set on failure) so one broken lookup never kills the run.
 
-    NOTE on officials parsing: the page renders as plain stacked text with
-    no reliable column markers, so officials are read as alternating
-    Name/Title line pairs after the "COMPANY OFFICIALS" header block. If an
-    official also has a phone/email filled in, the pairing can drift for
-    that row — acceptable here since the primary goal (name of the top
-    officer, i.e. the CEO/contact) is the first pair, which is reliable.
-
-    The COMPANY OFFICIALS table is a MUI DataGrid whose row data loads
-    slightly AFTER the rest of the page (confirmed on a real run: the
-    column headers and the officer's name/title were both missing from
-    get_all_text() even though "networkidle" had already fired — the grid
-    populates its rows via a client-side render pass that lands a beat
-    later). page_action waits for the grid's column headers to actually
-    mount, then gives it a fixed settle window for the row(s) to follow.
+    Both DataGrids load well after "networkidle" fires — CONFIRMED on real
+    pages that one broker's grid filled in after ~8s and another's after
+    ~20s, showing a grey skeleton the whole time. page_action polls until
+    both grids actually hold data (or report "No rows") before the HTML is
+    captured.
     """
     url = MOTUS_ACCOUNT_URL.format(usdot=usdot)
-    empty = {
-        "legal_name": None,
-        "principal_address": None,
-        "mailing_address": None,
-        "phone": None,
-        "email": None,
-        "officials": [],
-        "error": None,
-    }
 
     def page_action(page):
         page.wait_for_load_state("networkidle")
-        # The Company Officials grid (header row AND data) mounts together
-        # as one lazy-loaded unit, well after "networkidle" fires — its
-        # backing API call is slow and its latency varies a lot. CONFIRMED
-        # on real pages: one broker's grid appeared after ~8s, another after
-        # ~20s, both showing a grey skeleton placeholder the whole time. Wait
-        # for the literal "Official Name" text directly (not the grid role,
-        # which the skeleton also carries) with a generous timeout so this
-        # only proceeds once real data has landed. If a broker genuinely has
-        # zero officials this just times out harmlessly and we move on.
         try:
-            page.wait_for_selector("text=Official Name", timeout=30000)
-        except Exception:  # noqa: BLE001
+            page.wait_for_function(GRIDS_READY_JS, timeout=30000)
+        except Exception:  # noqa: BLE001 — capture whatever did load
             pass
         page.wait_for_timeout(500)
         return page
@@ -459,54 +583,15 @@ def motus_account_lookup(usdot: str) -> dict:
             url, headless=True, network_idle=True, page_action=page_action
         )
     except Exception as e:  # noqa: BLE001
-        return {**empty, "error": str(e)}
+        return {**MOTUS_EMPTY_RECORD, "error": str(e)}
 
     if res.status != 200:
-        return {**empty, "error": f"HTTP {res.status}"}
+        return {**MOTUS_EMPTY_RECORD, "error": f"HTTP {res.status}"}
 
-    text = res.get_all_text()
-    if "Entity not found" in text:
-        return {**empty, "error": "not found"}
+    if "Entity not found" in res.get_all_text():
+        return {**MOTUS_EMPTY_RECORD, "error": "not found"}
 
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
-
-    def value_after(label: str) -> str | None:
-        try:
-            idx = lines.index(label)
-        except ValueError:
-            return None
-        return lines[idx + 1] if idx + 1 < len(lines) else None
-
-    legal_name = value_after("Legal Business Name")
-    principal_address = value_after("Principal Place of Business")
-    mailing_address = value_after("Mailing Address")
-    phone = value_after("Business Telephone No.")
-    email = value_after("Business Email")
-
-    officials: list[dict] = []
-    if "COMPANY OFFICIALS" in lines:
-        start = lines.index("COMPANY OFFICIALS")
-        header_labels = {"Official Name", "Title", "Telephone No", "Email"}
-        j = start + 1
-        while j < len(lines) and lines[j] in header_labels:
-            j += 1
-        stop_markers = ("Rows per page", "MILEAGE INFORMATION", "OPERATION DETAILS")
-        while j + 1 < len(lines):
-            name, title = lines[j], lines[j + 1]
-            if name.startswith(stop_markers) or "of 2" in name or " of " in name.lower():
-                break
-            officials.append({"name": name, "title": title})
-            j += 2
-
-    return {
-        "legal_name": legal_name,
-        "principal_address": principal_address,
-        "mailing_address": mailing_address,
-        "phone": phone,
-        "email": email,
-        "officials": officials,
-        "error": None,
-    }
+    return parse_motus_account(res)
 
 
 # ── Step 4: Supabase save ────────────────────────────────────────────────────
@@ -532,10 +617,13 @@ def save_broker(
 ) -> bool:
     """Returns True if a new row was inserted, False if it was a duplicate
     (dot_number already existed) and got silently skipped instead."""
-    email = motus.get("email")
+    officials = motus.get("officials") or []
+
+    # Primary contact email: the business email if MOTUS has one, otherwise
+    # fall back to the first company official who listed their own.
+    email = motus.get("email") or next((o["email"] for o in officials if o.get("email")), None)
     confidence = "found" if email else "not_found"
 
-    officials = motus.get("officials") or []
     # Company Officials table can list more than one (e.g. co-owners) —
     # keep all of them rather than just the first.
     contact_name = ", ".join(o["name"] for o in officials) if officials else record.get("officer")
@@ -563,8 +651,11 @@ def save_broker(
         .upsert(
             {
                 "dot_number": record["usdot"],
-                "mc_number": safer.get("mc_number"),
+                # MOTUS reports the docket number straight off the broker's
+                # own authority record; SAFER is the fallback.
+                "mc_number": motus.get("mc_number") or safer.get("mc_number"),
                 "company_name": motus.get("legal_name") or record["company_name"],
+                "dba_name": motus.get("dba_name"),
                 "contact_name": contact_name,
                 "phone": motus.get("phone") or record.get("phone"),
                 "address_line1": address["address_line1"],
@@ -572,9 +663,13 @@ def save_broker(
                 "state": address["state"],
                 "zip": address["zip"],
                 "authority_status": safer.get("operating_status"),
+                "usdot_status": motus.get("usdot_status"),
+                "mc_status": motus.get("mc_status"),
+                "authority_type": motus.get("authority_type"),
                 "registration_date": normalise_date(record.get("filing_date")),
                 "broker_type": record["broker_type"],
                 "email": email,
+                "business_email": motus.get("email"),
                 "email_confidence": confidence,
                 "ingestion_run_id": log_id,
             },
@@ -585,7 +680,35 @@ def save_broker(
     )
     # `on_broker_inserted` DB trigger auto-creates the matching lead — only
     # fires on a real insert, so a skipped duplicate correctly gets no lead.
-    return len(result.data) > 0
+    if not result.data:
+        return False
+
+    save_officials(supabase, result.data[0]["id"], officials)
+    return True
+
+
+def save_officials(supabase: Client, broker_id: str, officials: list[dict]) -> None:
+    """Best-effort — a broker row that saved fine shouldn't be lost to a
+    failure writing its officials."""
+    if not officials:
+        return
+    rows = [
+        {
+            "broker_id": broker_id,
+            "official_name": o["name"],
+            "title": o.get("title"),
+            "telephone": o.get("phone"),
+            "email": o.get("email"),
+        }
+        for o in officials
+        if o.get("name")
+    ]
+    try:
+        supabase.table("broker_officials").upsert(
+            rows, on_conflict="broker_id,official_name", ignore_duplicates=True
+        ).execute()
+    except Exception as e:  # noqa: BLE001
+        log(f"  could not save company officials: {e}")
 
 
 # ── Orchestration ────────────────────────────────────────────────────────────
@@ -617,6 +740,9 @@ def main() -> None:
     fetched = 0
     inserted = 0
     emails_found = 0
+    active_count = 0
+    pending_count = 0
+    skipped_status = 0
 
     try:
         if pdf_file_path:
@@ -685,11 +811,27 @@ def main() -> None:
                 log(f"  MOTUS account lookup failed: {motus['error']}")
             else:
                 officials = motus.get("officials") or []
-                officer_str = officials[0]["name"] if officials else "—"
-                log(f"  email: {motus.get('email') or '—'}  officer: {officer_str}")
+                officer_str = ", ".join(o["name"] for o in officials) if officials else "—"
+                log(
+                    f"  email: {motus.get('email') or '—'}  officer: {officer_str}  "
+                    f"MC-{motus.get('mc_number') or '—'} ({motus.get('mc_status') or 'unknown'})"
+                )
                 if motus.get("email"):
                     emails_found += 1
             time.sleep(MOTUS_DELAY_SECONDS)
+
+            # STEP 3 filter: a broker whose only authority was rejected or
+            # withdrawn never actually got operating authority, so there's
+            # no one to sell to — don't create a lead for them.
+            mc_status = motus.get("mc_status")
+            if mc_status in MC_STATUS_SKIP:
+                skipped_status += 1
+                log(f"  skipped — MC authority is {mc_status}, no lead created")
+                continue
+            if mc_status == "active":
+                active_count += 1
+            elif mc_status == "pending":
+                pending_count += 1
 
             was_new = save_broker(supabase, record, safer, motus, log_id)
             if was_new:
@@ -703,11 +845,19 @@ def main() -> None:
                 "fetched_count": fetched,
                 "new_count": inserted,
                 "updated_count": 0,
+                "active_count": active_count,
+                "pending_count": pending_count,
+                "skipped_count": skipped_status,
+                "email_count": emails_found,
                 "finished_at": datetime.now(timezone.utc).isoformat(),
             }
         ).eq("id", log_id).execute()
 
-        log(f"Done — {inserted} new brokers inserted, {emails_found} emails found ({fetched} fetched)")
+        log(
+            f"Done — {fetched} USDOT processed · {inserted} new brokers · "
+            f"{active_count} active · {pending_count} pending · "
+            f"{skipped_status} rejected/withdrawn skipped · {emails_found} emails found"
+        )
 
     except Exception as e:  # noqa: BLE001 — always record failure to the log row
         supabase.table("daily_ingestion_log").update(

@@ -12,6 +12,23 @@ import { ArrowLeft, Mail, Phone, MapPin, Calendar, Hash, User } from "lucide-rea
 import { Badge } from "@/components/ui/badge"
 import type { LeadStage } from "@/types/database"
 
+const MC_STATUS_STYLES: Record<string, string> = {
+  active: "border-green-600/30 bg-green-600/10 text-green-700 dark:text-green-400",
+  pending: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  rejected: "border-destructive/30 bg-destructive/10 text-destructive",
+  withdrawn: "border-destructive/30 bg-destructive/10 text-destructive",
+}
+
+function McStatusBadge({ status }: { status: string | null }) {
+  if (!status) return null
+  const style = MC_STATUS_STYLES[status.toLowerCase()] ?? "border-border bg-muted text-muted-foreground"
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${style}`}>
+      MC {status}
+    </span>
+  )
+}
+
 function InfoRow({
   icon: Icon,
   label,
@@ -50,17 +67,23 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     assigned_agent_id: string | null
     created_at: string
     brokers: {
+      id: string
       mc_number: string | null
       dot_number: string | null
       company_name: string | null
+      dba_name: string | null
       contact_name: string | null
       email: string | null
+      business_email: string | null
       phone: string | null
       address_line1: string | null
       city: string | null
       state: string | null
       zip: string | null
       authority_status: string | null
+      usdot_status: string | null
+      mc_status: string | null
+      authority_type: "property" | "household_goods" | null
       registration_date: string | null
     } | null
     agents: { id: string; name: string } | null
@@ -71,8 +94,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     .select(`
       id, stage, notes, assigned_agent_id, created_at,
       brokers (
-        mc_number, dot_number, company_name, contact_name, email, phone,
-        address_line1, city, state, zip, authority_status, registration_date
+        id, mc_number, dot_number, company_name, dba_name, contact_name,
+        email, business_email, phone, address_line1, city, state, zip,
+        authority_status, usdot_status, mc_status, authority_type,
+        registration_date
       ),
       agents ( id, name )
     `)
@@ -84,6 +109,21 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
   const b = lead.brokers
   const agent = lead.agents
+
+  const { data: officialsRaw } = b
+    ? await supabase
+        .from("broker_officials")
+        .select("id, official_name, title, telephone, email")
+        .eq("broker_id", b.id)
+        .order("created_at", { ascending: true })
+    : { data: null }
+  const officials = (officialsRaw ?? []) as Array<{
+    id: string
+    official_name: string
+    title: string | null
+    telephone: string | null
+    email: string | null
+  }>
 
   // Fetch agent record for the current user (needed for outreach logging)
   const { data: myAgentRaw } = await supabase
@@ -147,7 +187,18 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <h1 className="text-2xl font-semibold tracking-tight">
               {b?.company_name ?? "Unknown broker"}
             </h1>
-            <p className="text-sm text-muted-foreground font-mono mt-0.5">MC-{b?.mc_number}</p>
+            {b?.dba_name && (
+              <p className="text-sm text-muted-foreground mt-0.5">dba {b.dba_name}</p>
+            )}
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span className="text-sm text-muted-foreground font-mono">MC-{b?.mc_number}</span>
+              <McStatusBadge status={b?.mc_status ?? null} />
+              {b?.usdot_status && (
+                <span className="text-xs text-muted-foreground">
+                  USDOT {b.usdot_status}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
             <CallButton
@@ -191,6 +242,17 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                 value={[b?.address_line1, b?.city, b?.state, b?.zip].filter(Boolean).join(", ") || null}
               />
               <InfoRow icon={Calendar} label="Registered" value={b?.registration_date} />
+              <InfoRow
+                icon={Hash}
+                label="Authority"
+                value={
+                  b?.authority_type === "household_goods"
+                    ? "Broker of Household Goods"
+                    : b?.authority_type === "property"
+                      ? "Broker of Property"
+                      : null
+                }
+              />
               {b?.authority_status && (
                 <div className="flex items-center gap-2 pt-1">
                   <Badge variant="outline" className="text-xs">
@@ -200,6 +262,40 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               )}
             </div>
           </section>
+
+          {/* Company officials */}
+          {officials.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                Company Officials
+              </h2>
+              <div className="rounded-lg border bg-card divide-y">
+                {officials.map((o) => (
+                  <div key={o.id} className="flex items-center gap-3 px-4 py-2.5 text-sm flex-wrap">
+                    <User className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="font-medium">{o.official_name}</span>
+                    {o.title && (
+                      <span className="text-xs text-muted-foreground capitalize">
+                        {o.title.toLowerCase()}
+                      </span>
+                    )}
+                    <span className="flex-1" />
+                    {o.telephone && (
+                      <span className="text-xs text-muted-foreground font-mono">{o.telephone}</span>
+                    )}
+                    {o.email && (
+                      <a
+                        href={`mailto:${o.email}`}
+                        className="text-xs text-muted-foreground hover:text-foreground underline"
+                      >
+                        {o.email}
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Outreach timeline */}
           <section>
