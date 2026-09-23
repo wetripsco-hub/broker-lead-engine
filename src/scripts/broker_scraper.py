@@ -13,13 +13,20 @@ STATUS (verified against real runs, 2026-09-23):
   - PDF parsing: WORKING — verified 33/33 property-broker rows parsed
     correctly from a real REGISTER PDF.
   - SAFER enrichment: WORKING.
-  - Email discovery: DISABLED. Both Google (429 "/sorry/index") and
-    DuckDuckGo (image CAPTCHA) block this automated search outright —
-    confirmed from this sandbox AND the operator's own residential IP,
-    with or without request pacing. find_email() is left in the code for
-    wiring in a paid provider (Hunter.io, SerpAPI, Google Custom Search
-    API, ...) later; it is not called from main() right now, so every
-    broker saves with email=None, email_confidence='not_found'.
+  - MOTUS account lookup (email + officials + address): WORKING.
+    https://motus.dot.gov/customer/{usdot}/account is a PUBLIC (no
+    login required) per-USDOT record page — confirmed via a live test
+    that it returns Business Email, Company Officials (name + title,
+    i.e. the CEO/beneficial-owner/contact person), Principal Place of
+    Business, Mailing Address, and Business Telephone directly. This
+    replaces the old Google/DuckDuckGo email-search approach entirely
+    — see motus_account_lookup().
+  - Email discovery via search engines: ABANDONED. Both Google (429
+    "/sorry/index") and DuckDuckGo (image CAPTCHA) block automated
+    search outright, confirmed from this sandbox AND the operator's
+    own residential IP. find_email() is left in the code unused, in
+    case the MOTUS account page ever gets locked down and a paid
+    provider (Hunter.io, SerpAPI, ...) needs wiring in as a fallback.
 
 RUN LOCALLY ONLY — see the architecture note in app/api/scrape/run/route.ts
 for why this cannot run on Vercel (no Python runtime, no browser binary
@@ -58,9 +65,12 @@ SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
 MOTUS_INDEX_URL = "https://motus.dot.gov/customer/daily-fmcsa-publications"
+MOTUS_ACCOUNT_URL = "https://motus.dot.gov/customer/{usdot}/account"
 SAFER_SNAPSHOT_URL = "https://safer.fmcsa.dot.gov/CompanySnapshot.aspx?USDOT={usdot}"
 SAFER_DELAY_SECONDS = 2
+MOTUS_DELAY_SECONDS = 2
 # Polite pacing between DuckDuckGo searches (on top of SAFER_DELAY_SECONDS).
+# find_email() is currently unused — see motus_account_lookup() instead.
 EMAIL_SEARCH_DELAY_SECONDS = 3
 
 SECTION_HEADERS = {
@@ -353,7 +363,115 @@ def safer_lookup(usdot: str) -> dict:
     }
 
 
-# ── Step 3: Email finder ─────────────────────────────────────────────────────
+# ── Step 3: MOTUS account lookup (email + officials + confirmed address) ────
+
+# CONFIRMED against a real account page (USDOT 4551039, 2026-09-23):
+#   "9746 FM 605, Merkel, TX 79536"  →  line1 / city / state / zip
+ADDRESS_RE = re.compile(r"^(.+),\s*([A-Za-z .'\-]+),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$")
+
+
+def parse_motus_address(raw: str | None) -> dict:
+    if not raw:
+        return {"address_line1": None, "city": None, "state": None, "zip": None}
+    m = ADDRESS_RE.match(raw.strip())
+    if not m:
+        # Doesn't match the usual "street, city, ST zip" shape — keep the
+        # whole thing in address_line1 rather than dropping it.
+        return {"address_line1": raw.strip(), "city": None, "state": None, "zip": None}
+    return {
+        "address_line1": m.group(1).strip(),
+        "city": m.group(2).strip(),
+        "state": m.group(3).strip(),
+        "zip": m.group(4).strip(),
+    }
+
+
+def motus_account_lookup(usdot: str) -> dict:
+    """
+    https://motus.dot.gov/customer/{usdot}/account is a PUBLIC, no-login
+    per-USDOT record page — CONFIRMED via a live test that it returns the
+    full business record directly: Legal Business Name, Principal Place of
+    Business, Mailing Address, Business Telephone, Business Email, and a
+    COMPANY OFFICIALS table (name + title — the CEO / beneficial owner /
+    contact person). This is a client-rendered MUI app like the daily
+    publications page, so it needs StealthyFetcher (a real browser), not
+    the plain Fetcher.
+
+    Best-effort like safer_lookup(): never raises, always returns a dict
+    (with "error" set on failure) so one broken lookup never kills the run.
+
+    NOTE on officials parsing: the page renders as plain stacked text with
+    no reliable column markers, so officials are read as alternating
+    Name/Title line pairs after the "COMPANY OFFICIALS" header block. If an
+    official also has a phone/email filled in, the pairing can drift for
+    that row — acceptable here since the primary goal (name of the top
+    officer, i.e. the CEO/contact) is the first pair, which is reliable.
+    """
+    url = MOTUS_ACCOUNT_URL.format(usdot=usdot)
+    empty = {
+        "legal_name": None,
+        "principal_address": None,
+        "mailing_address": None,
+        "phone": None,
+        "email": None,
+        "officials": [],
+        "error": None,
+    }
+
+    try:
+        res = StealthyFetcher.fetch(url, headless=True, network_idle=True)
+    except Exception as e:  # noqa: BLE001
+        return {**empty, "error": str(e)}
+
+    if res.status != 200:
+        return {**empty, "error": f"HTTP {res.status}"}
+
+    text = res.get_all_text()
+    if "Entity not found" in text:
+        return {**empty, "error": "not found"}
+
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+    def value_after(label: str) -> str | None:
+        try:
+            idx = lines.index(label)
+        except ValueError:
+            return None
+        return lines[idx + 1] if idx + 1 < len(lines) else None
+
+    legal_name = value_after("Legal Business Name")
+    principal_address = value_after("Principal Place of Business")
+    mailing_address = value_after("Mailing Address")
+    phone = value_after("Business Telephone No.")
+    email = value_after("Business Email")
+
+    officials: list[dict] = []
+    if "COMPANY OFFICIALS" in lines:
+        start = lines.index("COMPANY OFFICIALS")
+        header_labels = {"Official Name", "Title", "Telephone No", "Email"}
+        j = start + 1
+        while j < len(lines) and lines[j] in header_labels:
+            j += 1
+        stop_markers = ("Rows per page", "MILEAGE INFORMATION", "OPERATION DETAILS")
+        while j + 1 < len(lines):
+            name, title = lines[j], lines[j + 1]
+            if name.startswith(stop_markers) or "of 2" in name or " of " in name.lower():
+                break
+            officials.append({"name": name, "title": title})
+            j += 2
+
+    return {
+        "legal_name": legal_name,
+        "principal_address": principal_address,
+        "mailing_address": mailing_address,
+        "phone": phone,
+        "email": email,
+        "officials": officials,
+        "error": None,
+    }
+
+
+# ── Step 3b: Email finder (unused — see motus_account_lookup() above) ───────
 
 def find_email(
     company_name: str, city: str | None, state: str | None, officer: str | None
@@ -459,16 +577,35 @@ def normalise_date(raw: str | None) -> str | None:
 
 
 def save_broker(
-    supabase: Client, record: dict, safer: dict, email: str | None, confidence: str, log_id: str
+    supabase: Client, record: dict, safer: dict, motus: dict, log_id: str
 ) -> None:
+    email = motus.get("email")
+    confidence = "found" if email else "not_found"
+
+    officials = motus.get("officials") or []
+    contact_name = officials[0]["name"] if officials else record.get("officer")
+
+    # Prefer the confirmed MOTUS address (principal, then mailing) over the
+    # SAFER snapshot address, over whatever the PDF row itself had.
+    raw_address = (
+        motus.get("principal_address")
+        or motus.get("mailing_address")
+        or safer.get("address")
+        or record.get("address")
+    )
+    address = parse_motus_address(raw_address)
+
     supabase.table("brokers").insert(
         {
             "dot_number": record["usdot"],
             "mc_number": safer.get("mc_number"),
-            "company_name": record["company_name"],
-            "contact_name": record.get("officer"),
-            "phone": record.get("phone"),
-            "address_line1": safer.get("address") or record.get("address"),
+            "company_name": motus.get("legal_name") or record["company_name"],
+            "contact_name": contact_name,
+            "phone": motus.get("phone") or record.get("phone"),
+            "address_line1": address["address_line1"],
+            "city": address["city"],
+            "state": address["state"],
+            "zip": address["zip"],
             "authority_status": safer.get("operating_status"),
             "registration_date": normalise_date(record.get("filing_date")),
             "broker_type": record["broker_type"],
@@ -536,18 +673,18 @@ def main() -> None:
                 log(f"  SAFER lookup failed: {safer['error']}")
             time.sleep(SAFER_DELAY_SECONDS)
 
-            # Email discovery is disabled: confirmed on a real run that both
-            # Google (429 "/sorry/index") and DuckDuckGo (image CAPTCHA)
-            # block this automated search outright, from both this sandbox
-            # and the operator's own residential IP — not a pacing issue,
-            # a hard bot-detection wall either provider can throw up at
-            # will. find_email() is left in place below for when a paid
-            # provider (Hunter.io, SerpAPI, Google Custom Search API, ...)
-            # is wired in — swap this line for that call when ready.
-            email, confidence = None, "not_found"
-            log(f"  email: {email or '—'} ({confidence}) — search disabled, see comment above")
+            motus = motus_account_lookup(record["usdot"])
+            if motus.get("error"):
+                log(f"  MOTUS account lookup failed: {motus['error']}")
+            else:
+                officials = motus.get("officials") or []
+                officer_str = officials[0]["name"] if officials else "—"
+                log(f"  email: {motus.get('email') or '—'}  officer: {officer_str}")
+                if motus.get("email"):
+                    emails_found += 1
+            time.sleep(MOTUS_DELAY_SECONDS)
 
-            save_broker(supabase, record, safer, email, confidence, log_id)
+            save_broker(supabase, record, safer, motus, log_id)
             inserted += 1
 
         supabase.table("daily_ingestion_log").update(
