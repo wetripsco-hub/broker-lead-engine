@@ -21,12 +21,13 @@ STATUS (verified against real runs, 2026-09-23):
     Business, Mailing Address, and Business Telephone directly. This
     replaces the old Google/DuckDuckGo email-search approach entirely
     — see motus_account_lookup().
-  - Email discovery via search engines: ABANDONED. Both Google (429
-    "/sorry/index") and DuckDuckGo (image CAPTCHA) block automated
+  - Email discovery via search engines: REMOVED. Both Google (429
+    "/sorry/index") and DuckDuckGo (image CAPTCHA) blocked automated
     search outright, confirmed from this sandbox AND the operator's
-    own residential IP. find_email() is left in the code unused, in
-    case the MOTUS account page ever gets locked down and a paid
-    provider (Hunter.io, SerpAPI, ...) needs wiring in as a fallback.
+    own residential IP — the MOTUS account page (above) makes this
+    unnecessary anyway, so the search-engine code was deleted rather
+    than kept unused. If MOTUS ever gets locked down, a paid provider
+    (Hunter.io, SerpAPI, ...) would need wiring in here instead.
 
 RUN LOCALLY ONLY — see the architecture note in app/api/scrape/run/route.ts
 for why this cannot run on Vercel (no Python runtime, no browser binary
@@ -56,7 +57,6 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 
 import pdfplumber
 import requests
@@ -77,17 +77,11 @@ MOTUS_ACCOUNT_URL = "https://motus.dot.gov/customer/{usdot}/account"
 SAFER_SNAPSHOT_URL = "https://safer.fmcsa.dot.gov/CompanySnapshot.aspx?USDOT={usdot}"
 SAFER_DELAY_SECONDS = 2
 MOTUS_DELAY_SECONDS = 2
-# Polite pacing between DuckDuckGo searches (on top of SAFER_DELAY_SECONDS).
-# find_email() is currently unused — see motus_account_lookup() instead.
-EMAIL_SEARCH_DELAY_SECONDS = 3
 
 SECTION_HEADERS = {
     "property": "BROKER OF PROPERTY (EXCEPT HOUSEHOLD GOODS)",
     "household_goods": "BROKER OF HOUSEHOLD GOODS",
 }
-
-EMAIL_PREFIXES = ["info", "contact", "sales"]
-EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
 # CONFIRMED against a real REGISTER PDF (2026-09-16). This is a plain table
 # — NOT labeled fields — with columns:
@@ -487,93 +481,6 @@ def motus_account_lookup(usdot: str) -> dict:
     }
 
 
-# ── Step 3b: Email finder (unused — see motus_account_lookup() above) ───────
-
-def find_email(
-    company_name: str, city: str | None, state: str | None, officer: str | None
-) -> tuple[str | None, str]:
-    """
-    Best-effort. CONFIRMED against a live run: Google returns HTTP 429
-    ("/sorry/index" bot-check) on essentially every request regardless of
-    pacing — it detects the automated browser itself, not just request
-    frequency, so it was never usable here. Switched to DuckDuckGo's
-    no-JS HTML endpoint (html.duckduckgo.com/html/) via the plain Fetcher
-    instead of a full browser — much less aggressive bot detection, though
-    still best-effort (a high 'not_found' rate is expected regardless of
-    search engine — see EMAIL_PREFIXES fallback below).
-    Returns (email, confidence).
-    """
-    query = f"{company_name} {city or ''} {state or ''} email contact"
-    search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
-
-    try:
-        res = Fetcher.get(search_url)
-    except Exception as e:  # noqa: BLE001
-        log(f"  email search failed: {e}")
-        return None, "not_found"
-
-    if res.status != 200:
-        log(f"  email search returned HTTP {res.status}")
-        return None, "not_found"
-
-    # DuckDuckGo's HTML results use class="result__a"; fall back to any
-    # link on the page if that selector ever changes.
-    links = res.css("a.result__a::attr(href)").getall() or res.css("a::attr(href)").getall()
-    website = None
-    name_tokens = [t.lower() for t in re.split(r"\W+", company_name) if len(t) > 3]
-
-    for href in links:
-        if href.startswith("//"):
-            href = "https:" + href
-        if "duckduckgo.com/l/" in href:
-            # DDG wraps click-tracked results as /l/?uddg=<real>&... —
-            # unwrap instead of discarding.
-            qs = parse_qs(urlparse(href).query)
-            real = qs.get("uddg", [None])[0]
-            if not real:
-                continue
-            href = real
-        elif "duckduckgo.com" in href:
-            continue  # other DDG-internal links
-
-        if not href.startswith("http"):
-            continue
-
-        domain = urlparse(href).netloc.lower()
-        if any(tok in domain for tok in name_tokens):
-            website = href
-            break
-
-    if not website:
-        return None, "not_found"
-
-    try:
-        site_res = StealthyFetcher.fetch(website, headless=True, network_idle=True)
-    except Exception as e:  # noqa: BLE001
-        log(f"  website crawl failed: {e}")
-        return None, "not_found"
-
-    found_emails = set(EMAIL_RE.findall(site_res.get_all_text()))
-    if not found_emails:
-        return None, "not_found"
-
-    domain = urlparse(website).netloc.replace("www.", "")
-    lower_emails = {e.lower(): e for e in found_emails}
-
-    if officer:
-        first = officer.strip().split()[0].lower()
-        for lower, original in lower_emails.items():
-            if lower.startswith(first + "@"):
-                return original, "found"
-
-    for prefix in EMAIL_PREFIXES:
-        guess = f"{prefix}@{domain}"
-        if guess in lower_emails:
-            return lower_emails[guess], "found"
-
-    return next(iter(found_emails)), "guessed"
-
-
 # ── Step 4: Supabase save ────────────────────────────────────────────────────
 
 def get_existing_usdots(supabase: Client) -> set[str]:
@@ -594,7 +501,9 @@ def normalise_date(raw: str | None) -> str | None:
 
 def save_broker(
     supabase: Client, record: dict, safer: dict, motus: dict, log_id: str
-) -> None:
+) -> bool:
+    """Returns True if a new row was inserted, False if it was a duplicate
+    (dot_number already existed) and got silently skipped instead."""
     email = motus.get("email")
     confidence = "found" if email else "not_found"
 
@@ -613,26 +522,42 @@ def save_broker(
     )
     address = parse_motus_address(raw_address)
 
-    supabase.table("brokers").insert(
-        {
-            "dot_number": record["usdot"],
-            "mc_number": safer.get("mc_number"),
-            "company_name": motus.get("legal_name") or record["company_name"],
-            "contact_name": contact_name,
-            "phone": motus.get("phone") or record.get("phone"),
-            "address_line1": address["address_line1"],
-            "city": address["city"],
-            "state": address["state"],
-            "zip": address["zip"],
-            "authority_status": safer.get("operating_status"),
-            "registration_date": normalise_date(record.get("filing_date")),
-            "broker_type": record["broker_type"],
-            "email": email,
-            "email_confidence": confidence,
-            "ingestion_run_id": log_id,
-        }
-    ).execute()
-    # `on_broker_inserted` DB trigger auto-creates the matching lead
+    # upsert(..., on_conflict="dot_number", ignore_duplicates=True) instead
+    # of insert(): the pre-run existing-USDOT check (get_existing_usdots)
+    # already skips most duplicates before we get here, but this is the
+    # real guarantee — it relies on the DB's own unique index
+    # (brokers_dot_number_unique_idx) rather than an in-memory snapshot, so
+    # a duplicate row is silently ignored (not inserted, no error, no
+    # crash) even if the same USDOT appears twice in one PDF, across two
+    # overlapping runs, or in a future re-run.
+    result = (
+        supabase.table("brokers")
+        .upsert(
+            {
+                "dot_number": record["usdot"],
+                "mc_number": safer.get("mc_number"),
+                "company_name": motus.get("legal_name") or record["company_name"],
+                "contact_name": contact_name,
+                "phone": motus.get("phone") or record.get("phone"),
+                "address_line1": address["address_line1"],
+                "city": address["city"],
+                "state": address["state"],
+                "zip": address["zip"],
+                "authority_status": safer.get("operating_status"),
+                "registration_date": normalise_date(record.get("filing_date")),
+                "broker_type": record["broker_type"],
+                "email": email,
+                "email_confidence": confidence,
+                "ingestion_run_id": log_id,
+            },
+            on_conflict="dot_number",
+            ignore_duplicates=True,
+        )
+        .execute()
+    )
+    # `on_broker_inserted` DB trigger auto-creates the matching lead — only
+    # fires on a real insert, so a skipped duplicate correctly gets no lead.
+    return len(result.data) > 0
 
 
 # ── Orchestration ────────────────────────────────────────────────────────────
@@ -684,6 +609,21 @@ def main() -> None:
 
         log("Parsing PDF (broker sections only — property + household goods)…")
         records = parse_pdf(pdf_bytes)
+
+        # De-dupe within the parsed batch itself — a USDOT could in theory
+        # appear twice in one PDF (e.g. listed once per an amended filing).
+        # Keeps the first occurrence only.
+        seen_in_batch: set[str] = set()
+        deduped: list[dict] = []
+        for r in records:
+            if r["usdot"] in seen_in_batch:
+                continue
+            seen_in_batch.add(r["usdot"])
+            deduped.append(r)
+        if len(deduped) < len(records):
+            log(f"  {len(records) - len(deduped)} duplicate USDOT rows within this PDF, collapsed")
+        records = deduped
+
         fetched = len(records)
         log(f"Found {fetched} broker records")
 
@@ -723,8 +663,11 @@ def main() -> None:
                     emails_found += 1
             time.sleep(MOTUS_DELAY_SECONDS)
 
-            save_broker(supabase, record, safer, motus, log_id)
-            inserted += 1
+            was_new = save_broker(supabase, record, safer, motus, log_id)
+            if was_new:
+                inserted += 1
+            else:
+                log(f"  skipped — USDOT {record['usdot']} already exists (duplicate)")
 
         supabase.table("daily_ingestion_log").update(
             {
