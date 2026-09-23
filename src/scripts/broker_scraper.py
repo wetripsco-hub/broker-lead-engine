@@ -103,27 +103,38 @@ def find_latest_pdf_url() -> str:
     def page_action(page):
         page.wait_for_load_state("networkidle")
 
-        links = page.locator("a")
-        for i in range(links.count()):
-            href = links.nth(i).get_attribute("href") or ""
+        # (a) the pre-signed href might already be in the DOM once JS renders
+        for el in page.locator("a").all():
+            href = el.get_attribute("href") or ""
             if "REGISTER" in href and ".pdf" in href:
                 captured["url"] = href
                 return page
 
-        # Fall back to clicking date links (text like "09/23/2026") — the
-        # "FMCSA Daily Register" section's links appear first in the DOM,
-        # so try the last date link first and walk backwards.
-        date_links = page.get_by_role("link", name=_re.compile(r"^\d{2}/\d{2}/\d{4}$"))
-        count = date_links.count()
-        for idx in range(count - 1, -1, -1):
+        # (b) find clickable-looking elements whose visible text is a bare
+        # date (MM/DD/YYYY). Matching is done in Python (not via Playwright's
+        # own regex locators — patchright's regex-to-selector conversion
+        # chokes on "\d" patterns) to sidestep that entirely.
+        date_re = _re.compile(r"^\d{2}/\d{2}/\d{4}$")
+        candidates = []
+        for el in page.locator("a, button, span, div").all():
+            try:
+                text = el.inner_text().strip()
+            except Exception:  # noqa: BLE001
+                continue
+            if date_re.match(text):
+                candidates.append(el)
+
+        # The "FMCSA Daily Register" section's links appear first in the
+        # DOM, so try the last date-text element first and walk backwards.
+        for el in reversed(candidates):
             try:
                 with page.expect_response(
                     lambda r: "REGISTER" in r.url and ".pdf" in r.url, timeout=8000
                 ) as resp_info:
-                    date_links.nth(idx).click()
+                    el.click()
                 captured["url"] = resp_info.value.url
                 return page
-            except Exception:  # noqa: BLE001 — try the next link
+            except Exception:  # noqa: BLE001 — try the next candidate
                 continue
 
         return page
