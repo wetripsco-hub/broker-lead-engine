@@ -110,10 +110,11 @@ def find_latest_pdf_url() -> str:
         # are already present, then give the results a moment to render.
         try:
             page.locator("button:has-text('Apply')").first.click(timeout=5000)
+            log("  clicked Apply button")
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(2000)
-        except Exception:  # noqa: BLE001 — proceed with whatever is already rendered
-            pass
+        except Exception as e:  # noqa: BLE001 — proceed with whatever is already rendered
+            log(f"  could not click Apply button: {e}")
 
         # (a) the pre-signed href might already be in the DOM once JS renders
         for el in page.locator("a").all():
@@ -149,19 +150,23 @@ def find_latest_pdf_url() -> str:
             except Exception:  # noqa: BLE001 — try the next candidate
                 continue
 
-        # Nothing matched — dump the rendered HTML around "Daily Register"
-        # to a local file for inspection instead of guessing blind again.
+        # Nothing matched — dump HTML around the first real date pattern
+        # found anywhere in the page (not the word "Daily Register", which
+        # only ever appears once, as the checkbox label) to a local file.
         try:
             full_html = page.content()
-            # "Daily Register" also appears as a checkbox label earlier in
-            # the form — the results heading (with the actual date links)
-            # is the LAST occurrence, if results rendered at all.
-            idx = full_html.rfind("Daily Register")
-            snippet = full_html[max(0, idx - 200): idx + 3000] if idx != -1 else full_html[:3000]
             debug_path = REPO_ROOT / "src" / "scripts" / "debug_page.html"
             debug_path.write_text(full_html, encoding="utf-8")
-            captured["debug_snippet"] = snippet
             captured["debug_path"] = str(debug_path)
+
+            date_match = _re.search(r"\d{2}/\d{2}/202\d", full_html)
+            if date_match:
+                idx = date_match.start()
+                captured["debug_snippet"] = full_html[max(0, idx - 500): idx + 1000]
+                captured["debug_note"] = f"Found date text at offset {idx}"
+            else:
+                captured["debug_snippet"] = full_html[:2000]
+                captured["debug_note"] = "No MM/DD/YYYY-shaped text found anywhere in the rendered page"
         except Exception:  # noqa: BLE001
             pass
 
@@ -179,8 +184,9 @@ def find_latest_pdf_url() -> str:
     if "debug_snippet" in captured:
         raise RuntimeError(
             "Could not find or trigger the FMCSA Daily Register PDF link. "
-            f"Full page HTML saved to {captured['debug_path']} — share the "
-            f"snippet below (or that file) to fix this:\n{captured['debug_snippet']}"
+            f"{captured.get('debug_note', '')} Full page HTML saved to "
+            f"{captured['debug_path']} — share the snippet below (or that "
+            f"file) to fix this:\n{captured['debug_snippet']}"
         )
 
     all_links = res.css("a::attr(href)").getall()
