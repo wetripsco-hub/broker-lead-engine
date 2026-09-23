@@ -3,13 +3,27 @@ Broker-only lead pipeline for Broker Lead Engine.
 
 Discovers newly-filed freight brokers (property + household goods only —
 truckers/forwarders/passenger carriers are skipped) from the FMCSA daily
-publication PDF, enriches each one via a SAFER lookup and a best-effort
-email search, then writes new brokers to Supabase. The existing
-`on_broker_inserted` DB trigger auto-creates a 'new'-stage lead for each.
+publication PDF, enriches each one via a SAFER lookup, then writes new
+brokers to Supabase. The existing `on_broker_inserted` DB trigger
+auto-creates a 'new'-stage lead for each.
+
+STATUS (verified against real runs, 2026-09-23):
+  - PDF discovery + download: WORKING (captures the live pre-signed S3
+    URL via browser automation — see find_latest_pdf_url()).
+  - PDF parsing: WORKING — verified 33/33 property-broker rows parsed
+    correctly from a real REGISTER PDF.
+  - SAFER enrichment: WORKING.
+  - Email discovery: DISABLED. Both Google (429 "/sorry/index") and
+    DuckDuckGo (image CAPTCHA) block this automated search outright —
+    confirmed from this sandbox AND the operator's own residential IP,
+    with or without request pacing. find_email() is left in the code for
+    wiring in a paid provider (Hunter.io, SerpAPI, Google Custom Search
+    API, ...) later; it is not called from main() right now, so every
+    broker saves with email=None, email_confidence='not_found'.
 
 RUN LOCALLY ONLY — see the architecture note in app/api/scrape/run/route.ts
 for why this cannot run on Vercel (no Python runtime, no browser binary
-for Scrapling's StealthyFetcher, and FMCSA/Google both block cloud IPs).
+for Scrapling's StealthyFetcher, and FMCSA blocks cloud IPs).
 
 Usage:
     pip install -r src/scripts/requirements.txt
@@ -18,15 +32,6 @@ Usage:
 Reads Supabase credentials from the repo's .env.local (same variables the
 Next.js app uses: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) so
 there is only one place secrets live.
-
-UNVERIFIED AGAINST LIVE SITES — motus.dot.gov and safer.fmcsa.dot.gov were
-not reachable during development (same cloud-IP blocking pattern this
-project hit earlier with census.dot.gov and QCMobile). The PDF-field
-regexes, SAFER selectors, and page-link discovery below are best-effort
-guesses at FMCSA's actual format. After your first real run, inspect a
-downloaded PDF/page and adjust FIELD_PATTERNS / safer_lookup() as needed —
-each function has a fallback that logs and continues rather than crashing
-the whole run on one bad record.
 """
 
 import io
@@ -531,16 +536,16 @@ def main() -> None:
                 log(f"  SAFER lookup failed: {safer['error']}")
             time.sleep(SAFER_DELAY_SECONDS)
 
-            addr = safer.get("address") or record.get("address") or ""
-            parts = [p.strip() for p in addr.split(",")]
-            city = parts[-2] if len(parts) >= 2 else None
-            state = parts[-1] if parts else None
-
-            time.sleep(EMAIL_SEARCH_DELAY_SECONDS)
-            email, confidence = find_email(record["company_name"], city, state, record.get("officer"))
-            if confidence == "found":
-                emails_found += 1
-            log(f"  email: {email or '—'} ({confidence})")
+            # Email discovery is disabled: confirmed on a real run that both
+            # Google (429 "/sorry/index") and DuckDuckGo (image CAPTCHA)
+            # block this automated search outright, from both this sandbox
+            # and the operator's own residential IP — not a pacing issue,
+            # a hard bot-detection wall either provider can throw up at
+            # will. find_email() is left in place below for when a paid
+            # provider (Hunter.io, SerpAPI, Google Custom Search API, ...)
+            # is wired in — swap this line for that call when ready.
+            email, confidence = None, "not_found"
+            log(f"  email: {email or '—'} ({confidence}) — search disabled, see comment above")
 
             save_broker(supabase, record, safer, email, confidence, log_id)
             inserted += 1
