@@ -13,14 +13,15 @@ STATUS (verified against real runs, 2026-09-23):
   - PDF parsing: WORKING — verified 33/33 property-broker rows parsed
     correctly from a real REGISTER PDF.
   - SAFER enrichment: WORKING.
-  - MOTUS account lookup (email + officials + address): WORKING.
-    https://motus.dot.gov/customer/{usdot}/account is a PUBLIC (no
-    login required) per-USDOT record page — confirmed via a live test
-    that it returns Business Email, Company Officials (name + title,
-    i.e. the CEO/beneficial-owner/contact person), Principal Place of
-    Business, Mailing Address, and Business Telephone directly. This
-    replaces the old Google/DuckDuckGo email-search approach entirely
-    — see motus_account_lookup().
+  - MOTUS lookup (email + officials + authority + address): WORKING,
+    via MOTUS's own public JSON API (no auth, ~390ms per broker) —
+    GET /api/carriers/{usdot}, the same endpoint its account page
+    calls. Returns USDOT status, legal/DBA name, principal + mailing
+    addresses (pre-split into line/city/state/zip), business phone and
+    email, every company official (name/title/phone/email) and every
+    operating authority (type, MC number, status). This replaces both
+    the old Google/DuckDuckGo email search AND the later browser-based
+    DOM scrape of the same page — see motus_account_lookup().
   - Email discovery via search engines: REMOVED. Both Google (429
     "/sorry/index") and DuckDuckGo (image CAPTCHA) blocked automated
     search outright, confirmed from this sandbox AND the operator's
@@ -73,10 +74,15 @@ SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
 MOTUS_INDEX_URL = "https://motus.dot.gov/customer/daily-fmcsa-publications"
-MOTUS_ACCOUNT_URL = "https://motus.dot.gov/customer/{usdot}/account"
+# The JSON API behind the /customer/{usdot}/account page — see
+# motus_account_lookup() for why we call this directly.
+MOTUS_API_URL = "https://motus.dot.gov/api/carriers/{usdot}"
+MOTUS_USER_AGENT = "Mozilla/5.0"
 SAFER_SNAPSHOT_URL = "https://safer.fmcsa.dot.gov/CompanySnapshot.aspx?USDOT={usdot}"
 SAFER_DELAY_SECONDS = 2
-MOTUS_DELAY_SECONDS = 2
+# The MOTUS API answers in ~0.4s, so this is politeness pacing for a
+# government endpoint rather than a wait for anything to load.
+MOTUS_DELAY_SECONDS = 1
 
 SECTION_HEADERS = {
     "property": "BROKER OF PROPERTY (EXCEPT HOUSEHOLD GOODS)",
@@ -421,65 +427,37 @@ MC_STATUS_RANK = {"active": 0, "pending": 1}
 # of the pipeline spec: no lead is created for these.
 MC_STATUS_SKIP = {"rejected", "withdrawn"}
 
-# Waits until BOTH MUI DataGrids on the page have settled: either a real
-# cell value has rendered, or the grid says "No rows" (legitimately empty).
-# Polling on textContent rather than a visible-text selector is deliberate —
-# the Operating Authority accordion is COLLAPSED by default, so its text is
-# present in the DOM but invisible, and any visible-text wait would hang
-# until the timeout on every single broker.
-GRIDS_READY_JS = """() => {
-    const settled = (field) => {
-        const grid = [...document.querySelectorAll('[role="grid"]')]
-            .find(g => g.querySelector(`[data-field="${field}"]`));
-        if (!grid) return false;
-        if (/No rows/i.test(grid.textContent)) return true;
-        const cell = grid.querySelector(`[role="gridcell"][data-field="${field}"]`);
-        return !!(cell && cell.textContent.trim());
-    };
-    return settled('name') && settled('docketNumber');
-}"""
+# addressTypeId values, decoded by cross-checking a broker whose principal
+# and mailing addresses differ (USDOT 4551039) against what its account
+# page displays under each heading.
+ADDRESS_TYPE_PRINCIPAL = "eef9bd53-0da3-4b96-b462-8e2711a009ef"
+ADDRESS_TYPE_MAILING = "34878d0c-cf18-46ce-a23e-60bfcaf558db"
+
+EMPTY_ADDRESS = {
+    "address_line1": None,
+    "address_line2": None,
+    "city": None,
+    "state": None,
+    "zip": None,
+}
 
 
-def _node_text(node) -> str | None:
-    try:
-        text = node.get_all_text(strip=True)
-    except AttributeError:  # plain parsel Selector without Scrapling's helper
-        text = "".join(node.css("::text").getall()).strip()
+def _clean(value) -> str | None:
+    """MOTUS pads several fields with trailing spaces (e.g. "SCOTT ")."""
+    if value is None:
+        return None
+    text = str(value).strip()
     return text or None
 
 
-def _labelled_value(sel, label: str) -> str | None:
-    """
-    Each business-info field renders as a two-div row: a label div holding
-    a <p>, then a sibling value div. Walking label → parent → next sibling
-    is deliberate: reading the page's flat text instead breaks on EMPTY
-    fields, which contribute no text at all, so a text-order parser
-    silently returns the NEXT field's label as this field's value (e.g. an
-    empty "Doing Business As (DBA) Name" would come back as "Principal
-    Place of Business").
-    """
-    nodes = sel.xpath(f'//p[normalize-space(text())="{label}"]/../following-sibling::div[1]')
-    return _node_text(nodes[0]) if nodes else None
-
-
-def _grid_rows(sel, fields: tuple[str, ...]) -> list[dict]:
-    """
-    Reads MUI DataGrid rows by their data-field attributes. Selecting on
-    role="gridcell" excludes the header row (role="columnheader"), and
-    keying on data-field means column order/labels can change without
-    breaking this. Rows from an unrelated grid are skipped automatically
-    because they carry different data-field names.
-    """
-    rows: list[dict] = []
-    for row in sel.css('div[role="row"]'):
-        cells = {}
-        for field in fields:
-            cell = row.css(f'div[role="gridcell"][data-field="{field}"]')
-            if cell:
-                cells[field] = _node_text(cell[0])
-        if cells and any(cells.values()):
-            rows.append(cells)
-    return rows
+def _api_address(location: dict) -> dict:
+    return {
+        "address_line1": _clean(location.get("addressLine1")),
+        "address_line2": _clean(location.get("addressLine2")),
+        "city": _clean(location.get("city")),
+        "state": _clean(location.get("state")),
+        "zip": _clean(location.get("zipCode")),
+    }
 
 
 def _normalise_authority(raw_type: str | None, docket: str | None, status: str | None) -> dict:
@@ -502,24 +480,61 @@ def _normalise_authority(raw_type: str | None, docket: str | None, status: str |
     }
 
 
-def parse_motus_account(sel) -> dict:
-    """Pure parser — split out from the fetch so it can be tested offline
-    against saved page HTML."""
-    officials = [
-        {
-            "name": r.get("name"),
-            "title": r.get("title"),
-            "phone": r.get("phoneNumber"),
-            "email": r.get("email"),
-        }
-        for r in _grid_rows(sel, ("name", "title", "phoneNumber", "email"))
-        if r.get("name")
-    ]
+def parse_motus_payload(data: dict) -> dict:
+    """Pure parser over /api/carriers/{usdot} JSON — split out from the
+    request so it can be tested offline against a saved payload."""
+    names = {n.get("nameType"): _clean(n.get("entityName")) for n in data.get("entityNames") or []}
 
-    authorities = [
-        _normalise_authority(r.get("operatingAuthorityType"), r.get("docketNumber"), r.get("status"))
-        for r in _grid_rows(sel, ("operatingAuthorityType", "docketNumber", "status"))
-    ]
+    locations = data.get("locations") or []
+    by_type = {loc.get("addressTypeId"): loc for loc in locations}
+    principal = by_type.get(ADDRESS_TYPE_PRINCIPAL)
+    mailing = by_type.get(ADDRESS_TYPE_MAILING)
+
+    emails = data.get("emailAddresses") or []
+    primary_email = next(
+        (_clean(e.get("emailAddress")) for e in emails if e.get("primaryAddressFlag")),
+        None,
+    ) or next((_clean(e.get("emailAddress")) for e in emails), None)
+
+    phones = data.get("phoneNumbers") or []
+    phone = next((_clean(p.get("phoneNumber")) for p in phones), None)
+
+    officials = []
+    for officer in data.get("entityOfficers") or []:
+        name = " ".join(
+            part
+            for part in (
+                _clean(officer.get("firstName")),
+                _clean(officer.get("middleName")),
+                _clean(officer.get("lastName")),
+                _clean(officer.get("suffix")),
+            )
+            if part
+        )
+        if not name:
+            continue
+        officials.append(
+            {
+                "name": name,
+                "title": _clean(officer.get("title")),
+                "phone": _clean(officer.get("phoneNumber")),
+                "email": _clean(officer.get("email")),
+            }
+        )
+
+    authorities = []
+    for registration in data.get("entityRegistrations") or []:
+        for link in registration.get("entityRegistrationOperatingAuthorities") or []:
+            authority = link.get("entityOperatingAuthority") or {}
+            authorities.append(
+                _normalise_authority(
+                    (authority.get("operatingAuthorityType") or {}).get("operatingAuthorityType"),
+                    authority.get("docketNumber"),
+                    (authority.get("operatingAuthorityStatus") or {}).get(
+                        "operatingAuthorityStatusName"
+                    ),
+                )
+            )
 
     broker_authorities = [a for a in authorities if a["authority_type"]]
     primary = min(
@@ -528,16 +543,16 @@ def parse_motus_account(sel) -> dict:
         default=None,
     )
 
-    status_nodes = sel.xpath('//h4[starts-with(normalize-space(), "USDOT #")]/following-sibling::h4[1]')
+    dot_status = (data.get("entityDotNumber") or {}).get("dotNumberStatus") or {}
 
     return {
-        "usdot_status": _node_text(status_nodes[0]) if status_nodes else None,
-        "legal_name": _labelled_value(sel, "Legal Business Name"),
-        "dba_name": _labelled_value(sel, "Doing Business As (DBA) Name"),
-        "principal_address": _labelled_value(sel, "Principal Place of Business"),
-        "mailing_address": _labelled_value(sel, "Mailing Address"),
-        "phone": _labelled_value(sel, "Business Telephone No."),
-        "email": _labelled_value(sel, "Business Email"),
+        "usdot_status": _clean(dot_status.get("dotNumberStatus")),
+        "legal_name": names.get("Legal"),
+        "dba_name": names.get("DBA"),
+        "principal_address": _api_address(principal) if principal else None,
+        "mailing_address": _api_address(mailing) if mailing else None,
+        "phone": phone,
+        "email": primary_email,
         "officials": officials,
         "authorities": authorities,
         "authority_type": primary["authority_type"] if primary else None,
@@ -549,49 +564,39 @@ def parse_motus_account(sel) -> dict:
 
 def motus_account_lookup(usdot: str) -> dict:
     """
-    https://motus.dot.gov/customer/{usdot}/account is a PUBLIC, no-login
-    per-USDOT record page — CONFIRMED via live tests that it returns the
-    full business record directly: USDOT status, Legal/DBA name, Principal
-    and Mailing addresses, Business Telephone, Business Email, a COMPANY
-    OFFICIALS table (name/title/phone/email) and an OPERATING AUTHORITY
-    REGISTRATION(S) table (authority type, MC number, current status).
-    This is a client-rendered MUI app, so it needs StealthyFetcher (a real
-    browser), not the plain Fetcher.
+    MOTUS's own JSON API, which is what the account page itself calls:
+    GET https://motus.dot.gov/api/carriers/{usdot} — public, no auth.
+
+    This replaced rendering the page in a browser and scraping its DOM.
+    The page's two MUI DataGrids lazy-load — measured 8s to 20s of grey
+    skeleton per broker before the officials/authority rows appeared — so
+    the browser path needed a 30s worst-case wait for data this endpoint
+    returns in well under a second (measured ~390ms). It is also strictly
+    richer: officer phone/email come back populated here even where the
+    rendered table left those cells blank, and addresses arrive already
+    split into line/city/state/zip instead of needing a regex.
 
     Best-effort like safer_lookup(): never raises, always returns a dict
     (with "error" set on failure) so one broken lookup never kills the run.
-
-    Both DataGrids load well after "networkidle" fires — CONFIRMED on real
-    pages that one broker's grid filled in after ~8s and another's after
-    ~20s, showing a grey skeleton the whole time. page_action polls until
-    both grids actually hold data (or report "No rows") before the HTML is
-    captured.
     """
-    url = MOTUS_ACCOUNT_URL.format(usdot=usdot)
-
-    def page_action(page):
-        page.wait_for_load_state("networkidle")
-        try:
-            page.wait_for_function(GRIDS_READY_JS, timeout=30000)
-        except Exception:  # noqa: BLE001 — capture whatever did load
-            pass
-        page.wait_for_timeout(500)
-        return page
-
     try:
-        res = StealthyFetcher.fetch(
-            url, headless=True, network_idle=True, page_action=page_action
+        resp = requests.get(
+            MOTUS_API_URL.format(usdot=usdot),
+            timeout=30,
+            headers={"User-Agent": MOTUS_USER_AGENT, "Accept": "application/json"},
         )
     except Exception as e:  # noqa: BLE001
         return {**MOTUS_EMPTY_RECORD, "error": str(e)}
 
-    if res.status != 200:
-        return {**MOTUS_EMPTY_RECORD, "error": f"HTTP {res.status}"}
-
-    if "Entity not found" in res.get_all_text():
+    if resp.status_code == 404:
         return {**MOTUS_EMPTY_RECORD, "error": "not found"}
+    if resp.status_code != 200:
+        return {**MOTUS_EMPTY_RECORD, "error": f"HTTP {resp.status_code}"}
 
-    return parse_motus_account(res)
+    try:
+        return parse_motus_payload(resp.json())
+    except Exception as e:  # noqa: BLE001 — a malformed payload shouldn't kill the run
+        return {**MOTUS_EMPTY_RECORD, "error": f"could not parse payload: {e}"}
 
 
 # ── Step 4: Supabase save ────────────────────────────────────────────────────
@@ -628,21 +633,20 @@ def save_broker(
     # keep all of them rather than just the first.
     contact_name = ", ".join(o["name"] for o in officials) if officials else record.get("officer")
 
-    # Prefer the confirmed MOTUS address (principal, then mailing) over the
-    # SAFER snapshot address, over whatever the PDF row itself had.
-    raw_address = (
+    # Prefer MOTUS's structured address (principal, then mailing) — it comes
+    # already split into line/city/state/zip. Only the SAFER/PDF fallbacks
+    # are single strings that need the regex.
+    address = (
         motus.get("principal_address")
         or motus.get("mailing_address")
-        or safer.get("address")
-        or record.get("address")
+        or parse_motus_address(safer.get("address") or record.get("address"))
     )
-    address = parse_motus_address(raw_address)
 
     # upsert(..., on_conflict="dot_number", ignore_duplicates=True) instead
     # of insert(): the pre-run existing-USDOT check (get_existing_usdots)
     # already skips most duplicates before we get here, but this is the
-    # real guarantee — it relies on the DB's own unique index
-    # (brokers_dot_number_unique_idx) rather than an in-memory snapshot, so
+    # real guarantee — it relies on the DB's own unique constraint
+    # (brokers_dot_number_key) rather than an in-memory snapshot, so
     # a duplicate row is silently ignored (not inserted, no error, no
     # crash) even if the same USDOT appears twice in one PDF, across two
     # overlapping runs, or in a future re-run.
@@ -659,6 +663,7 @@ def save_broker(
                 "contact_name": contact_name,
                 "phone": motus.get("phone") or record.get("phone"),
                 "address_line1": address["address_line1"],
+                "address_line2": address.get("address_line2"),
                 "city": address["city"],
                 "state": address["state"],
                 "zip": address["zip"],

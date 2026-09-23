@@ -23,7 +23,6 @@ from broker_scraper import (  # noqa: E402
     SUPABASE_URL,
     log,
     motus_account_lookup,
-    parse_motus_address,
     save_officials,
 )
 from supabase import create_client  # noqa: E402
@@ -67,7 +66,7 @@ def main() -> None:
         # the first official who listed their own.
         email = motus.get("email") or next((o["email"] for o in officials if o.get("email")), None)
 
-        raw_address = motus.get("principal_address") or motus.get("mailing_address")
+        address = motus.get("principal_address") or motus.get("mailing_address")
 
         update: dict = {
             "contact_name": contact_name,
@@ -83,11 +82,11 @@ def main() -> None:
             update["mc_number"] = motus["mc_number"]
         if motus.get("phone"):
             update["phone"] = motus["phone"]
-        if raw_address:
-            address = parse_motus_address(raw_address)
+        if address:
             update.update(
                 {
                     "address_line1": address["address_line1"],
+                    "address_line2": address.get("address_line2"),
                     "city": address["city"],
                     "state": address["state"],
                     "zip": address["zip"],
