@@ -36,6 +36,18 @@ function formatDuration(s: number) {
   return `${m}:${sec.toString().padStart(2, "0")}`
 }
 
+// The SDK emits structured error objects ({ code, name, message, description })
+// for things like MEDIA_MICROPHONE_PERMISSION_DENIED — String(e) on those
+// gives "[object Object]", so pull the useful field out first.
+function telnyxErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (e && typeof e === "object") {
+    const anyE = e as any
+    return anyE.message || anyE.description || anyE.name || JSON.stringify(e)
+  }
+  return String(e)
+}
+
 function parseDuration(body: string | null): number | null {
   if (!body) return null
   const m = body.match(/Duration:\s*(\d+)s/)
@@ -82,6 +94,7 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
   const startTimeRef = useRef<number>(0)
   const endedRef     = useRef(false)
   const numberRef    = useRef("")
+  const audioRef      = useRef<HTMLAudioElement>(null)
 
   const isBusy = phase !== "idle" // used for the trigger indicator dot
 
@@ -168,12 +181,23 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
       const { TelnyxRTC } = await import("@telnyx/webrtc")
       const client = new TelnyxRTC({ login_token: token })
       clientRef.current = client
+      // Without this the SDK has no element to attach the remote audio
+      // stream to, so the browser side never hears the other party.
+      if (audioRef.current) (client as any).remoteElement = audioRef.current
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("Registration timed out (15 s)")), 15000)
         ;(client as any).on("telnyx.ready", () => { clearTimeout(timeout); resolve() })
-        ;(client as any).on("telnyx.error", (e: unknown) => { clearTimeout(timeout); reject(new Error(String(e))) })
+        ;(client as any).on("telnyx.error", (e: unknown) => { clearTimeout(timeout); reject(new Error(telnyxErrorMessage(e))) })
         ;(client as any).connect()
+      })
+
+      // Errors after registration (e.g. mic permission denied when the call
+      // tries to grab getUserMedia) don't reject the promise above — it's
+      // already settled — so without this listener they fail silently.
+      ;(client as any).on("telnyx.error", (e: unknown) => {
+        toast.error(`Call error: ${telnyxErrorMessage(e)}`)
+        handleCallEnd()
       })
 
       setPhase("dialing")
@@ -197,6 +221,9 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
         if (state === "active") {
           setPhase("active")
           startTimeRef.current = Date.now()
+          // Mobile browsers block autoplay outside a direct user gesture;
+          // this nudge runs after the user's own "Call" click, so it's allowed.
+          audioRef.current?.play().catch(() => {})
         }
         if (["hangup", "destroy", "purge"].includes(state)) {
           handleCallEnd()
@@ -267,6 +294,9 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
 
   return (
     <div className="relative">
+      {/* Remote audio playout — required by the Telnyx SDK (client.remoteElement) */}
+      <audio ref={audioRef} autoPlay playsInline className="hidden" />
+
       {/* ── Trigger button ── */}
       <button
         onClick={togglePanel}
