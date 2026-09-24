@@ -35,12 +35,14 @@ export async function mintToken(credentialId: string): Promise<string> {
     method: "POST",
     headers: authHeaders(),
   })
+  // Unlike Telnyx's other endpoints, this one returns the JWT itself as the
+  // raw response body (text/plain), not JSON — parsing it with res.json()
+  // throws "Unexpected token 'e', "eyJhbGciOi"... is not valid JSON".
+  const body = await res.text()
   if (!res.ok) {
-    const body = await res.text()
     throw new Error(`Telnyx mintToken failed (${res.status}): ${body}`)
   }
-  const { token } = await res.json()
-  return token
+  return body.trim()
 }
 
 export async function startCallRecording(callControlId: string): Promise<void> {
