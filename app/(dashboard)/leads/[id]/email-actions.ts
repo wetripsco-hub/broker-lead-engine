@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { getResend, EMAIL_FROM, interpolate } from "@/lib/email/resend"
+import { interpolate } from "@/lib/email/resend"
+import { sendEmail } from "@/lib/email/send"
 
 export interface SendEmailResult {
   error: string | null
@@ -72,30 +73,26 @@ export async function sendTemplateEmail(
   const subject = interpolate(tpl.subject, vars)
   const body    = interpolate(tpl.body, vars)
 
-  // Send via Resend
-  try {
-    const resend = getResend()
-    const { data, error } = await resend.emails.send({
-      from: EMAIL_FROM,
-      to:   lead.brokers.email,
-      subject,
-      text: body,
-    })
-    if (error) return { error: error.message }
+  const { id: messageId, error: sendError } = await sendEmail({
+    to: lead.brokers.email,
+    subject,
+    text: body,
+  })
 
-    // Log to outreach_events
-    await (supabase.from("outreach_events") as any).insert({
-      lead_id:      leadId,
-      agent_id:     agent.id,
-      channel:      "email",
-      status:       "sent",
-      message_body: `Subject: ${subject}\n\n${body}`,
-      external_id:  data?.id ?? null,
-    })
+  // Log every attempt to outreach_events, success or failure, so the
+  // timeline and any bulk-send summary reflect what actually happened.
+  await (supabase.from("outreach_events") as any).insert({
+    lead_id:      leadId,
+    agent_id:     agent.id,
+    channel:      "email",
+    status:       sendError ? "failed" : "sent",
+    message_body: sendError ? `Subject: ${subject}\n\nFailed: ${sendError}` : `Subject: ${subject}\n\n${body}`,
+    external_id:  messageId,
+  })
 
-    revalidatePath(`/leads/${leadId}`)
-    return { error: null, messageId: data?.id }
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) }
-  }
+  if (sendError) return { error: sendError }
+
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath("/leads")
+  return { error: null, messageId: messageId ?? undefined }
 }
