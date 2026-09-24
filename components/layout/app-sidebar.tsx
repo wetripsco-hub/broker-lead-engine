@@ -33,8 +33,37 @@ const navItems = [
   { href: "/leads",     label: "Leads",         icon: Users },
   { href: "/templates", label: "Templates",     icon: Mail },
   { href: "/ingestion", label: "Ingestion Log", icon: RefreshCw },
-  { href: "/settings",  label: "Settings",      icon: Settings },
 ]
+
+const settingsItem = { href: "/settings", label: "Settings", icon: Settings }
+
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  active,
+}: {
+  href: string
+  label: string
+  icon: React.ElementType
+  active: boolean
+}) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        render={<Link href={href} />}
+        isActive={active}
+        className="relative transition-colors duration-150 ease-[var(--ease-out)] data-[active=true]:font-medium"
+      >
+        {active && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full bg-primary animate-in-fade" />
+        )}
+        <Icon className="size-4 transition-transform duration-150 ease-[var(--ease-out)] group-hover/menu-item:translate-x-0.5" />
+        <span>{label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+}
 
 interface AppSidebarProps {
   userName: string
@@ -69,24 +98,24 @@ export function AppSidebar({ userName, userEmail, role, agentId }: AppSidebarPro
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
-              {navItems.map(({ href, label, icon: Icon }) => {
-                const active = pathname === href || pathname.startsWith(href + "/")
-                return (
-                  <SidebarMenuItem key={href}>
-                    <SidebarMenuButton
-                      render={<Link href={href} />}
-                      isActive={active}
-                      className="relative transition-colors duration-150 ease-[var(--ease-out)] data-[active=true]:font-medium"
-                    >
-                      {active && (
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full bg-primary animate-in-fade" />
-                      )}
-                      <Icon className="size-4 transition-transform duration-150 ease-[var(--ease-out)] group-hover/menu-item:translate-x-0.5" />
-                      <span>{label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
+              {navItems.map(({ href, label, icon }) => (
+                <NavLink
+                  key={href}
+                  href={href}
+                  label={label}
+                  icon={icon}
+                  active={pathname === href || pathname.startsWith(href + "/")}
+                />
+              ))}
+              <SidebarMenuItem>
+                <DialerWidget agentId={agentId} />
+              </SidebarMenuItem>
+              <NavLink
+                href={settingsItem.href}
+                label={settingsItem.label}
+                icon={settingsItem.icon}
+                active={pathname === settingsItem.href || pathname.startsWith(settingsItem.href + "/")}
+              />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -107,8 +136,6 @@ export function AppSidebar({ userName, userEmail, role, agentId }: AppSidebarPro
             {role}
           </Badge>
         </div>
-
-        <DialerWidget agentId={agentId} />
 
         <form action={logout}>
           <button
