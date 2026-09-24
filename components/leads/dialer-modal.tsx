@@ -15,9 +15,9 @@ import { toast } from "sonner"
 import {
   logCallStarted,
   saveCallDisposition,
-  DISPOSITION_LABEL,
-  type DispositionKey,
 } from "@/app/(dashboard)/leads/[id]/call-actions"
+import { DISPOSITION_LABEL } from "@/lib/call-dispositions"
+import type { DispositionKey } from "@/lib/call-dispositions"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
