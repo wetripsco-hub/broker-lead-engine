@@ -316,9 +316,13 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
         )}
       </button>
 
-      {/* ── Floating panel ── */}
+      {/* ── Panel (centered modal so it's never clipped by the sidebar) ── */}
       {open && (
-        <div className="animate-panel-in absolute bottom-full left-0 mb-2 z-50 w-80 bg-card border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setOpen(false) }}
+        >
+        <div className="animate-panel-in w-full max-w-sm bg-card border rounded-xl shadow-2xl flex flex-col overflow-hidden">
           {/* Header with tabs */}
           <div className="relative flex items-center justify-between border-b px-2 pt-2">
             <div className="relative flex gap-1">
@@ -560,6 +564,7 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
               </div>
             </div>
           )}
+        </div>
         </div>
       )}
     </div>
