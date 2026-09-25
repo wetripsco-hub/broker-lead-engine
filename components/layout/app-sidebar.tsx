@@ -7,6 +7,7 @@ import {
   Users,
   RefreshCw,
   Mail,
+  MessageSquare,
   Settings,
   LogOut,
 } from "lucide-react"
@@ -26,11 +27,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { logout } from "@/app/(auth)/login/actions"
 import { DialerWidget } from "@/components/dialer/dialer-widget"
+import { UnreadSmsBadge } from "@/components/messages/unread-sms-badge"
 import type { UserRole } from "@/types/database"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard",     icon: LayoutDashboard },
   { href: "/leads",     label: "Leads",         icon: Users },
+]
+
+const secondaryNavItems = [
   { href: "/templates", label: "Templates",     icon: Mail },
   { href: "/ingestion", label: "Ingestion Log", icon: RefreshCw },
 ]
@@ -42,11 +47,13 @@ function NavLink({
   label,
   icon: Icon,
   active,
+  badge,
 }: {
   href: string
   label: string
   icon: React.ElementType
   active: boolean
+  badge?: React.ReactNode
 }) {
   return (
     <SidebarMenuItem>
@@ -60,6 +67,7 @@ function NavLink({
         )}
         <Icon className="size-4 transition-transform duration-150 ease-[var(--ease-out)] group-hover/menu-item:translate-x-0.5" />
         <span>{label}</span>
+        {badge}
       </SidebarMenuButton>
     </SidebarMenuItem>
   )
@@ -70,9 +78,10 @@ interface AppSidebarProps {
   userEmail: string
   role: UserRole
   agentId: string | null
+  unreadSmsCount: number
 }
 
-export function AppSidebar({ userName, userEmail, role, agentId }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount }: AppSidebarProps) {
   const pathname = usePathname()
   const initials = userName
     .split(" ")
@@ -99,6 +108,22 @@ export function AppSidebar({ userName, userEmail, role, agentId }: AppSidebarPro
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
               {navItems.map(({ href, label, icon }) => (
+                <NavLink
+                  key={href}
+                  href={href}
+                  label={label}
+                  icon={icon}
+                  active={pathname === href || pathname.startsWith(href + "/")}
+                />
+              ))}
+              <NavLink
+                href="/messages"
+                label="Messages"
+                icon={MessageSquare}
+                active={pathname === "/messages" || pathname.startsWith("/messages/")}
+                badge={<UnreadSmsBadge initialCount={unreadSmsCount} />}
+              />
+              {secondaryNavItems.map(({ href, label, icon }) => (
                 <NavLink
                   key={href}
                   href={href}

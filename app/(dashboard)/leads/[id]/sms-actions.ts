@@ -43,6 +43,8 @@ export async function sendLeadSms(
       message_body: text,
       direction: "outbound",
       external_id: externalId,
+      from_number: process.env.TELNYX_SMS_NUMBER ?? null,
+      to_number: brokerPhone,
     })
     .select("id")
     .single()

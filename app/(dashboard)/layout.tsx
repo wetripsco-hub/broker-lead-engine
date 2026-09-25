@@ -28,6 +28,13 @@ export default async function DashboardLayout({
   const role = (user.user_metadata?.role as UserRole) ?? "agent"
   const userName = agent?.name ?? user.email ?? "User"
 
+  const { count: unreadSmsCount } = await supabase
+    .from("outreach_events")
+    .select("id", { count: "exact", head: true })
+    .eq("channel", "sms")
+    .eq("direction", "inbound")
+    .is("read_at", null)
+
   return (
     <SidebarProvider>
       <AppSidebar
@@ -35,6 +42,7 @@ export default async function DashboardLayout({
         userEmail={user.email ?? ""}
         role={role}
         agentId={agent?.id ?? null}
+        unreadSmsCount={unreadSmsCount ?? 0}
       />
       <main className="flex flex-1 flex-col min-h-screen">
         <header className="flex items-center h-12 px-4 border-b shrink-0">

@@ -189,6 +189,9 @@ export interface Database {
           external_id: string | null
           direction: "inbound" | "outbound"
           direct_number: string | null
+          from_number: string | null
+          to_number: string | null
+          read_at: string | null
           occurred_at: string
         }
         Insert: {
@@ -203,6 +206,9 @@ export interface Database {
           external_id?: string | null
           direction?: "inbound" | "outbound"
           direct_number?: string | null
+          from_number?: string | null
+          to_number?: string | null
+          read_at?: string | null
           occurred_at?: string
         }
         Update: Partial<Database["public"]["Tables"]["outreach_events"]["Insert"]>
