@@ -40,6 +40,21 @@ export default async function LeadsPage() {
     .maybeSingle()
   const currentAgentName = (myAgentRaw as { name: string } | null)?.name ?? ""
 
+  // Latest email status per lead, for the "Email Status" column — one query
+  // for all leads, newest first, then keep only the first (latest) row per
+  // lead_id client-side (Postgres has no simple "latest per group" select).
+  const { data: emailEventsRaw } = await supabase
+    .from("outreach_events")
+    .select("lead_id, status, open_count, click_count, occurred_at")
+    .eq("channel", "email")
+    .order("occurred_at", { ascending: false })
+
+  const emailStatusByLead: Record<string, { status: string; openCount: number; clickCount: number }> = {}
+  for (const e of (emailEventsRaw ?? []) as any[]) {
+    if (!e.lead_id || emailStatusByLead[e.lead_id]) continue
+    emailStatusByLead[e.lead_id] = { status: e.status, openCount: e.open_count ?? 0, clickCount: e.click_count ?? 0 }
+  }
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <LeadsListClient
@@ -47,6 +62,7 @@ export default async function LeadsPage() {
         isAdmin={isAdmin}
         templates={templates}
         currentAgentName={currentAgentName}
+        emailStatusByLead={emailStatusByLead}
       />
     </div>
   )

@@ -86,6 +86,34 @@ export default async function DashboardPage() {
     },
   ]
 
+  // Email performance: no delivery webhook exists for email (unlike SMS/
+  // calls via Telnyx), so "delivered" here means "didn't fail to send" —
+  // the honest signal we actually have — not carrier-confirmed delivery.
+  const { data: emailEventsRaw } = await supabase
+    .from("outreach_events")
+    .select("status, open_count, click_count")
+    .eq("channel", "email")
+
+  const emailEvents = (emailEventsRaw ?? []) as Array<{
+    status: string
+    open_count: number | null
+    click_count: number | null
+  }>
+  const totalEmailAttempts = emailEvents.length
+  const failedEmails = emailEvents.filter((e) => e.status === "failed").length
+  const sentEmails = totalEmailAttempts - failedEmails
+  const openedEmails = emailEvents.filter((e) => (e.open_count ?? 0) > 0).length
+  const clickedEmails = emailEvents.filter((e) => (e.click_count ?? 0) > 0).length
+
+  const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "—")
+
+  const emailStats = [
+    { label: "Emails Sent", value: totalEmailAttempts, sub: totalEmailAttempts ? `${failedEmails} failed` : "No emails yet" },
+    { label: "Delivery Rate", value: pct(sentEmails, totalEmailAttempts), sub: `${sentEmails} of ${totalEmailAttempts} sent` },
+    { label: "Open Rate", value: pct(openedEmails, sentEmails), sub: `${openedEmails} opened` },
+    { label: "Click Rate", value: pct(clickedEmails, sentEmails), sub: `${clickedEmails} clicked` },
+  ]
+
   // Recent activity: last 12 outreach events across all leads
   const { data: recentRaw } = await supabase
     .from("outreach_events")
@@ -167,6 +195,30 @@ export default async function DashboardPage() {
             <div key={label}>{card}</div>
           )
         })}
+      </div>
+
+      {/* Email performance */}
+      <div>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">Email performance</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {emailStats.map(({ label, value, sub }, i) => (
+            <Card
+              key={label}
+              className="shadow-sm animate-in-rise"
+              style={{ animationDelay: `${200 + i * 50}ms` }}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
+                <p className="text-xs text-muted-foreground mt-1.5">{sub}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">

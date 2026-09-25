@@ -8,7 +8,7 @@ export type Json =
 
 export type LeadStage = "new" | "contacted" | "interested" | "converted" | "dead"
 export type OutreachChannel = "email" | "call" | "sms"
-export type OutreachStatus = "pending" | "sent" | "delivered" | "failed" | "no_answer" | "answered"
+export type OutreachStatus = "pending" | "sent" | "delivered" | "opened" | "clicked" | "failed" | "no_answer" | "answered"
 export type UserRole = "admin" | "agent"
 
 export interface Database {
@@ -192,6 +192,10 @@ export interface Database {
           from_number: string | null
           to_number: string | null
           read_at: string | null
+          opened_at: string | null
+          open_count: number
+          clicked_at: string | null
+          click_count: number
           occurred_at: string
         }
         Insert: {
@@ -209,6 +213,10 @@ export interface Database {
           from_number?: string | null
           to_number?: string | null
           read_at?: string | null
+          opened_at?: string | null
+          open_count?: number
+          clicked_at?: string | null
+          click_count?: number
           occurred_at?: string
         }
         Update: Partial<Database["public"]["Tables"]["outreach_events"]["Insert"]>

@@ -10,6 +10,10 @@ interface TimelineEvent {
   recording_url: string | null
   occurred_at: string
   agents: { name: string } | null
+  opened_at?: string | null
+  open_count?: number
+  clicked_at?: string | null
+  click_count?: number
 }
 
 interface OutreachTimelineProps {
@@ -28,19 +32,24 @@ const CHANNEL_LABEL: Record<OutreachChannel, string> = {
   sms:   "SMS",
 }
 
-const STATUS_COLOR: Record<OutreachStatus, string> = {
-  pending:   "text-muted-foreground",
-  sent:      "text-blue-600 dark:text-blue-400",
-  delivered: "text-green-600 dark:text-green-400",
-  failed:    "text-destructive",
-  no_answer: "text-yellow-600 dark:text-yellow-400",
-  answered:  "text-green-600 dark:text-green-400",
+// Sent (gray) -> Delivered (blue) -> Opened (green) -> Clicked (purple)
+const STATUS_BADGE: Record<OutreachStatus, string> = {
+  pending:   "bg-muted text-muted-foreground",
+  sent:      "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200",
+  delivered: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  opened:    "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  clicked:   "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  failed:    "bg-destructive/10 text-destructive",
+  no_answer: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300",
+  answered:  "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
 }
 
 const STATUS_LABEL: Record<OutreachStatus, string> = {
   pending:   "Pending",
   sent:      "Sent",
   delivered: "Delivered",
+  opened:    "Opened",
+  clicked:   "Clicked",
   failed:    "Failed",
   no_answer: "No answer",
   answered:  "Answered",
@@ -154,7 +163,7 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
                         ? <ArrowDownLeft className="size-3 text-blue-500" />
                         : <ArrowUpRight className="size-3 text-muted-foreground" />
                     )}
-                    <span className={`text-xs ${STATUS_COLOR[ev.status]}`}>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${STATUS_BADGE[ev.status]}`}>
                       {STATUS_LABEL[ev.status]}
                     </span>
                   </div>
@@ -180,6 +189,24 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
                       {ev.message_body}
                     </p>
                   ) : null}
+
+                  {/* Open/click stats — email only */}
+                  {ev.channel === "email" && ((ev.open_count ?? 0) > 0 || (ev.click_count ?? 0) > 0) && (
+                    <p className="text-xs text-muted-foreground">
+                      {(ev.open_count ?? 0) > 0 && (
+                        <>
+                          Opened {ev.open_count} time{ev.open_count === 1 ? "" : "s"}
+                          {ev.opened_at && ` · last ${relativeTime(ev.opened_at)}`}
+                        </>
+                      )}
+                      {(ev.click_count ?? 0) > 0 && (
+                        <>
+                          {(ev.open_count ?? 0) > 0 && " · "}
+                          Clicked {ev.click_count} time{ev.click_count === 1 ? "" : "s"}
+                        </>
+                      )}
+                    </p>
+                  )}
 
                   <p className="text-xs text-muted-foreground">
                     {isInbound ? "Broker" : (ev.agents?.name ?? "Agent")}

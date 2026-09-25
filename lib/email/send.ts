@@ -13,6 +13,7 @@ export async function sendEmail(params: {
   to: string
   subject: string
   text: string
+  html?: string
 }): Promise<SendEmailResult> {
   const provider = process.env.EMAIL_PROVIDER ?? "resend"
 
@@ -27,6 +28,7 @@ export async function sendEmail(params: {
       to: params.to,
       subject: params.subject,
       text: params.text,
+      ...(params.html ? { html: params.html } : {}),
     })
     if (error) return { id: null, error: error.message }
     return { id: data?.id ?? null, error: null }

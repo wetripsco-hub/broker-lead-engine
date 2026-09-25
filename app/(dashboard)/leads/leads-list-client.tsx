@@ -34,6 +34,45 @@ interface Template {
   body: string
 }
 
+interface EmailStatusInfo {
+  status: string
+  openCount: number
+  clickCount: number
+}
+
+// Mirrors OutreachTimeline's STATUS_BADGE: Sent (gray) -> Delivered (blue)
+// -> Opened (green) -> Clicked (purple).
+const EMAIL_STATUS_BADGE: Record<string, string> = {
+  pending:   "bg-muted text-muted-foreground",
+  sent:      "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200",
+  delivered: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  opened:    "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  clicked:   "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  failed:    "bg-destructive/10 text-destructive",
+}
+
+const EMAIL_STATUS_LABEL: Record<string, string> = {
+  pending:   "Pending",
+  sent:      "Sent",
+  delivered: "Delivered",
+  opened:    "Opened",
+  clicked:   "Clicked",
+  failed:    "Failed",
+}
+
+function EmailStatusCell({ info }: { info: EmailStatusInfo | undefined }) {
+  if (!info) return <span className="text-xs text-muted-foreground pointer-events-none">—</span>
+  return (
+    <span
+      className={`text-xs px-1.5 py-0.5 rounded-full font-medium w-fit pointer-events-none ${
+        EMAIL_STATUS_BADGE[info.status] ?? "bg-muted text-muted-foreground"
+      }`}
+    >
+      {EMAIL_STATUS_LABEL[info.status] ?? info.status}
+    </span>
+  )
+}
+
 const STAGE_FILTERS: { value: LeadStage | "all"; label: string }[] = [
   { value: "all",        label: "All" },
   { value: "new",        label: "New" },
@@ -48,11 +87,13 @@ export function LeadsListClient({
   isAdmin,
   templates,
   currentAgentName,
+  emailStatusByLead,
 }: {
   leads: LeadRow[]
   isAdmin: boolean
   templates: Template[]
   currentAgentName: string
+  emailStatusByLead: Record<string, EmailStatusInfo>
 }) {
   const [stageFilter, setStageFilter] = useState<LeadStage | "all">("all")
   const [search, setSearch] = useState("")
@@ -185,7 +226,7 @@ export function LeadsListClient({
           </div>
         ) : (
           <div>
-            <div className="grid grid-cols-[28px_1fr_140px_180px_100px_32px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide items-center">
+            <div className="grid grid-cols-[28px_1fr_140px_110px_180px_100px_32px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide items-center">
               <input
                 type="checkbox"
                 checked={allFilteredSelected}
@@ -195,6 +236,7 @@ export function LeadsListClient({
               />
               <span>Company</span>
               <span>Location</span>
+              <span>Email Status</span>
               {isAdmin && <span>Agent</span>}
               <span>Stage</span>
               <span />
@@ -202,10 +244,14 @@ export function LeadsListClient({
             {filtered.map((lead, i) => {
               const b = lead.brokers
               const checked = selectedIds.has(lead.id)
+              const emailInfo = emailStatusByLead[lead.id]
+              const opened = emailInfo?.status === "opened" || emailInfo?.status === "clicked"
               return (
                 <div
                   key={lead.id}
-                  className={`relative grid grid-cols-[28px_1fr_140px_180px_100px_32px] gap-4 px-4 py-3 border-b last:border-0 items-center transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/40 group animate-in-fade ${checked ? "bg-accent/40" : ""}`}
+                  className={`relative grid grid-cols-[28px_1fr_140px_110px_180px_100px_32px] gap-4 px-4 py-3 border-b last:border-0 items-center transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/40 group animate-in-fade ${
+                    checked ? "bg-accent/40" : opened ? "bg-green-500/5" : ""
+                  }`}
                   style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
                 >
                   <Link href={`/leads/${lead.id}`} className="absolute inset-0" aria-label={b?.company_name ?? "View lead"} />
@@ -224,6 +270,7 @@ export function LeadsListClient({
                   <span className="text-sm text-muted-foreground truncate pointer-events-none">
                     {[b?.city, b?.state].filter(Boolean).join(", ") || "—"}
                   </span>
+                  <EmailStatusCell info={emailInfo} />
                   {isAdmin && (
                     <span className="text-sm text-muted-foreground truncate pointer-events-none">
                       {lead.agents?.name ?? <span className="italic">Unassigned</span>}

@@ -27,6 +27,7 @@ export async function sendViaSmtp(params: {
   to: string
   subject: string
   text: string
+  html?: string
 }): Promise<{ id: string | null; error: string | null }> {
   try {
     const info = await getTransporter().sendMail({
@@ -34,6 +35,7 @@ export async function sendViaSmtp(params: {
       to: params.to,
       subject: params.subject,
       text: params.text,
+      html: params.html,
     })
     return { id: info.messageId ?? null, error: null }
   } catch (err) {
