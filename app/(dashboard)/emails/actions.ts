@@ -176,25 +176,63 @@ export async function addSenderAsLead(
   return { error: null, leadId }
 }
 
+// A shared inbox sync is safe for agents to trigger: it just imports mail
+// server-side with the admin client, and what each user then *sees* is still
+// decided by RLS (an agent only gets replies for their own leads). Agents
+// get two guard rails admins don't: a short throttle so repeated clicks
+// can't hammer the mailbox, and generic error text so IMAP connection
+// details never reach them.
+const AGENT_SYNC_COOLDOWN_MS = 15_000
+
 export async function syncEmailNow(): Promise<{
   error: string | null
   imported?: number
   duplicates?: number
   remaining?: number
   baselined?: boolean
+  throttled?: boolean
 }> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user || user.user_metadata?.role !== "admin") return { error: "Admin access required" }
-  if (!imapConfigured()) return { error: "IMAP isn't configured (set IMAP_HOST, IMAP_USER, IMAP_PASS)" }
+  if (!user) return { error: "Not authenticated" }
+
+  const isAdmin = user.user_metadata?.role === "admin"
+
+  if (!isAdmin) {
+    const { data: agentRow } = await (supabase.from("agents") as any)
+      .select("active")
+      .eq("user_id", user.id)
+      .maybeSingle()
+    if (!agentRow || !(agentRow as { active: boolean }).active) return { error: "No active agent record" }
+
+    const { data: stateRaw } = await (createAdminClient().from("email_sync_state") as any)
+      .select("last_synced_at")
+      .eq("id", "inbox")
+      .maybeSingle()
+    const last = (stateRaw as { last_synced_at: string | null } | null)?.last_synced_at
+    if (last && Date.now() - new Date(last).getTime() < AGENT_SYNC_COOLDOWN_MS) {
+      return { error: null, imported: 0, duplicates: 0, remaining: 0, throttled: true }
+    }
+  }
+
+  if (!imapConfigured()) {
+    return {
+      error: isAdmin
+        ? "IMAP isn't configured (set IMAP_HOST, IMAP_USER, IMAP_PASS)"
+        : "Email sync isn't set up yet — ask an admin.",
+    }
+  }
 
   try {
     const r = await syncInbox()
     revalidatePath("/emails")
     return { error: null, imported: r.imported, duplicates: r.duplicates, remaining: r.remaining, baselined: r.baselined }
   } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) }
+    const message = err instanceof Error ? err.message : String(err)
+    if (isAdmin) return { error: message }
+    console.error("[email sync] agent-triggered sync failed:", message)
+    return { error: "Sync failed — ask an admin to check the mail connection." }
   }
 }

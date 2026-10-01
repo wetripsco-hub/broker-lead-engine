@@ -233,7 +233,10 @@ export function EmailsClient({
     setSyncing(true)
     const r = await syncEmailNow()
     if (r.error) toast.error(`Sync failed: ${r.error}`)
-    else if (r.baselined) {
+    else if (r.throttled) {
+      toast.success("Already up to date — synced a moment ago.")
+      await refetch()
+    } else if (r.baselined) {
       toast.success("Sync started — only emails that arrive from now on will be imported.")
       await refetch()
     } else {
@@ -259,48 +262,51 @@ export function EmailsClient({
               className="pl-8 h-8 text-sm"
             />
           </div>
-          {isAdmin && (
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant={filter === "all" ? "default" : "ghost"}
-                size="sm"
-                className="h-7 text-xs px-2.5"
-                onClick={() => setFilter("all")}
-              >
-                All
-              </Button>
-              <Button
-                variant={filter === "unmatched" ? "default" : "ghost"}
-                size="sm"
-                className="h-7 text-xs px-2.5"
-                onClick={() => setFilter("unmatched")}
-              >
-                Unmatched{unmatchedCount > 0 ? ` (${unmatchedCount})` : ""}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs px-2.5 gap-1.5 ml-auto"
-                onClick={handleSync}
-                disabled={syncing || !imapConfigured}
-                title={imapConfigured ? "Fetch new mail now" : "IMAP isn't configured"}
-              >
-                <RefreshCw className={`size-3 ${syncing ? "animate-spin" : ""}`} />
-                Sync now
-              </Button>
-            </div>
-          )}
-          {isAdmin && (
-            <p className="text-[11px] text-muted-foreground">
-              {!imapConfigured
+          <div className="flex items-center gap-1.5">
+            {/* Unmatched mail has no lead, so only admins ever see it. */}
+            {isAdmin && (
+              <>
+                <Button
+                  variant={filter === "all" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 text-xs px-2.5"
+                  onClick={() => setFilter("all")}
+                >
+                  All
+                </Button>
+                <Button
+                  variant={filter === "unmatched" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 text-xs px-2.5"
+                  onClick={() => setFilter("unmatched")}
+                >
+                  Unmatched{unmatchedCount > 0 ? ` (${unmatchedCount})` : ""}
+                </Button>
+              </>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs px-2.5 gap-1.5 ml-auto"
+              onClick={handleSync}
+              disabled={syncing || !imapConfigured}
+              title={imapConfigured ? "Fetch new mail now" : "Email sync isn't set up"}
+            >
+              <RefreshCw className={`size-3 ${syncing ? "animate-spin" : ""}`} />
+              Sync now
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {!imapConfigured
+              ? isAdmin
                 ? "IMAP isn't configured — set IMAP_HOST, IMAP_USER, IMAP_PASS."
-                : lastSyncError
-                  ? `Last sync failed: ${lastSyncError}`
-                  : lastSyncedAt
-                    ? `Last synced ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                    : "Not synced yet."}
-            </p>
-          )}
+                : "Email sync isn't set up yet — ask an admin."
+              : lastSyncError
+                ? `Last sync failed: ${lastSyncError}`
+                : lastSyncedAt
+                  ? `Last synced ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : "Not synced yet."}
+          </p>
         </div>
 
         <div className="flex-1 overflow-y-auto">

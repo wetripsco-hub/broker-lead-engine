@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { imapConfigured } from "@/lib/email/imap-sync"
 import { EmailsClient } from "./emails-client"
 
@@ -24,17 +25,16 @@ export default async function EmailsPage() {
     .eq("channel", "email")
     .order("occurred_at", { ascending: true })
 
-  let lastSyncedAt: string | null = null
-  let lastSyncError: string | null = null
-  if (isAdmin) {
-    const { data: stateRaw } = await (supabase.from("email_sync_state") as any)
-      .select("last_synced_at, last_error")
-      .eq("id", "inbox")
-      .maybeSingle()
-    const state = stateRaw as { last_synced_at: string | null; last_error: string | null } | null
-    lastSyncedAt = state?.last_synced_at ?? null
-    lastSyncError = state?.last_error ?? null
-  }
+  // email_sync_state is admin-only under RLS (its error text can contain
+  // mail-server details), so read it with the admin client and hand agents
+  // just the timestamp — never the error.
+  const { data: stateRaw } = await (createAdminClient().from("email_sync_state") as any)
+    .select("last_synced_at, last_error")
+    .eq("id", "inbox")
+    .maybeSingle()
+  const state = stateRaw as { last_synced_at: string | null; last_error: string | null } | null
+  const lastSyncedAt = state?.last_synced_at ?? null
+  const lastSyncError = isAdmin ? (state?.last_error ?? null) : null
 
   return (
     <div className="h-[calc(100vh-3rem)]">
