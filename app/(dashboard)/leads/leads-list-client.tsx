@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { StageBadge } from "@/components/leads/stage-badge"
 import { StageSelector } from "@/components/leads/stage-selector"
 import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selector"
 import { BulkEmailModal, type BulkRecipient } from "@/components/leads/bulk-email-modal"
-import { Search, ChevronRight, Mail, X } from "lucide-react"
+import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp } from "lucide-react"
 import { toast } from "sonner"
 import { bulkAssignLeads } from "./actions"
 import type { LeadStage } from "@/types/database"
@@ -76,6 +76,20 @@ function EmailStatusCell({ info }: { info: EmailStatusInfo | undefined }) {
   )
 }
 
+// The agent view has no Agent column, so it needs its own track list — a
+// fixed template with one column too many pushes everything after it over.
+const GRID_ADMIN = "grid-cols-[28px_1fr_140px_100px_110px_180px_100px_32px]"
+const GRID_AGENT = "grid-cols-[28px_1fr_140px_100px_110px_100px_32px]"
+
+function relativeAge(iso: string, now: number): string {
+  const mins = Math.floor((now - new Date(iso).getTime()) / 60_000)
+  if (mins < 1) return "just now"
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
 const STAGE_FILTERS: { value: LeadStage | "all"; label: string }[] = [
   { value: "all",        label: "All" },
   { value: "new",        label: "New" },
@@ -106,8 +120,14 @@ export function LeadsListClient({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkModalOpen, setBulkModalOpen] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
+  // Newest first by default: the freshly scraped leads are what you look for.
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
+  // Relative ages depend on the current time, so they're filled in after
+  // mount — rendering them on the server would mismatch on hydration.
+  const [now, setNow] = useState<number | null>(null)
+  useEffect(() => setNow(Date.now()), [])
 
-  const filtered = leads.filter((l) => {
+  const matching = leads.filter((l) => {
     if (stageFilter !== "all" && l.stage !== stageFilter) return false
     if (agentFilter === "unassigned" && l.assigned_agent_id !== null) return false
     if (agentFilter !== "all" && agentFilter !== "unassigned" && l.assigned_agent_id !== agentFilter) return false
@@ -124,6 +144,11 @@ export function LeadsListClient({
       )
     }
     return true
+  })
+
+  const filtered = [...matching].sort((a, b) => {
+    const d = a.created_at.localeCompare(b.created_at)
+    return sortDir === "desc" ? -d : d
   })
 
   function toggleOne(id: string) {
@@ -248,7 +273,7 @@ export function LeadsListClient({
           </div>
         ) : (
           <div>
-            <div className="grid grid-cols-[28px_1fr_140px_110px_180px_100px_32px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide items-center">
+            <div className={`grid ${isAdmin ? GRID_ADMIN : GRID_AGENT} gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide items-center`}>
               <input
                 type="checkbox"
                 checked={allFilteredSelected}
@@ -258,6 +283,15 @@ export function LeadsListClient({
               />
               <span>Company</span>
               <span>Location</span>
+              <button
+                type="button"
+                onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+                className="flex items-center gap-1 uppercase tracking-wide hover:text-foreground w-fit"
+                title={sortDir === "desc" ? "Newest first — click for oldest first" : "Oldest first — click for newest first"}
+              >
+                Added
+                {sortDir === "desc" ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />}
+              </button>
               <span>Email Status</span>
               {isAdmin && <span>Agent</span>}
               <span>Stage</span>
@@ -271,7 +305,7 @@ export function LeadsListClient({
               return (
                 <div
                   key={lead.id}
-                  className={`relative grid grid-cols-[28px_1fr_140px_110px_180px_100px_32px] gap-4 px-4 py-3 border-b last:border-0 items-center transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/40 group animate-in-fade ${
+                  className={`relative grid ${isAdmin ? GRID_ADMIN : GRID_AGENT} gap-4 px-4 py-3 border-b last:border-0 items-center transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/40 group animate-in-fade ${
                     checked ? "bg-accent/40" : opened ? "bg-green-500/5" : ""
                   }`}
                   style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
@@ -292,6 +326,14 @@ export function LeadsListClient({
                   <span className="text-sm text-muted-foreground truncate pointer-events-none">
                     {[b?.city, b?.state].filter(Boolean).join(", ") || "—"}
                   </span>
+                  <div className="min-w-0 pointer-events-none leading-tight" title={new Date(lead.created_at).toLocaleString()}>
+                    <p className="text-sm text-muted-foreground" suppressHydrationWarning>
+                      {new Date(lead.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </p>
+                    <p className="text-xs text-muted-foreground/70 h-4" suppressHydrationWarning>
+                      {now !== null ? relativeAge(lead.created_at, now) : ""}
+                    </p>
+                  </div>
                   <EmailStatusCell info={emailInfo} />
                   {isAdmin && (
                     <div className="relative z-10">
