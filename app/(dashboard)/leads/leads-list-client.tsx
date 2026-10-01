@@ -8,6 +8,8 @@ import { StageBadge } from "@/components/leads/stage-badge"
 import { StageSelector } from "@/components/leads/stage-selector"
 import { BulkEmailModal, type BulkRecipient } from "@/components/leads/bulk-email-modal"
 import { Search, ChevronRight, Mail, X } from "lucide-react"
+import { toast } from "sonner"
+import { bulkAssignLeads } from "./actions"
 import type { LeadStage } from "@/types/database"
 
 interface LeadRow {
@@ -88,20 +90,26 @@ export function LeadsListClient({
   templates,
   currentAgentName,
   emailStatusByLead,
+  allAgents,
 }: {
   leads: LeadRow[]
   isAdmin: boolean
   templates: Template[]
   currentAgentName: string
   emailStatusByLead: Record<string, EmailStatusInfo>
+  allAgents: Array<{ id: string; name: string }>
 }) {
   const [stageFilter, setStageFilter] = useState<LeadStage | "all">("all")
+  const [agentFilter, setAgentFilter] = useState<string>("all") // "all" | "unassigned" | agentId
   const [search, setSearch] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkModalOpen, setBulkModalOpen] = useState(false)
+  const [isAssigning, setIsAssigning] = useState(false)
 
   const filtered = leads.filter((l) => {
     if (stageFilter !== "all" && l.stage !== stageFilter) return false
+    if (agentFilter === "unassigned" && l.assigned_agent_id !== null) return false
+    if (agentFilter !== "all" && agentFilter !== "unassigned" && l.assigned_agent_id !== agentFilter) return false
     if (search) {
       const q = search.toLowerCase()
       const b = l.brokers
@@ -187,6 +195,19 @@ export function LeadsListClient({
             </Button>
           ))}
         </div>
+        {isAdmin && (
+          <select
+            value={agentFilter}
+            onChange={(e) => setAgentFilter(e.target.value)}
+            className="h-8 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="all">All agents</option>
+            <option value="unassigned">Unassigned</option>
+            {allAgents.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        )}
         {filtered.length > 0 && (
           <div className="flex items-center gap-1 ml-auto">
             <Button
@@ -299,6 +320,33 @@ export function LeadsListClient({
               <Mail className="size-3.5" />
               Send email
             </Button>
+            {isAdmin && (
+              <>
+                <div className="h-4 w-px bg-border" />
+                <select
+                  defaultValue=""
+                  disabled={isAssigning}
+                  onChange={async (e) => {
+                    const raw = e.target.value
+                    e.target.value = ""
+                    if (!raw) return
+                    const agentId = raw === "__unassign__" ? null : raw
+                    setIsAssigning(true)
+                    const { error } = await bulkAssignLeads([...selectedIds], agentId)
+                    if (error) toast.error(`Failed to assign: ${error}`)
+                    else toast.success(agentId ? "Leads assigned" : "Leads unassigned")
+                    setIsAssigning(false)
+                  }}
+                  className="h-8 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                >
+                  <option value="" disabled>Assign to agent…</option>
+                  <option value="__unassign__">Unassign</option>
+                  {allAgents.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </>
+            )}
             <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={deselectAll}>
               <X className="size-3.5" />
               Clear

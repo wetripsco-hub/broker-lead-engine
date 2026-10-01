@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Settings,
   LogOut,
+  UserCog,
 } from "lucide-react"
 import {
   Sidebar,
@@ -83,6 +84,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount }: AppSidebarProps) {
   const pathname = usePathname()
+  const isAdmin = role === "admin"
   const initials = userName
     .split(" ")
     .slice(0, 2)
@@ -123,24 +125,38 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount 
                 active={pathname === "/messages" || pathname.startsWith("/messages/")}
                 badge={<UnreadSmsBadge initialCount={unreadSmsCount} />}
               />
-              {secondaryNavItems.map(({ href, label, icon }) => (
-                <NavLink
-                  key={href}
-                  href={href}
-                  label={label}
-                  icon={icon}
-                  active={pathname === href || pathname.startsWith(href + "/")}
-                />
-              ))}
-              <SidebarMenuItem>
-                <DialerWidget agentId={agentId} />
-              </SidebarMenuItem>
-              <NavLink
-                href={settingsItem.href}
-                label={settingsItem.label}
-                icon={settingsItem.icon}
-                active={pathname === settingsItem.href || pathname.startsWith(settingsItem.href + "/")}
-              />
+              {/* Agent view is intentionally limited to Dashboard, Leads and
+                  Messages — everything below is admin-only. The server-side
+                  page guards are what actually enforce this; hiding the
+                  links is just so an agent never sees a dead end. */}
+              {isAdmin && (
+                <>
+                  {secondaryNavItems.map(({ href, label, icon }) => (
+                    <NavLink
+                      key={href}
+                      href={href}
+                      label={label}
+                      icon={icon}
+                      active={pathname === href || pathname.startsWith(href + "/")}
+                    />
+                  ))}
+                  <NavLink
+                    href="/agents"
+                    label="Agents"
+                    icon={UserCog}
+                    active={pathname === "/agents" || pathname.startsWith("/agents/")}
+                  />
+                  <SidebarMenuItem>
+                    <DialerWidget agentId={agentId} />
+                  </SidebarMenuItem>
+                  <NavLink
+                    href={settingsItem.href}
+                    label={settingsItem.label}
+                    icon={settingsItem.icon}
+                    active={pathname === settingsItem.href || pathname.startsWith(settingsItem.href + "/")}
+                  />
+                </>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

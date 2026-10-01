@@ -12,6 +12,7 @@ export default async function SettingsPage() {
 
   const role = (user.user_metadata?.role as UserRole) ?? "agent"
   const isAdmin = role === "admin"
+  if (!isAdmin) redirect("/leads")
 
   const { data: myAgentRaw } = await (supabase.from("agents") as any)
     .select("id, name, user_id, commission_rate")

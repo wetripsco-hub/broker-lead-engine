@@ -22,6 +22,8 @@ export interface Database {
           twilio_identity: string | null
           telnyx_credential_id: string | null
           commission_rate: number | null
+          email: string | null
+          active: boolean
           created_at: string
           updated_at: string
         }
@@ -32,6 +34,8 @@ export interface Database {
           twilio_identity?: string | null
           telnyx_credential_id?: string | null
           commission_rate?: number | null
+          email?: string | null
+          active?: boolean
           created_at?: string
           updated_at?: string
         }

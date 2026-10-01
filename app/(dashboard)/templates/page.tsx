@@ -10,6 +10,7 @@ export default async function TemplatesPage() {
   if (!user) redirect("/login")
 
   const isAdmin = user.user_metadata?.role === "admin"
+  if (!isAdmin) redirect("/leads")
 
   const { data } = await supabase
     .from("email_templates")

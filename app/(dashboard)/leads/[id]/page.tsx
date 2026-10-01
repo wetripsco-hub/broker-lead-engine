@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { StageSelector } from "@/components/leads/stage-selector"
 import { StageBadge } from "@/components/leads/stage-badge"
 import { NotesEditor } from "@/components/leads/notes-editor"
+import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selector"
 import { EmailCompose } from "@/components/leads/email-compose"
 import { CallButton } from "@/components/leads/call-button"
 import { SmsThread } from "@/components/leads/sms-thread"
@@ -141,6 +142,17 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const templates = (templatesRaw ?? []) as Array<{
     id: string; name: string; subject: string; body: string
   }>
+
+  // Agent list for the assignment dropdown — admin only
+  let allAgents: Array<{ id: string; name: string }> = []
+  if (isAdmin) {
+    const { data: agentsRaw } = await supabase
+      .from("agents")
+      .select("id, name")
+      .eq("active", true)
+      .order("name", { ascending: true })
+    allAgents = (agentsRaw ?? []) as Array<{ id: string; name: string }>
+  }
 
   // Outreach events for this lead (all channels for timeline; newest first)
   const { data: eventsRaw } = await supabase
@@ -321,11 +333,19 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
               Assigned to
             </p>
-            <p className="text-sm">
-              {agent?.name ?? (
-                <span className="italic text-muted-foreground">Unassigned</span>
-              )}
-            </p>
+            {isAdmin ? (
+              <AssignedAgentSelector
+                leadId={lead.id}
+                assignedAgentId={lead.assigned_agent_id}
+                agents={allAgents}
+              />
+            ) : (
+              <p className="text-sm">
+                {agent?.name ?? (
+                  <span className="italic text-muted-foreground">Unassigned</span>
+                )}
+              </p>
+            )}
           </div>
 
           {/* Notes */}

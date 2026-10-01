@@ -19,6 +19,7 @@ export default async function IngestionPage() {
   if (!user) redirect("/login")
 
   const isAdmin = user.user_metadata?.role === "admin"
+  if (!isAdmin) redirect("/leads")
 
   // Fetch log rows, most recent first
   const { data: logsRaw } = await supabase

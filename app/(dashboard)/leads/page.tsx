@@ -55,6 +55,17 @@ export default async function LeadsPage() {
     emailStatusByLead[e.lead_id] = { status: e.status, openCount: e.open_count ?? 0, clickCount: e.click_count ?? 0 }
   }
 
+  // Full agent roster for the assignment dropdown + "by agent" filter — admin only
+  let allAgents: Array<{ id: string; name: string }> = []
+  if (isAdmin) {
+    const { data: agentsRaw } = await supabase
+      .from("agents")
+      .select("id, name")
+      .eq("active", true)
+      .order("name", { ascending: true })
+    allAgents = (agentsRaw ?? []) as Array<{ id: string; name: string }>
+  }
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <LeadsListClient
@@ -63,6 +74,7 @@ export default async function LeadsPage() {
         templates={templates}
         currentAgentName={currentAgentName}
         emailStatusByLead={emailStatusByLead}
+        allAgents={allAgents}
       />
     </div>
   )
