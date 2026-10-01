@@ -19,7 +19,9 @@ interface LeadRow {
   assigned_agent_id: string | null
   created_at: string
   brokers: {
-    mc_number: string
+    // Newly scraped brokers can have no MC number yet (only a DOT).
+    mc_number: string | null
+    dot_number: string | null
     company_name: string
     contact_name: string | null
     city: string | null
@@ -137,7 +139,8 @@ export function LeadsListClient({
       if (!b) return false
       return (
         b.company_name.toLowerCase().includes(q) ||
-        b.mc_number.includes(q) ||
+        b.mc_number?.includes(q) ||
+        b.dot_number?.includes(q) ||
         b.state?.toLowerCase().includes(q) ||
         b.city?.toLowerCase().includes(q) ||
         false
@@ -321,7 +324,9 @@ export function LeadsListClient({
                   />
                   <div className="min-w-0 pointer-events-none">
                     <p className="font-medium truncate text-sm">{b?.company_name ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground font-mono">MC-{b?.mc_number}</p>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {b?.mc_number ? `MC-${b.mc_number}` : b?.dot_number ? `DOT-${b.dot_number}` : "—"}
+                    </p>
                   </div>
                   <span className="text-sm text-muted-foreground truncate pointer-events-none">
                     {[b?.city, b?.state].filter(Boolean).join(", ") || "—"}

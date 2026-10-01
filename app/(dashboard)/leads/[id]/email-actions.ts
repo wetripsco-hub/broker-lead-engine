@@ -39,7 +39,7 @@ export async function sendTemplateEmail(
       company_name: string
       contact_name: string | null
       email: string | null
-      mc_number: string
+      mc_number: string | null
       state: string | null
       city: string | null
     } | null
@@ -67,7 +67,8 @@ export async function sendTemplateEmail(
   const vars: Record<string, string> = {
     company_name: lead.brokers.company_name,
     contact_name: lead.brokers.contact_name ?? lead.brokers.company_name,
-    mc_number:    lead.brokers.mc_number,
+    // A null here would leave a literal "{{mc_number}}" in the sent email.
+    mc_number:    lead.brokers.mc_number ?? "",
     state:        lead.brokers.state ?? "",
     city:         lead.brokers.city ?? "",
     agent_name:   agent.name,

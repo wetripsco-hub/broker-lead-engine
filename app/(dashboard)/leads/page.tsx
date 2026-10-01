@@ -18,7 +18,7 @@ export default async function LeadsPage() {
       stage,
       assigned_agent_id,
       created_at,
-      brokers ( mc_number, company_name, contact_name, city, state, phone, email ),
+      brokers ( mc_number, dot_number, company_name, contact_name, city, state, phone, email ),
       agents ( name )
     `)
     .order("created_at", { ascending: false })

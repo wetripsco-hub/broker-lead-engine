@@ -157,7 +157,7 @@ function LogEntry({
               {log.brokers.map((b) => (
                 <div key={b.id} className="flex items-center gap-4 py-1.5 text-sm border-b border-border/50 last:border-0">
                   <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">
-                    MC-{b.mc_number}
+                    {b.mc_number ? `MC-${b.mc_number}` : "MC pending"}
                   </span>
                   <span className="font-medium truncate flex-1">{b.company_name}</span>
                   <span className="text-muted-foreground text-xs shrink-0">

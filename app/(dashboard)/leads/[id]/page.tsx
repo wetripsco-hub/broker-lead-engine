@@ -203,7 +203,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               <p className="text-sm text-muted-foreground mt-0.5">dba {b.dba_name}</p>
             )}
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className="text-sm text-muted-foreground font-mono">MC-{b?.mc_number}</span>
+              <span className="text-sm text-muted-foreground font-mono">
+                {b?.mc_number ? `MC-${b.mc_number}` : b?.dot_number ? `DOT-${b.dot_number}` : "—"}
+              </span>
               <McStatusBadge status={b?.mc_status ?? null} />
               {b?.usdot_status && (
                 <span className="text-xs text-muted-foreground">
