@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { StageBadge } from "@/components/leads/stage-badge"
 import { StageSelector } from "@/components/leads/stage-selector"
+import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selector"
 import { BulkEmailModal, type BulkRecipient } from "@/components/leads/bulk-email-modal"
 import { Search, ChevronRight, Mail, X } from "lucide-react"
 import { toast } from "sonner"
@@ -293,9 +294,20 @@ export function LeadsListClient({
                   </span>
                   <EmailStatusCell info={emailInfo} />
                   {isAdmin && (
-                    <span className="text-sm text-muted-foreground truncate pointer-events-none">
-                      {lead.agents?.name ?? <span className="italic">Unassigned</span>}
-                    </span>
+                    <div className="relative z-10">
+                      <AssignedAgentSelector
+                        leadId={lead.id}
+                        assignedAgentId={lead.assigned_agent_id}
+                        agents={
+                          // A lead can still point at a since-disabled agent, who
+                          // isn't in the active-only roster — keep them selectable
+                          // so the dropdown doesn't misleadingly show "Unassigned".
+                          lead.assigned_agent_id && lead.agents && !allAgents.some((a) => a.id === lead.assigned_agent_id)
+                            ? [...allAgents, { id: lead.assigned_agent_id, name: `${lead.agents.name} (disabled)` }]
+                            : allAgents
+                        }
+                      />
+                    </div>
                   )}
                   <div className="relative z-10">
                     <StageSelector leadId={lead.id} stage={lead.stage} />
