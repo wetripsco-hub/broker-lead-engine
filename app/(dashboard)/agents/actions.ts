@@ -36,16 +36,17 @@ export async function createAgent(formData: FormData): Promise<{ error: string |
   })
   if (createError) return { error: createError.message }
 
-  const { error: insertError } = await (admin.from("agents") as any).insert({
-    user_id: created.user.id,
-    name,
-    email,
-    active: true,
-  })
-  if (insertError) {
-    // Don't leave a login with no agent row behind it.
+  // The on_auth_user_created trigger (handle_new_user) already inserted an
+  // agents row for this user with name = email, so upsert on user_id to
+  // fill in the real name/email instead of inserting a duplicate.
+  const { error: upsertError } = await (admin.from("agents") as any).upsert(
+    { user_id: created.user.id, name, email, active: true },
+    { onConflict: "user_id" },
+  )
+  if (upsertError) {
+    // Don't leave a login with no usable agent row behind it.
     await admin.auth.admin.deleteUser(created.user.id)
-    return { error: insertError.message }
+    return { error: upsertError.message }
   }
 
   revalidatePath("/agents")
