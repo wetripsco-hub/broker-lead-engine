@@ -14,6 +14,8 @@ interface TimelineEvent {
   open_count?: number
   clicked_at?: string | null
   click_count?: number
+  subject?: string | null
+  from_email?: string | null
 }
 
 interface OutreachTimelineProps {
@@ -99,6 +101,18 @@ function groupByDay(events: TimelineEvent[]): Array<{ label: string; events: Tim
   }))
 }
 
+// A reply carries the whole quoted thread below the new text; the timeline
+// preview only wants the new part. Display only — the full text is stored.
+function withoutQuotedReply(text: string): string {
+  const cuts = [
+    text.search(/\r?\n?On [\s\S]{0,300}?wrote:/),
+    text.search(/\r?\n-{2,}\s*Original Message/i),
+    text.search(/(^|\n)>/),
+  ].filter((i) => i >= 0)
+  if (cuts.length === 0) return text
+  return text.slice(0, Math.min(...cuts)).trim() || text
+}
+
 // Parse "Duration: Xs" from message_body written by logCallEnded
 function parseDuration(body: string | null): string | null {
   if (!body) return null
@@ -157,14 +171,15 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
                 <div className="flex-1 min-w-0 space-y-0.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium">{CHANNEL_LABEL[ev.channel]}</span>
-                    {/* Direction arrow */}
-                    {ev.channel !== "email" && (
+                    {/* Direction arrow — outbound email is the default case, so
+                        only inbound email (a broker's reply) gets one */}
+                    {(ev.channel !== "email" || isInbound) && (
                       isInbound
                         ? <ArrowDownLeft className="size-3 text-blue-500" />
                         : <ArrowUpRight className="size-3 text-muted-foreground" />
                     )}
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${STATUS_BADGE[ev.status]}`}>
-                      {STATUS_LABEL[ev.status]}
+                      {ev.channel === "email" && isInbound ? "Received" : STATUS_LABEL[ev.status]}
                     </span>
                   </div>
 
@@ -184,11 +199,18 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
                         </a>
                       )}
                     </div>
-                  ) : ev.message_body ? (
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                      {ev.message_body}
-                    </p>
-                  ) : null}
+                  ) : (
+                    <>
+                      {ev.channel === "email" && ev.subject && (
+                        <p className="text-xs font-medium">{ev.subject}</p>
+                      )}
+                      {ev.message_body && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                          {ev.channel === "email" && isInbound ? withoutQuotedReply(ev.message_body) : ev.message_body}
+                        </p>
+                      )}
+                    </>
+                  )}
 
                   {/* Open/click stats — email only */}
                   {ev.channel === "email" && ((ev.open_count ?? 0) > 0 || (ev.click_count ?? 0) > 0) && (

@@ -47,6 +47,7 @@ export default async function LeadsPage() {
     .from("outreach_events")
     .select("lead_id, status, open_count, click_count, occurred_at")
     .eq("channel", "email")
+    .eq("direction", "outbound")
     .order("occurred_at", { ascending: false })
 
   const emailStatusByLead: Record<string, { status: string; openCount: number; clickCount: number }> = {}

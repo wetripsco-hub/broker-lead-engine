@@ -93,6 +93,7 @@ export default async function DashboardPage() {
     .from("outreach_events")
     .select("status, open_count, click_count")
     .eq("channel", "email")
+    .eq("direction", "outbound")
 
   const emailEvents = (emailEventsRaw ?? []) as Array<{
     status: string

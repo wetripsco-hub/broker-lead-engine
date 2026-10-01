@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { interpolate } from "@/lib/email/resend"
-import { sendEmail } from "@/lib/email/send"
+import { sendEmail, fromAddress } from "@/lib/email/send"
+import { generateMessageId, replyToAddress } from "@/lib/email/message-id"
 import { buildTrackedEmailHtml } from "@/lib/email/tracking"
 
 export interface SendEmailResult {
@@ -75,14 +76,23 @@ export async function sendTemplateEmail(
   const body    = interpolate(tpl.body, vars)
 
   // Insert the row before sending — the tracking pixel and click-wrapped
-  // links embedded in the email need this row's id to report back to.
+  // links embedded in the email need this row's id to report back to, and
+  // the Message-ID has to be saved so a reply's In-Reply-To can find it.
+  const from = fromAddress()
+  const rfcMessageId = generateMessageId(from)
+
   const { data: eventRow, error: insertError } = await (supabase.from("outreach_events") as any)
     .insert({
       lead_id:      leadId,
       agent_id:     agent.id,
       channel:      "email",
+      direction:    "outbound",
       status:       "pending",
-      message_body: `Subject: ${subject}\n\n${body}`,
+      subject,
+      message_body: body,
+      from_email:   from,
+      to_email:     lead.brokers.email.toLowerCase(),
+      message_id:   rfcMessageId,
     })
     .select("id")
     .single()
@@ -90,20 +100,20 @@ export async function sendTemplateEmail(
   if (insertError) return { error: insertError.message }
   const eventId = (eventRow as { id: string }).id
 
-  const { id: messageId, error: sendError } = await sendEmail({
+  const { id: providerId, error: sendError } = await sendEmail({
     to: lead.brokers.email,
     subject,
     text: body,
     html: buildTrackedEmailHtml(body, eventId),
+    messageId: rfcMessageId,
+    replyTo: replyToAddress(),
   })
 
   await (supabase.from("outreach_events") as any)
     .update({
       status:      sendError ? "failed" : "sent",
-      external_id: messageId,
-      message_body: sendError
-        ? `Subject: ${subject}\n\nFailed: ${sendError}`
-        : `Subject: ${subject}\n\n${body}`,
+      external_id: providerId,
+      send_error:  sendError,
     })
     .eq("id", eventId)
 
@@ -111,5 +121,6 @@ export async function sendTemplateEmail(
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath("/leads")
-  return { error: null, messageId: messageId ?? undefined }
+  revalidatePath("/emails")
+  return { error: null, messageId: providerId ?? undefined }
 }

@@ -28,6 +28,10 @@ export async function sendViaSmtp(params: {
   subject: string
   text: string
   html?: string
+  messageId?: string
+  replyTo?: string
+  inReplyTo?: string
+  references?: string
 }): Promise<{ id: string | null; error: string | null }> {
   try {
     const info = await getTransporter().sendMail({
@@ -36,6 +40,10 @@ export async function sendViaSmtp(params: {
       subject: params.subject,
       text: params.text,
       html: params.html,
+      messageId: params.messageId,
+      replyTo: params.replyTo,
+      inReplyTo: params.inReplyTo,
+      references: params.references,
     })
     return { id: info.messageId ?? null, error: null }
   } catch (err) {

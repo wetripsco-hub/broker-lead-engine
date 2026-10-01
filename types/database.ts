@@ -200,6 +200,15 @@ export interface Database {
           open_count: number
           clicked_at: string | null
           click_count: number
+          subject: string | null
+          body_html: string | null
+          from_email: string | null
+          to_email: string | null
+          message_id: string | null
+          in_reply_to: string | null
+          email_references: string | null
+          received_at: string | null
+          send_error: string | null
           occurred_at: string
         }
         Insert: {
@@ -221,6 +230,15 @@ export interface Database {
           open_count?: number
           clicked_at?: string | null
           click_count?: number
+          subject?: string | null
+          body_html?: string | null
+          from_email?: string | null
+          to_email?: string | null
+          message_id?: string | null
+          in_reply_to?: string | null
+          email_references?: string | null
+          received_at?: string | null
+          send_error?: string | null
           occurred_at?: string
         }
         Update: Partial<Database["public"]["Tables"]["outreach_events"]["Insert"]>

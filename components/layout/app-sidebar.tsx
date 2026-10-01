@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Mail,
   MessageSquare,
+  Inbox,
   Settings,
   LogOut,
   UserCog,
@@ -80,9 +81,10 @@ interface AppSidebarProps {
   role: UserRole
   agentId: string | null
   unreadSmsCount: number
+  unreadEmailCount: number
 }
 
-export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount }: AppSidebarProps) {
   const pathname = usePathname()
   const isAdmin = role === "admin"
   const initials = userName
@@ -125,8 +127,15 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount 
                 active={pathname === "/messages" || pathname.startsWith("/messages/")}
                 badge={<UnreadSmsBadge initialCount={unreadSmsCount} />}
               />
-              {/* Agent view is intentionally limited to Dashboard, Leads and
-                  Messages — everything below is admin-only. The server-side
+              <NavLink
+                href="/emails"
+                label="Emails"
+                icon={Inbox}
+                active={pathname === "/emails" || pathname.startsWith("/emails/")}
+                badge={<UnreadSmsBadge initialCount={unreadEmailCount} channel="email" />}
+              />
+              {/* Agent view is intentionally limited to Dashboard, Leads,
+                  Messages and Emails — everything below is admin-only. The server-side
                   page guards are what actually enforce this; hiding the
                   links is just so an agent never sees a dead end. */}
               {isAdmin && (
