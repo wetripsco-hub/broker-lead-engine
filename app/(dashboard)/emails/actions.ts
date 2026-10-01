@@ -4,7 +4,7 @@ import { createHash } from "crypto"
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { sendEmail, fromAddress } from "@/lib/email/send"
+import { sendEmail, fromAddress, conversationProvider } from "@/lib/email/send"
 import { generateMessageId, replyToAddress } from "@/lib/email/message-id"
 import { syncInbox, imapConfigured } from "@/lib/email/imap-sync"
 
@@ -55,7 +55,8 @@ export async function sendEmailReply(
   const baseSubject = parent.subject?.trim() || "(no subject)"
   const subject = /^re:/i.test(baseSubject) ? baseSubject : `Re: ${baseSubject}`
 
-  const from = fromAddress()
+  const provider = conversationProvider()
+  const from = fromAddress(provider)
   const rfcMessageId = generateMessageId(from)
   const references = [parent.email_references, parent.message_id].filter(Boolean).join(" ") || undefined
 
@@ -87,6 +88,7 @@ export async function sendEmailReply(
     replyTo: replyToAddress(),
     inReplyTo: parent.message_id ?? undefined,
     references,
+    provider,
   })
 
   await (supabase.from("outreach_events") as any)
@@ -179,6 +181,7 @@ export async function syncEmailNow(): Promise<{
   imported?: number
   duplicates?: number
   remaining?: number
+  baselined?: boolean
 }> {
   const supabase = await createClient()
   const {
@@ -190,7 +193,7 @@ export async function syncEmailNow(): Promise<{
   try {
     const r = await syncInbox()
     revalidatePath("/emails")
-    return { error: null, imported: r.imported, duplicates: r.duplicates, remaining: r.remaining }
+    return { error: null, imported: r.imported, duplicates: r.duplicates, remaining: r.remaining, baselined: r.baselined }
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) }
   }

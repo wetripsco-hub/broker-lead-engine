@@ -233,7 +233,10 @@ export function EmailsClient({
     setSyncing(true)
     const r = await syncEmailNow()
     if (r.error) toast.error(`Sync failed: ${r.error}`)
-    else {
+    else if (r.baselined) {
+      toast.success("Sync started — only emails that arrive from now on will be imported.")
+      await refetch()
+    } else {
       toast.success(
         `Synced — ${r.imported} new${r.remaining ? `, ${r.remaining} more waiting (sync again)` : ""}`,
       )

@@ -6,9 +6,29 @@ export interface SendEmailResult {
   error: string | null
 }
 
+export type EmailProvider = "smtp" | "resend"
+
+export function smtpConfigured(): boolean {
+  return Boolean(
+    process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS,
+  )
+}
+
+// Provider for threaded conversation replies: SMTP whenever it's set up (it
+// honours Message-ID / In-Reply-To / References exactly, which is what makes
+// a reply thread in the broker's mail client), otherwise whatever
+// EMAIL_PROVIDER says.
+export function conversationProvider(): EmailProvider | undefined {
+  return smtpConfigured() ? "smtp" : undefined
+}
+
+function activeProvider(override?: EmailProvider): EmailProvider {
+  return override ?? (process.env.EMAIL_PROVIDER === "smtp" ? "smtp" : "resend")
+}
+
 // The address mail actually goes out from, for whichever provider is active.
-export function fromAddress(): string {
-  return (process.env.EMAIL_PROVIDER ?? "resend") === "smtp" ? SMTP_FROM : EMAIL_FROM
+export function fromAddress(provider?: EmailProvider): string {
+  return activeProvider(provider) === "smtp" ? SMTP_FROM : EMAIL_FROM
 }
 
 // Single entry point for all outbound email. Provider is chosen by
@@ -30,10 +50,9 @@ export async function sendEmail(params: {
   replyTo?: string
   inReplyTo?: string
   references?: string
+  provider?: EmailProvider
 }): Promise<SendEmailResult> {
-  const provider = process.env.EMAIL_PROVIDER ?? "resend"
-
-  if (provider === "smtp") {
+  if (activeProvider(params.provider) === "smtp") {
     return sendViaSmtp(params)
   }
 
