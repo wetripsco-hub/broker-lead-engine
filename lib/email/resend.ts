@@ -11,7 +11,8 @@ export function getResend(): Resend {
   return _resend
 }
 
-export const EMAIL_FROM = process.env.EMAIL_FROM ?? "onboarding@resend.dev"
+// No default: the sender address comes from the environment only.
+export const EMAIL_FROM = process.env.EMAIL_FROM ?? ""
 
 // Merge-tag interpolation: {{company_name}}, {{contact_name}}, etc.
 export function interpolate(template: string, vars: Record<string, string>): string {

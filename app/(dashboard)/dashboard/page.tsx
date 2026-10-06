@@ -2,7 +2,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
-import { Users, TrendingUp, Mail, Phone, MessageSquare, ArrowUpRight, ArrowDownLeft, Clock } from "lucide-react"
+import { Users, TrendingUp, Mail, Phone, MessageSquare, ArrowUpRight, ArrowDownLeft, Clock, Bot } from "lucide-react"
 import { getFollowUps } from "@/lib/follow-up/query"
 import type { UserRole, OutreachChannel } from "@/types/database"
 
@@ -10,6 +10,7 @@ const CHANNEL_ICON: Record<OutreachChannel, React.ElementType> = {
   email: Mail,
   call:  Phone,
   sms:   MessageSquare,
+  ai_call: Bot,
 }
 
 function relativeTime(iso: string): string {

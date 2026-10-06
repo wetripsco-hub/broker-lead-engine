@@ -7,6 +7,7 @@ import { NotesEditor } from "@/components/leads/notes-editor"
 import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selector"
 import { EmailCompose } from "@/components/leads/email-compose"
 import { FollowUpBanner } from "@/components/leads/follow-up-banner"
+import { AiCallControls } from "@/components/leads/ai-call-controls"
 import { getFollowUps } from "@/lib/follow-up/query"
 import { CallButton } from "@/components/leads/call-button"
 import { LocalTimeCard } from "@/components/leads/local-time-card"
@@ -163,7 +164,32 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     .select("id, channel, status, message_body, recording_url, direction, occurred_at, opened_at, open_count, clicked_at, click_count, subject, from_email, transcript, ai_summary, follow_up_date, agents ( name )")
     .eq("lead_id", lead.id)
     .order("occurred_at", { ascending: false })
-  const events = (eventsRaw ?? []) as any[]
+  let events = (eventsRaw ?? []) as any[]
+
+  // AI-calling data is read in separate queries on purpose: if the AI-calling
+  // migration hasn't been applied yet these simply return nothing and the page
+  // keeps working without the AI Call button's data.
+  const [{ data: aiFlagsRaw }, { data: aiEventsRaw }, { data: aiEnabledRaw }] = await Promise.all([
+    (supabase.from("leads") as any)
+      .select("ai_call_consent, ai_call_consent_source, ai_call_consent_at, do_not_call")
+      .eq("id", lead.id)
+      .maybeSingle(),
+    (supabase.from("outreach_events") as any)
+      .select("id, call_status, sentiment, disposition, duration_seconds, cost_usd, ai_callback_time, ai_summary, follow_up_date, transcript, recording_url")
+      .eq("lead_id", lead.id)
+      .eq("channel", "ai_call"),
+    (supabase.from("app_settings") as any).select("value").eq("key", "ai_calling_enabled").maybeSingle(),
+  ])
+  const aiFlags = (aiFlagsRaw ?? {}) as {
+    ai_call_consent?: boolean
+    ai_call_consent_source?: string | null
+    ai_call_consent_at?: string | null
+    do_not_call?: boolean
+  }
+  const aiExtra = new Map(((aiEventsRaw ?? []) as any[]).map((e) => [e.id, e]))
+  events = events.map((e) => (aiExtra.has(e.id) ? { ...e, ...aiExtra.get(e.id) } : e))
+  const latestAiCall = events.find((e) => e.channel === "ai_call")
+  const aiEnabled = (aiEnabledRaw as { value: unknown } | null)?.value === true
 
   // SMS events in chronological order for thread view
   const smsEvents = (eventsRaw ?? [])
@@ -236,6 +262,22 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               brokerEmail={b?.email ?? null}
               templates={templates}
               mergeVars={mergeVars}
+            />
+            <AiCallControls
+              leadId={lead.id}
+              brokerName={b?.company_name ?? null}
+              brokerState={b?.state ?? null}
+              brokerPhone={b?.phone ?? null}
+              isAdmin={isAdmin}
+              aiEnabled={aiEnabled}
+              consent={{
+                granted: aiFlags.ai_call_consent === true,
+                source: aiFlags.ai_call_consent_source ?? null,
+                at: aiFlags.ai_call_consent_at ?? null,
+              }}
+              doNotCall={aiFlags.do_not_call === true}
+              latestCallStatus={latestAiCall?.call_status ?? null}
+              latestCallAt={latestAiCall?.occurred_at ?? null}
             />
             {isAdmin ? (
               <StageSelector leadId={lead.id} stage={lead.stage} />

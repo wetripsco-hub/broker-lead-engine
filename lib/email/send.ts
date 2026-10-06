@@ -52,7 +52,14 @@ export async function sendEmail(params: {
   references?: string
   provider?: EmailProvider
 }): Promise<SendEmailResult> {
-  if (activeProvider(params.provider) === "smtp") {
+  const provider = activeProvider(params.provider)
+  if (!fromAddress(provider)) {
+    return {
+      id: null,
+      error: provider === "smtp" ? "SMTP_FROM (or SMTP_USER) is not set" : "EMAIL_FROM is not set",
+    }
+  }
+  if (provider === "smtp") {
     return sendViaSmtp(params)
   }
 

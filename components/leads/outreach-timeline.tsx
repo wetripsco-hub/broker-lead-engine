@@ -1,4 +1,4 @@
-import { Mail, Phone, MessageSquare, ArrowUpRight, ArrowDownLeft, Voicemail } from "lucide-react"
+import { Mail, Phone, MessageSquare, ArrowUpRight, ArrowDownLeft, Voicemail, Bot } from "lucide-react"
 import type { OutreachChannel, OutreachStatus } from "@/types/database"
 
 interface TimelineEvent {
@@ -19,6 +19,12 @@ interface TimelineEvent {
   transcript?: string | null
   ai_summary?: string | null
   follow_up_date?: string | null
+  call_status?: string | null
+  sentiment?: string | null
+  disposition?: string | null
+  duration_seconds?: number | null
+  cost_usd?: number | null
+  ai_callback_time?: string | null
 }
 
 interface OutreachTimelineProps {
@@ -29,12 +35,14 @@ const CHANNEL_ICON: Record<OutreachChannel, React.ElementType> = {
   email: Mail,
   call:  Phone,
   sms:   MessageSquare,
+  ai_call: Bot,
 }
 
 const CHANNEL_LABEL: Record<OutreachChannel, string> = {
   email: "Email",
   call:  "Call",
   sms:   "SMS",
+  ai_call: "AI call",
 }
 
 // Sent (gray) -> Delivered (blue) -> Opened (green) -> Clicked (purple)
@@ -127,6 +135,54 @@ function parseDuration(body: string | null): string | null {
   return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
 }
 
+const AI_CALL_STATUS_LABEL: Record<string, string> = {
+  queued: "Calling",
+  registered: "Calling",
+  in_progress: "In progress",
+  ended: "Ended",
+  failed: "Failed",
+}
+
+const SENTIMENT_BADGE: Record<string, string> = {
+  positive: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  neutral: "bg-muted text-muted-foreground",
+  negative: "bg-destructive/10 text-destructive",
+}
+
+function AiCallDetails({ ev }: { ev: TimelineEvent }) {
+  const mins = ev.duration_seconds != null ? Math.floor(ev.duration_seconds / 60) : null
+  const secs = ev.duration_seconds != null ? ev.duration_seconds % 60 : null
+  return (
+    <div className="space-y-1.5 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {mins != null && secs != null && <span>Duration: {mins > 0 ? `${mins}m ${secs}s` : `${secs}s`}</span>}
+        {ev.cost_usd != null && <span className="tabular-nums">Cost: ${Number(ev.cost_usd).toFixed(2)}</span>}
+        {ev.sentiment && (
+          <span className={`rounded-full px-1.5 py-0.5 font-medium capitalize ${SENTIMENT_BADGE[ev.sentiment.toLowerCase()] ?? SENTIMENT_BADGE.neutral}`}>
+            {ev.sentiment}
+          </span>
+        )}
+      </div>
+      {ev.ai_summary && <p>{ev.ai_summary}</p>}
+      {(ev.follow_up_date || ev.ai_callback_time) && (
+        <p className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-800 dark:text-amber-300">
+          Suggested follow-up: {ev.follow_up_date ?? ev.ai_callback_time}
+          {ev.follow_up_date && ev.ai_callback_time ? ` (“${ev.ai_callback_time}”)` : ""}
+        </p>
+      )}
+      {ev.recording_url && <audio controls preload="none" src={ev.recording_url} className="h-8 w-full max-w-sm" />}
+      {ev.transcript && (
+        <details>
+          <summary className="cursor-pointer select-none text-blue-600 hover:underline dark:text-blue-400">Transcript</summary>
+          <pre className="mt-1.5 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/40 p-2.5 font-sans leading-relaxed">
+            {ev.transcript}
+          </pre>
+        </details>
+      )}
+    </div>
+  )
+}
+
 export function OutreachTimeline({ events }: OutreachTimelineProps) {
   if (events.length === 0) {
     return (
@@ -182,12 +238,18 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
                         : <ArrowUpRight className="size-3 text-muted-foreground" />
                     )}
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${STATUS_BADGE[ev.status]}`}>
-                      {ev.channel === "email" && isInbound ? "Received" : STATUS_LABEL[ev.status]}
+                      {ev.channel === "email" && isInbound
+                        ? "Received"
+                        : ev.channel === "ai_call"
+                          ? AI_CALL_STATUS_LABEL[ev.call_status ?? ""] ?? STATUS_LABEL[ev.status]
+                          : STATUS_LABEL[ev.status]}
                     </span>
                   </div>
 
                   {/* Preview */}
-                  {ev.channel === "call" ? (
+                  {ev.channel === "ai_call" ? (
+                    <AiCallDetails ev={ev} />
+                  ) : ev.channel === "call" ? (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {duration && <span>Duration: {duration}</span>}
                       {ev.follow_up_date && <span>Follow up: {ev.follow_up_date}</span>}

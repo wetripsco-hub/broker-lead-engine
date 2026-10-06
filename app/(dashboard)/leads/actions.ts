@@ -59,6 +59,33 @@ export async function bulkAssignLeads(leadIds: string[], agentId: string | null)
   return { error: null }
 }
 
+// Admin-only: records that this lead agreed to be called by the AI agent.
+// The source (where/how consent was given) is mandatory so there is always a
+// record of it. The database also blocks non-admins from changing these fields.
+export async function markAiCallConsent(leadId: string, source: string) {
+  const text = source.trim()
+  if (!text) return { error: "Say where the consent came from" }
+  if (text.length > 300) return { error: "Source is too long" }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (user?.user_metadata?.role !== "admin") return { error: "admin only" }
+
+  const { error } = await (supabase.from("leads") as any)
+    .update({
+      ai_call_consent: true,
+      ai_call_consent_source: text,
+      ai_call_consent_at: new Date().toISOString(),
+    })
+    .eq("id", leadId) as { error: { message: string } | null }
+
+  if (error) return { error: error.message }
+  revalidatePath(`/leads/${leadId}`)
+  return { error: null }
+}
+
 // Hides the follow-up flag until `days` from now. RLS limits agents to
 // their own leads.
 export async function snoozeFollowUp(leadId: string, days: number) {

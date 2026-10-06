@@ -8,7 +8,7 @@ export type Json =
 
 export type EmailTemplateType = "initial" | "follow_up"
 export type LeadStage = "new" | "contacted" | "interested" | "converted" | "dead"
-export type OutreachChannel = "email" | "call" | "sms"
+export type OutreachChannel = "email" | "call" | "sms" | "ai_call"
 export type OutreachStatus = "pending" | "sent" | "delivered" | "opened" | "clicked" | "failed" | "no_answer" | "answered"
 export type UserRole = "admin" | "agent"
 
@@ -168,6 +168,10 @@ export interface Database {
           assigned_agent_id: string | null
           notes: string | null
           follow_up_snoozed_until: string | null
+          ai_call_consent: boolean
+          ai_call_consent_source: string | null
+          ai_call_consent_at: string | null
+          do_not_call: boolean
           created_at: string
           updated_at: string
         }
@@ -178,6 +182,10 @@ export interface Database {
           assigned_agent_id?: string | null
           notes?: string | null
           follow_up_snoozed_until?: string | null
+          ai_call_consent?: boolean
+          ai_call_consent_source?: string | null
+          ai_call_consent_at?: string | null
+          do_not_call?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -214,6 +222,14 @@ export interface Database {
           send_error: string | null
           ai_summary: string | null
           follow_up_date: string | null
+          provider: string | null
+          provider_call_id: string | null
+          call_status: string | null
+          sentiment: string | null
+          disposition: string | null
+          duration_seconds: number | null
+          cost_usd: number | null
+          ai_callback_time: string | null
           occurred_at: string
         }
         Insert: {

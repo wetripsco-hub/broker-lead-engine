@@ -148,6 +148,9 @@ export function SettingsClient({ myAgent, myEmail, myRole, allAgents, announceRe
         <Link href="/settings/knowledge" className="inline-block text-sm underline underline-offset-2">
           Edit knowledge base
         </Link>
+        <Link href="/settings/ai-calling" className="ml-4 inline-block text-sm underline underline-offset-2">
+          AI calling settings
+        </Link>
       </section>
 
       {/* Integrations status */}
