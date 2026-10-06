@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DialerModal } from "./dialer-modal"
+import { CopilotSwitch } from "@/components/copilot/copilot-switch"
 import {
   resolveTimezone,
   getCallStatus,
@@ -21,6 +22,8 @@ interface CallButtonProps {
 
 export function CallButton({ leadId, agentId, brokerPhone, brokerName, brokerState }: CallButtonProps) {
   const [open, setOpen] = useState(false)
+  // Off by default; not remembered between visits so it is never on by accident.
+  const [copilotOn, setCopilotOn] = useState(false)
   const [confirm, setConfirm] = useState<{ time: string; weekday: string | null } | null>(null)
 
   useEffect(() => {
@@ -62,6 +65,7 @@ export function CallButton({ leadId, agentId, brokerPhone, brokerName, brokerSta
 
   return (
     <>
+      <CopilotSwitch on={copilotOn} onChange={setCopilotOn} />
       <Button
         variant="outline"
         size="sm"
@@ -125,6 +129,7 @@ export function CallButton({ leadId, agentId, brokerPhone, brokerName, brokerSta
           agentId={agentId}
           brokerPhone={brokerPhone}
           brokerName={brokerName}
+          copilotOn={copilotOn}
           onClose={() => setOpen(false)}
         />
       )}

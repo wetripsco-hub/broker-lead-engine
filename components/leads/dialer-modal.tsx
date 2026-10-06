@@ -36,6 +36,8 @@ interface DialerModalProps {
   agentId: string
   brokerPhone: string
   brokerName: string | null
+  /** Copilot preference chosen on the lead page before dialing. */
+  copilotOn?: boolean
   onClose: () => void
 }
 
@@ -113,6 +115,7 @@ export function DialerModal({
   agentId,
   brokerPhone,
   brokerName,
+  copilotOn = false,
   onClose,
 }: DialerModalProps) {
   const [phase, setPhase] = useState<Phase>("connecting")
@@ -523,6 +526,7 @@ export function DialerModal({
 
       <CopilotPanel
         leadId={leadId}
+        initialOn={copilotOn}
         callId={eventIdRef.current}
         callLive={phase === "dialing" || phase === "active"}
         getSources={getSources}

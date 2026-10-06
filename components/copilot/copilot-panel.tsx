@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Check, Copy, MessageSquareQuote, TriangleAlert } from "lucide-react"
 import { useTranscription, type MediaSources } from "./use-transcription"
+import { CopilotSwitch } from "./copilot-switch"
 import {
   RECORDING_REMINDER,
   type CopilotContext,
@@ -11,6 +12,8 @@ import {
 
 interface CopilotPanelProps {
   leadId: string
+  /** Preference chosen before dialing (lead page). Defaults to off. */
+  initialOn?: boolean
   callId: string | null
   /** Dialing or on a live call: the only time transcription may run. */
   callLive: boolean
@@ -29,9 +32,9 @@ type SuggestState =
   | { kind: "busy" }
   | { kind: "unavailable" }
 
-export function CopilotPanel({ leadId, callId, callLive, getSources, onTranscript }: CopilotPanelProps) {
+export function CopilotPanel({ leadId, initialOn = false, callId, callLive, getSources, onTranscript }: CopilotPanelProps) {
   const [ctx, setCtx] = useState<CopilotContext | null>(null)
-  const [on, setOn] = useState(false) // always starts off; the agent opts in
+  const [on, setOn] = useState(initialOn) // off unless the agent turned it on
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
   const [stale, setStale] = useState(false)
   const [sState, setSState] = useState<SuggestState>({ kind: "idle" })
@@ -55,6 +58,9 @@ export function CopilotPanel({ leadId, callId, callLive, getSources, onTranscrip
   const getTurnsRef = useRef<() => { speaker: "broker" | "agent"; text: string }[]>(() => [])
   const onRef = useRef(on)
   onRef.current = on
+  useEffect(() => {
+    if (!on && timerRef.current) clearTimeout(timerRef.current)
+  }, [on])
 
   const requestSuggestion = useCallback(
     async (isRetry = false) => {
@@ -129,13 +135,6 @@ export function CopilotPanel({ leadId, callId, callLive, getSources, onTranscrip
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
   }, [bubbles])
 
-  function toggle() {
-    setOn((v) => {
-      if (v && timerRef.current) clearTimeout(timerRef.current)
-      return !v
-    })
-  }
-
   return (
     <aside
       aria-label="Sales Copilot"
@@ -144,25 +143,7 @@ export function CopilotPanel({ leadId, callId, callLive, getSources, onTranscrip
       {/* Header + toggle */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h2 className="text-sm font-semibold">Sales Copilot</h2>
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-          {on ? "On" : "Off"}
-          <button
-            type="button"
-            role="switch"
-            aria-checked={on}
-            aria-label="Copilot on/off"
-            onClick={toggle}
-            className={`relative h-5 w-9 rounded-full transition-colors duration-200 ease-[var(--ease-out)] active:scale-[0.97] ${
-              on ? "bg-blue-600" : "bg-muted-foreground/30"
-            }`}
-          >
-            <span
-              className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform duration-200 ease-[var(--ease-out)] ${
-                on ? "translate-x-4" : ""
-              }`}
-            />
-          </button>
-        </label>
+        <CopilotSwitch on={on} onChange={setOn} />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
