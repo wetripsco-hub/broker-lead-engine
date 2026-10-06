@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import Link from "next/link"
 import { updateAgentName } from "./actions"
+import { setAnnounceRecording } from "./knowledge/actions"
 
 interface Agent {
   id: string
@@ -17,9 +19,11 @@ interface SettingsClientProps {
   myEmail: string
   myRole: string
   allAgents: Agent[] | null // admin only
+  announceRecording: boolean
 }
 
-export function SettingsClient({ myAgent, myEmail, myRole, allAgents }: SettingsClientProps) {
+export function SettingsClient({ myAgent, myEmail, myRole, allAgents, announceRecording }: SettingsClientProps) {
+  const [announce, setAnnounce] = useState(announceRecording)
   const [name, setName] = useState(myAgent?.name ?? "")
   const [isPending, startTransition] = useTransition()
   const dirty = name.trim() !== (myAgent?.name ?? "")
@@ -110,6 +114,41 @@ export function SettingsClient({ myAgent, myEmail, myRole, allAgents }: Settings
           )}
         </section>
       )}
+
+      {/* Calls & Copilot */}
+      <section className="rounded-lg border bg-card p-5 space-y-4">
+        <h2 className="text-sm font-semibold">Calls &amp; Sales Copilot</h2>
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={announce}
+            onChange={(e) => {
+              const next = e.target.checked
+              setAnnounce(next)
+              setAnnounceRecording(next).then(({ error }) => {
+                if (error) {
+                  setAnnounce(!next)
+                  toast.error(error)
+                } else toast.success(next ? "Reminder on" : "Reminder off")
+              })
+            }}
+            className="mt-0.5 size-4"
+          />
+          <span className="text-sm">
+            Announce recording/transcription at call start
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Agents see a reminder to say &ldquo;This call may be recorded and transcribed for quality purposes.&rdquo;
+            </span>
+          </span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          When an agent turns Copilot on, the call&apos;s speech is sent to Deepgram for transcription and the
+          transcript to the configured LLM provider for suggestions. It is off by default on every call.
+        </p>
+        <Link href="/settings/knowledge" className="inline-block text-sm underline underline-offset-2">
+          Edit knowledge base
+        </Link>
+      </section>
 
       {/* Integrations status */}
       <section className="rounded-lg border bg-card p-5 space-y-3">

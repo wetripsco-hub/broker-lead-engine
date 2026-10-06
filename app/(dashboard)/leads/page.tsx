@@ -1,8 +1,14 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { getFollowUps } from "@/lib/follow-up/query"
 import { LeadsListClient } from "./leads-list-client"
 
-export default async function LeadsPage() {
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filter?: string }>
+}) {
+  const { filter } = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -27,11 +33,13 @@ export default async function LeadsPage() {
 
   const { data: templatesRaw } = await supabase
     .from("email_templates")
-    .select("id, name, subject, body")
+    .select("id, name, subject, body, type")
     .order("created_at", { ascending: true })
   const templates = (templatesRaw ?? []) as Array<{
-    id: string; name: string; subject: string; body: string
+    id: string; name: string; subject: string; body: string; type: "initial" | "follow_up"
   }>
+
+  const followUpByLead = await getFollowUps(supabase)
 
   const { data: myAgentRaw } = await supabase
     .from("agents")
@@ -76,6 +84,8 @@ export default async function LeadsPage() {
         currentAgentName={currentAgentName}
         emailStatusByLead={emailStatusByLead}
         allAgents={allAgents}
+        followUpByLead={followUpByLead}
+        initialFollowUpOnly={filter === "followup"}
       />
     </div>
   )

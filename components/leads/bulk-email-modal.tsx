@@ -5,6 +5,7 @@ import { Mail, X, Send, CheckCircle2, XCircle, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { sendTemplateEmail } from "@/app/(dashboard)/leads/[id]/email-actions"
 import { interpolate } from "@/lib/email/resend"
+import { FOLLOW_UP_BULK_DELAY_MS } from "@/lib/follow-up/config"
 
 const MAX_BATCH = 50
 const DELAY_BETWEEN_MS = 30_000
@@ -14,6 +15,7 @@ interface Template {
   name: string
   subject: string
   body: string
+  type?: "initial" | "follow_up"
 }
 
 export interface BulkRecipient {
@@ -37,6 +39,8 @@ interface BulkEmailModalProps {
   recipients: BulkRecipient[]
   templates: Template[]
   agentName: string
+  /** Follow-up mode: preselects the follow-up template, replies in-thread, 1s delay. */
+  followUp?: boolean
   onClose: () => void
   onFinished: () => void
 }
@@ -45,11 +49,11 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export function BulkEmailModal({ recipients, templates, agentName, onClose, onFinished }: BulkEmailModalProps) {
+export function BulkEmailModal({ recipients, templates, agentName, followUp = false, onClose, onFinished }: BulkEmailModalProps) {
   const capped = useMemo(() => recipients.slice(0, MAX_BATCH), [recipients])
   const overflow = recipients.length - capped.length
 
-  const [selectedId, setSelectedId] = useState("")
+  const [selectedId, setSelectedId] = useState(() => (followUp ? templates.find((t) => t.type === "follow_up")?.id ?? "" : ""))
   const [rows, setRows] = useState<Row[]>(() =>
     capped.map((r) => ({ ...r, status: r.email ? "pending" : "no_email" }))
   )
@@ -95,7 +99,7 @@ export function BulkEmailModal({ recipients, templates, agentName, onClose, onFi
       setSendIndex(i + 1)
       setRows((prev) => prev.map((r) => (r.leadId === target.leadId ? { ...r, status: "sending" } : r)))
 
-      const { error } = await sendTemplateEmail(target.leadId, selectedId)
+      const { error } = await sendTemplateEmail(target.leadId, selectedId, { asFollowUp: followUp })
 
       setRows((prev) =>
         prev.map((r) =>
@@ -105,7 +109,7 @@ export function BulkEmailModal({ recipients, templates, agentName, onClose, onFi
         )
       )
 
-      if (i < targets.length - 1) await sleep(DELAY_BETWEEN_MS)
+      if (i < targets.length - 1) await sleep(followUp ? FOLLOW_UP_BULK_DELAY_MS : DELAY_BETWEEN_MS)
     }
 
     setPhase("done")
@@ -124,7 +128,7 @@ export function BulkEmailModal({ recipients, templates, agentName, onClose, onFi
         <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
           <h2 className="font-semibold text-sm flex items-center gap-2">
             <Mail className="size-4" />
-            Bulk email — {recipients.length} lead{recipients.length === 1 ? "" : "s"} selected
+            {followUp ? "Bulk follow-up" : "Bulk email"} — {recipients.length} lead{recipients.length === 1 ? "" : "s"} selected
           </h2>
           <button
             onClick={handleClose}
@@ -172,7 +176,9 @@ export function BulkEmailModal({ recipients, templates, agentName, onClose, onFi
               <p className="text-xs text-muted-foreground">Preview — first recipient ({first.companyName})</p>
               <div className="rounded-md border bg-muted/30 p-3 space-y-2">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Subject</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">
+                    Subject{followUp ? " (each lead is sent as “Re: <their previous subject>”)" : ""}
+                  </p>
                   <p className="text-sm font-medium">{preview.subject}</p>
                 </div>
                 <div>

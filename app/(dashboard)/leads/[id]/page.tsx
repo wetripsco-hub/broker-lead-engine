@@ -6,7 +6,10 @@ import { StageBadge } from "@/components/leads/stage-badge"
 import { NotesEditor } from "@/components/leads/notes-editor"
 import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selector"
 import { EmailCompose } from "@/components/leads/email-compose"
+import { FollowUpBanner } from "@/components/leads/follow-up-banner"
+import { getFollowUps } from "@/lib/follow-up/query"
 import { CallButton } from "@/components/leads/call-button"
+import { LocalTimeCard } from "@/components/leads/local-time-card"
 import { SmsThread } from "@/components/leads/sms-thread"
 import { OutreachTimeline } from "@/components/leads/outreach-timeline"
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Hash, User } from "lucide-react"
@@ -137,10 +140,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // Email templates (for compose dialog)
   const { data: templatesRaw } = await supabase
     .from("email_templates")
-    .select("id, name, subject, body")
+    .select("id, name, subject, body, type")
     .order("created_at", { ascending: true })
   const templates = (templatesRaw ?? []) as Array<{
-    id: string; name: string; subject: string; body: string
+    id: string; name: string; subject: string; body: string; type: "initial" | "follow_up"
   }>
 
   // Agent list for the assignment dropdown — admin only
@@ -157,7 +160,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // Outreach events for this lead (all channels for timeline; newest first)
   const { data: eventsRaw } = await supabase
     .from("outreach_events")
-    .select("id, channel, status, message_body, recording_url, direction, occurred_at, opened_at, open_count, clicked_at, click_count, subject, from_email, agents ( name )")
+    .select("id, channel, status, message_body, recording_url, direction, occurred_at, opened_at, open_count, clicked_at, click_count, subject, from_email, transcript, ai_summary, follow_up_date, agents ( name )")
     .eq("lead_id", lead.id)
     .order("occurred_at", { ascending: false })
   const events = (eventsRaw ?? []) as any[]
@@ -173,6 +176,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     occurred_at: string
     agents: { name: string } | null
   }>
+
+  const followUp = (await getFollowUps(supabase, lead.id))[lead.id]
+  // Events are newest-first, so the first sent outbound email is the latest.
+  const previousSubject =
+    events.find((e) => e.channel === "email" && e.direction === "outbound" && e.status !== "failed" && e.status !== "pending")
+      ?.subject ?? null
 
   const mergeVars = {
     company_name: b?.company_name ?? "",
@@ -220,6 +229,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               agentId={myAgent?.id ?? ""}
               brokerPhone={b?.phone ?? null}
               brokerName={b?.company_name ?? null}
+              brokerState={b?.state ?? null}
             />
             <EmailCompose
               leadId={lead.id}
@@ -235,6 +245,18 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
       </div>
+
+      {followUp?.due && (
+        <FollowUpBanner
+          leadId={lead.id}
+          days={followUp.days}
+          followUpCount={followUp.followUpCount}
+          previousSubject={previousSubject}
+          brokerEmail={b?.email ?? null}
+          templates={templates}
+          mergeVars={mergeVars}
+        />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-[1fr_300px] gap-6">
         {/* Left column */}
@@ -330,6 +352,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
         {/* Right column */}
         <div className="space-y-4">
+          <LocalTimeCard state={b?.state ?? null} phone={b?.phone ?? null} />
+
           {/* Assignment */}
           <div className="rounded-lg border bg-card p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">

@@ -12,6 +12,7 @@ interface Template {
   name: string
   subject: string
   body: string
+  type: "initial" | "follow_up"
   created_at: string
 }
 
@@ -79,7 +80,14 @@ export function TemplatesClient({ templates, isAdmin }: { templates: Template[];
                 <div className="px-5 py-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="font-medium text-sm">{t.name}</p>
+                      <p className="font-medium text-sm flex items-center gap-2">
+                        {t.name}
+                        {t.type === "follow_up" && (
+                          <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+                            Follow-up
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
                         Subject: {t.subject}
                       </p>

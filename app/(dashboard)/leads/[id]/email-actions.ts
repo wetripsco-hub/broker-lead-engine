@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { interpolate } from "@/lib/email/resend"
-import { sendEmail, fromAddress } from "@/lib/email/send"
+import { sendEmail, fromAddress, conversationProvider } from "@/lib/email/send"
 import { generateMessageId, replyToAddress } from "@/lib/email/message-id"
 import { buildTrackedEmailHtml } from "@/lib/email/tracking"
+import { followUpSubject } from "@/lib/follow-up/compute"
 
 export interface SendEmailResult {
   error: string | null
@@ -14,7 +15,8 @@ export interface SendEmailResult {
 
 export async function sendTemplateEmail(
   leadId: string,
-  templateId: string
+  templateId: string,
+  opts: { asFollowUp?: boolean } = {}
 ): Promise<SendEmailResult> {
   const supabase = await createClient()
   const {
@@ -73,13 +75,36 @@ export async function sendTemplateEmail(
     city:         lead.brokers.city ?? "",
     agent_name:   agent.name,
   }
-  const subject = interpolate(tpl.subject, vars)
+  let subject = interpolate(tpl.subject, vars)
   const body    = interpolate(tpl.body, vars)
+
+  // A follow-up continues the thread: "Re: <previous subject>", with
+  // In-Reply-To / References pointing at the email it follows up on.
+  type Parent = { subject: string | null; message_id: string | null; email_references: string | null }
+  let parent = null as Parent | null
+  if (opts.asFollowUp) {
+    const { data: parentRaw } = await supabase
+      .from("outreach_events")
+      .select("subject, message_id, email_references")
+      .eq("lead_id", leadId)
+      .eq("channel", "email")
+      .eq("direction", "outbound")
+      .not("status", "in", "(failed,pending)")
+      .order("occurred_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    parent = parentRaw as unknown as Parent | null
+    if (parent?.subject) subject = followUpSubject(parent.subject)
+  }
+  const provider = parent?.message_id ? conversationProvider() : undefined
+  const references = parent
+    ? [parent.email_references, parent.message_id].filter(Boolean).join(" ") || undefined
+    : undefined
 
   // Insert the row before sending — the tracking pixel and click-wrapped
   // links embedded in the email need this row's id to report back to, and
   // the Message-ID has to be saved so a reply's In-Reply-To can find it.
-  const from = fromAddress()
+  const from = fromAddress(provider)
   const rfcMessageId = generateMessageId(from)
 
   const { data: eventRow, error: insertError } = await (supabase.from("outreach_events") as any)
@@ -94,6 +119,8 @@ export async function sendTemplateEmail(
       from_email:   from,
       to_email:     lead.brokers.email.toLowerCase(),
       message_id:   rfcMessageId,
+      in_reply_to:  parent?.message_id ?? null,
+      email_references: references ?? null,
     })
     .select("id")
     .single()
@@ -108,6 +135,9 @@ export async function sendTemplateEmail(
     html: buildTrackedEmailHtml(body, eventId),
     messageId: rfcMessageId,
     replyTo: replyToAddress(),
+    inReplyTo: parent?.message_id ?? undefined,
+    references,
+    provider,
   })
 
   await (supabase.from("outreach_events") as any)

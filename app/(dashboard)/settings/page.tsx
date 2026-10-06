@@ -32,8 +32,15 @@ export default async function SettingsPage() {
     allAgents = (data ?? []) as AgentRow[]
   }
 
+  const { data: announceRaw } = await (supabase.from("app_settings") as any)
+    .select("value")
+    .eq("key", "announce_recording")
+    .maybeSingle()
+  const announceRecording = (announceRaw as { value: unknown } | null)?.value === true
+
   return (
     <SettingsClient
+      announceRecording={announceRecording}
       myAgent={myAgent}
       myEmail={user.email ?? ""}
       myRole={role}

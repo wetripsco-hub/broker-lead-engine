@@ -14,7 +14,7 @@ export default async function TemplatesPage() {
 
   const { data } = await supabase
     .from("email_templates")
-    .select("id, name, subject, body, created_at")
+    .select("id, name, subject, body, type, created_at")
     .order("created_at", { ascending: false })
 
   const templates = (data ?? []) as Array<{
@@ -22,6 +22,7 @@ export default async function TemplatesPage() {
     name: string
     subject: string
     body: string
+    type: "initial" | "follow_up"
     created_at: string
   }>
 

@@ -38,12 +38,33 @@ export async function logCallStarted(
   return { eventId: (data as { id: string }).id }
 }
 
+// Saved the moment the call ends, so a transcript is never lost if the agent
+// closes the dialog before confirming the outcome. RLS limits the update to
+// events on leads the agent can see.
+export async function saveCallTranscript(
+  eventId: string,
+  transcript: string,
+): Promise<{ error?: string }> {
+  const text = transcript.trim()
+  if (!text) return {}
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+  const { error } = await (supabase.from("outreach_events") as any)
+    .update({ transcript: text.slice(0, 200_000) })
+    .eq("id", eventId)
+  return error ? { error: error.message } : {}
+}
+
 export async function saveCallDisposition(
   eventId: string,
   leadId: string,
   disposition: DispositionKey,
   notes: string,
   durationSeconds: number,
+  extra: { aiSummary?: string | null; followUpDate?: string | null } = {},
 ): Promise<{ error?: string }> {
   const supabase = await createClient()
   const {
@@ -56,6 +77,7 @@ export async function saveCallDisposition(
     `Disposition: ${label}`,
     `Duration: ${durationSeconds}s`,
     notes.trim() ? `Notes: ${notes.trim()}` : null,
+    extra.followUpDate ? `Follow up: ${extra.followUpDate}` : null,
   ]
     .filter(Boolean)
     .join("\n")
@@ -64,6 +86,8 @@ export async function saveCallDisposition(
     .update({
       status: DISPOSITION_STATUS[disposition],
       message_body: messageBody,
+      ...(extra.aiSummary ? { ai_summary: extra.aiSummary } : {}),
+      ...(extra.followUpDate ? { follow_up_date: extra.followUpDate } : {}),
     })
     .eq("id", eventId)
 

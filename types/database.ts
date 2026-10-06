@@ -6,6 +6,7 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+export type EmailTemplateType = "initial" | "follow_up"
 export type LeadStage = "new" | "contacted" | "interested" | "converted" | "dead"
 export type OutreachChannel = "email" | "call" | "sms"
 export type OutreachStatus = "pending" | "sent" | "delivered" | "opened" | "clicked" | "failed" | "no_answer" | "answered"
@@ -166,6 +167,7 @@ export interface Database {
           stage: LeadStage
           assigned_agent_id: string | null
           notes: string | null
+          follow_up_snoozed_until: string | null
           created_at: string
           updated_at: string
         }
@@ -175,6 +177,7 @@ export interface Database {
           stage?: LeadStage
           assigned_agent_id?: string | null
           notes?: string | null
+          follow_up_snoozed_until?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -209,6 +212,8 @@ export interface Database {
           email_references: string | null
           received_at: string | null
           send_error: string | null
+          ai_summary: string | null
+          follow_up_date: string | null
           occurred_at: string
         }
         Insert: {
@@ -249,6 +254,7 @@ export interface Database {
           name: string
           subject: string
           body: string
+          type: EmailTemplateType
           created_by: string | null
           created_at: string
           updated_at: string
@@ -258,6 +264,7 @@ export interface Database {
           name: string
           subject: string
           body: string
+          type?: EmailTemplateType
           created_by?: string | null
           created_at?: string
           updated_at?: string

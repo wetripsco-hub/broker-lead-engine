@@ -16,7 +16,7 @@ const MERGE_TAGS = [
 ]
 
 interface TemplateFormProps {
-  template?: { id: string; name: string; subject: string; body: string }
+  template?: { id: string; name: string; subject: string; body: string; type: "initial" | "follow_up" }
   onCancel?: () => void
   onSaved?: () => void
 }
@@ -26,6 +26,7 @@ export function TemplateForm({ template, onCancel, onSaved }: TemplateFormProps)
   const [name,    setName]    = useState(template?.name    ?? "")
   const [subject, setSubject] = useState(template?.subject ?? "")
   const [body,    setBody]    = useState(template?.body    ?? "")
+  const [type,    setType]    = useState<"initial" | "follow_up">(template?.type ?? "initial")
   const [isPending, startTransition] = useTransition()
 
   function handleSubmit(e: React.FormEvent) {
@@ -34,6 +35,7 @@ export function TemplateForm({ template, onCancel, onSaved }: TemplateFormProps)
     fd.set("name", name)
     fd.set("subject", subject)
     fd.set("body", body)
+    fd.set("type", type)
     startTransition(async () => {
       const result = isEdit
         ? await updateTemplate(template!.id, fd)
@@ -60,6 +62,18 @@ export function TemplateForm({ template, onCancel, onSaved }: TemplateFormProps)
           placeholder="e.g. Initial outreach"
           required
         />
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">Type</label>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value as "initial" | "follow_up")}
+          className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="initial">Initial outreach</option>
+          <option value="follow_up">Follow-up (preselected when following up)</option>
+        </select>
       </div>
 
       <div>

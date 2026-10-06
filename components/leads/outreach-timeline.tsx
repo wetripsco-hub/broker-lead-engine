@@ -16,6 +16,9 @@ interface TimelineEvent {
   click_count?: number
   subject?: string | null
   from_email?: string | null
+  transcript?: string | null
+  ai_summary?: string | null
+  follow_up_date?: string | null
 }
 
 interface OutreachTimelineProps {
@@ -187,6 +190,7 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
                   {ev.channel === "call" ? (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {duration && <span>Duration: {duration}</span>}
+                      {ev.follow_up_date && <span>Follow up: {ev.follow_up_date}</span>}
                       {ev.recording_url && (
                         <a
                           href={ev.recording_url}
@@ -210,6 +214,20 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
                         </p>
                       )}
                     </>
+                  )}
+
+                  {ev.channel === "call" && ev.ai_summary && (
+                    <p className="text-xs text-muted-foreground">{ev.ai_summary}</p>
+                  )}
+                  {ev.channel === "call" && ev.transcript && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer select-none text-blue-600 hover:underline dark:text-blue-400">
+                        Transcript
+                      </summary>
+                      <pre className="mt-1.5 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/40 p-2.5 font-sans leading-relaxed text-muted-foreground">
+                        {ev.transcript}
+                      </pre>
+                    </details>
                   )}
 
                   {/* Open/click stats — email only */}

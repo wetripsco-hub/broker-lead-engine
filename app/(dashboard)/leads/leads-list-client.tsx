@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -8,9 +8,19 @@ import { StageBadge } from "@/components/leads/stage-badge"
 import { StageSelector } from "@/components/leads/stage-selector"
 import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selector"
 import { BulkEmailModal, type BulkRecipient } from "@/components/leads/bulk-email-modal"
-import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp } from "lucide-react"
+import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock } from "lucide-react"
 import { toast } from "sonner"
+import { CallDot, describeCall, type CallDisplayState } from "@/components/leads/call-status"
+import { useNow } from "@/lib/timezone/use-now"
+import {
+  resolveTimezone,
+  getCallStatus,
+  formatLocalClock,
+  formatLocalTime,
+  type CallStatus,
+} from "@/lib/timezone/broker-time"
 import { bulkAssignLeads } from "./actions"
+import type { FollowUpInfo } from "@/lib/follow-up/compute"
 import type { LeadStage } from "@/types/database"
 
 interface LeadRow {
@@ -37,6 +47,7 @@ interface Template {
   name: string
   subject: string
   body: string
+  type?: "initial" | "follow_up"
 }
 
 interface EmailStatusInfo {
@@ -80,8 +91,8 @@ function EmailStatusCell({ info }: { info: EmailStatusInfo | undefined }) {
 
 // The agent view has no Agent column, so it needs its own track list — a
 // fixed template with one column too many pushes everything after it over.
-const GRID_ADMIN = "grid-cols-[28px_1fr_140px_100px_110px_180px_100px_32px]"
-const GRID_AGENT = "grid-cols-[28px_1fr_140px_100px_110px_100px_32px]"
+const GRID_ADMIN = "grid-cols-[28px_1fr_140px_100px_110px_110px_180px_100px_32px]"
+const GRID_AGENT = "grid-cols-[28px_1fr_140px_100px_110px_110px_100px_32px]"
 
 function relativeAge(iso: string, now: number): string {
   const mins = Math.floor((now - new Date(iso).getTime()) / 60_000)
@@ -91,6 +102,29 @@ function relativeAge(iso: string, now: number): string {
   if (hrs < 24) return `${hrs}h ago`
   return `${Math.floor(hrs / 24)}d ago`
 }
+
+// "Callable now first": green, then amber, then closed, then weekend, then
+// leads whose timezone we couldn't work out.
+function LastEmailCell({ info }: { info: FollowUpInfo | undefined }) {
+  // Never emailed: show nothing.
+  if (!info) return <span />
+  return (
+    <div className="min-w-0 pointer-events-none leading-tight">
+      <p className="text-sm text-muted-foreground tabular-nums">
+        {info.days === 0 ? "Today" : `${info.days}d ago`}
+      </p>
+      <p
+        className={`text-xs h-4 ${
+          info.replied ? "text-green-600 dark:text-green-400" : "text-muted-foreground/70"
+        }`}
+      >
+        {info.replied ? "Replied" : "No reply"}
+      </p>
+    </div>
+  )
+}
+
+const CALL_RANK: Record<CallDisplayState, number> = { ok: 0, closing: 1, closed: 2, weekend: 3, unknown: 4 }
 
 const STAGE_FILTERS: { value: LeadStage | "all"; label: string }[] = [
   { value: "all",        label: "All" },
@@ -108,6 +142,8 @@ export function LeadsListClient({
   currentAgentName,
   emailStatusByLead,
   allAgents,
+  followUpByLead,
+  initialFollowUpOnly,
 }: {
   leads: LeadRow[]
   isAdmin: boolean
@@ -115,6 +151,8 @@ export function LeadsListClient({
   currentAgentName: string
   emailStatusByLead: Record<string, EmailStatusInfo>
   allAgents: Array<{ id: string; name: string }>
+  followUpByLead: Record<string, FollowUpInfo>
+  initialFollowUpOnly: boolean
 }) {
   const [stageFilter, setStageFilter] = useState<LeadStage | "all">("all")
   const [agentFilter, setAgentFilter] = useState<string>("all") // "all" | "unassigned" | agentId
@@ -124,13 +162,51 @@ export function LeadsListClient({
   const [isAssigning, setIsAssigning] = useState(false)
   // Newest first by default: the freshly scraped leads are what you look for.
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
-  // Relative ages depend on the current time, so they're filled in after
-  // mount — rendering them on the server would mismatch on hydration.
-  const [now, setNow] = useState<number | null>(null)
-  useEffect(() => setNow(Date.now()), [])
+  const [sortMode, setSortMode] = useState<"date" | "callable" | "followup">("date")
+  const [callableOnly, setCallableOnly] = useState(false)
+  const [followUpOnly, setFollowUpOnly] = useState(initialFollowUpOnly)
+  // Relative ages and local times depend on the current time, so they're
+  // filled in after mount (null until then) — rendering them on the server
+  // would mismatch on hydration. A 30s tick is plenty: nothing here shows
+  // seconds, and the calling window only changes on minute boundaries.
+  const nowDate = useNow(30_000)
+  const now = nowDate ? nowDate.getTime() : null
+
+  // Timezone per lead never changes; the calling status does, with the clock.
+  const tzByLead = useMemo(
+    () => new Map(leads.map((l) => [l.id, resolveTimezone(l.brokers?.state, l.brokers?.phone)])),
+    [leads],
+  )
+  const callByLead = useMemo(() => {
+    if (!nowDate) return null
+    const map = new Map<string, { status: CallStatus; clock: string; title: string } | null>()
+    for (const [id, tz] of tzByLead) {
+      if (!tz) {
+        map.set(id, null)
+        continue
+      }
+      const status = getCallStatus(tz.tz, nowDate)
+      const { headline } = describeCall(status, nowDate)
+      map.set(id, {
+        status,
+        clock: formatLocalClock(tz.tz, nowDate),
+        title: `${headline} · ${formatLocalTime(tz.tz, nowDate)} · ${tz.zoneLabel}${tz.place ? ` (${tz.place})` : ""}`,
+      })
+    }
+    return map
+  }, [tzByLead, nowDate])
+
+  const followUpCount = leads.filter((l) => followUpByLead[l.id]?.due).length
+
+  const callableCount = callByLead
+    ? leads.filter((l) => callByLead.get(l.id)?.status.state === "ok").length
+    : null
 
   const matching = leads.filter((l) => {
     if (stageFilter !== "all" && l.stage !== stageFilter) return false
+    // "Callable now" = green only (inside the window, not about to close).
+    if (followUpOnly && !followUpByLead[l.id]?.due) return false
+    if (callableOnly && callByLead?.get(l.id)?.status.state !== "ok") return false
     if (agentFilter === "unassigned" && l.assigned_agent_id !== null) return false
     if (agentFilter !== "all" && agentFilter !== "unassigned" && l.assigned_agent_id !== agentFilter) return false
     if (search) {
@@ -150,6 +226,19 @@ export function LeadsListClient({
   })
 
   const filtered = [...matching].sort((a, b) => {
+    if (sortMode === "followup") {
+      // Most overdue first; leads with nothing due fall to the bottom.
+      const da = followUpByLead[a.id]?.due ? followUpByLead[a.id].days : -1
+      const db = followUpByLead[b.id]?.due ? followUpByLead[b.id].days : -1
+      if (da !== db) return db - da
+      return b.created_at.localeCompare(a.created_at)
+    }
+    if (sortMode === "callable" && callByLead) {
+      const rank = (id: string) => CALL_RANK[callByLead.get(id)?.status.state ?? "unknown"]
+      const r = rank(a.id) - rank(b.id)
+      if (r !== 0) return r
+      return b.created_at.localeCompare(a.created_at) // newest first within a group
+    }
     const d = a.created_at.localeCompare(b.created_at)
     return sortDir === "desc" ? -d : d
   })
@@ -237,6 +326,45 @@ export function LeadsListClient({
             ))}
           </select>
         )}
+        <button
+          type="button"
+          aria-pressed={callableOnly}
+          disabled={now === null}
+          onClick={() => setCallableOnly((v) => !v)}
+          title="Only leads whose local time is inside the calling window"
+          className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-[background-color,color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] disabled:opacity-50 ${
+            callableOnly
+              ? "border-green-300 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-900/40 dark:text-green-300"
+              : "border-input hover:bg-muted"
+          }`}
+        >
+          <CallDot state="ok" />
+          Callable now{callableCount !== null ? ` (${callableCount})` : ""}
+        </button>
+        <button
+          type="button"
+          aria-pressed={followUpOnly}
+          onClick={() => setFollowUpOnly((v) => !v)}
+          title="Emailed with no reply yet"
+          className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-[background-color,color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
+            followUpOnly
+              ? "border-orange-300 bg-orange-100 text-orange-700 dark:border-orange-800 dark:bg-orange-900/40 dark:text-orange-300"
+              : "border-input hover:bg-muted"
+          }`}
+        >
+          <Clock className="size-3.5" />
+          Follow-up ({followUpCount})
+        </button>
+        <select
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value as "date" | "callable" | "followup")}
+          className="h-8 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+          aria-label="Sort leads"
+        >
+          <option value="date">Sort: Date added</option>
+          <option value="callable">Sort: Callable now first</option>
+          <option value="followup">Sort: Follow-up overdue first</option>
+        </select>
         {filtered.length > 0 && (
           <div className="flex items-center gap-1 ml-auto">
             <Button
@@ -288,14 +416,19 @@ export function LeadsListClient({
               <span>Location</span>
               <button
                 type="button"
-                onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+                onClick={() => {
+                  if (sortMode !== "date") setSortMode("date")
+                  else setSortDir((d) => (d === "desc" ? "asc" : "desc"))
+                }}
                 className="flex items-center gap-1 uppercase tracking-wide hover:text-foreground w-fit"
                 title={sortDir === "desc" ? "Newest first — click for oldest first" : "Oldest first — click for newest first"}
               >
                 Added
-                {sortDir === "desc" ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />}
+                {sortMode === "date" &&
+                  (sortDir === "desc" ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
               </button>
               <span>Email Status</span>
+              <span>Last email</span>
               {isAdmin && <span>Agent</span>}
               <span>Stage</span>
               <span />
@@ -324,13 +457,43 @@ export function LeadsListClient({
                   />
                   <div className="min-w-0 pointer-events-none">
                     <p className="font-medium truncate text-sm">{b?.company_name ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {b?.mc_number ? `MC-${b.mc_number}` : b?.dot_number ? `DOT-${b.dot_number}` : "—"}
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="font-mono">
+                        {b?.mc_number ? `MC-${b.mc_number}` : b?.dot_number ? `DOT-${b.dot_number}` : "—"}
+                      </span>
+                      {followUpByLead[lead.id]?.due && (
+                        <span className="rounded-full bg-orange-100 px-1.5 py-0.5 font-medium text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+                          Follow-up due - {followUpByLead[lead.id].days}d
+                        </span>
+                      )}
                     </p>
                   </div>
-                  <span className="text-sm text-muted-foreground truncate pointer-events-none">
-                    {[b?.city, b?.state].filter(Boolean).join(", ") || "—"}
-                  </span>
+                  <div className="min-w-0 pointer-events-none leading-tight">
+                    <p className="text-sm text-muted-foreground truncate">
+                      {[b?.city, b?.state].filter(Boolean).join(", ") || "—"}
+                    </p>
+                    {/* Broker's local time + whether it's inside the calling
+                        window. Blank until mount (no server/client clock mismatch);
+                        the h-4 keeps the row height steady while it fills in. */}
+                    <p className="mt-0.5 flex h-4 items-center gap-1.5 text-xs text-muted-foreground tabular-nums" suppressHydrationWarning>
+                      {callByLead &&
+                        (() => {
+                          const c = callByLead.get(lead.id)
+                          return c ? (
+                            <>
+                              <CallDot state={c.status.state} />
+                              {c.clock}
+                              <span className="sr-only">{c.title}</span>
+                            </>
+                          ) : (
+                            <>
+                              <CallDot state="unknown" />
+                              <span className="text-muted-foreground/70">TZ unknown</span>
+                            </>
+                          )
+                        })()}
+                    </p>
+                  </div>
                   <div className="min-w-0 pointer-events-none leading-tight" title={new Date(lead.created_at).toLocaleString()}>
                     <p className="text-sm text-muted-foreground" suppressHydrationWarning>
                       {new Date(lead.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
@@ -340,6 +503,7 @@ export function LeadsListClient({
                     </p>
                   </div>
                   <EmailStatusCell info={emailInfo} />
+                  <LastEmailCell info={followUpByLead[lead.id]} />
                   {isAdmin && (
                     <div className="relative z-10">
                       <AssignedAgentSelector
@@ -377,7 +541,7 @@ export function LeadsListClient({
             <div className="h-4 w-px bg-border" />
             <Button size="sm" className="h-8 gap-1.5" onClick={() => setBulkModalOpen(true)}>
               <Mail className="size-3.5" />
-              Send email
+              {followUpOnly ? "Send follow-up" : "Send email"}
             </Button>
             {isAdmin && (
               <>
@@ -418,6 +582,7 @@ export function LeadsListClient({
         <BulkEmailModal
           recipients={selectedRecipients}
           templates={templates}
+          followUp={followUpOnly}
           agentName={currentAgentName}
           onClose={() => setBulkModalOpen(false)}
           onFinished={() => deselectAll()}

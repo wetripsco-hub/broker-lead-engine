@@ -15,7 +15,10 @@ import { toast } from "sonner"
 import {
   logCallStarted,
   saveCallDisposition,
+  saveCallTranscript,
 } from "@/app/(dashboard)/leads/[id]/call-actions"
+import { CopilotPanel } from "@/components/copilot/copilot-panel"
+import type { CallWrapUp } from "@/lib/copilot/types"
 import { DISPOSITION_LABEL } from "@/lib/call-dispositions"
 import type { DispositionKey } from "@/lib/call-dispositions"
 
@@ -126,6 +129,18 @@ export function DialerModal({
   const startTimeRef = useRef<number>(0)
   const endedRef    = useRef(false) // guard double-fire
   const audioRef    = useRef<HTMLAudioElement>(null)
+  const transcriptRef = useRef("")
+  const [wrapUp, setWrapUp] = useState<CallWrapUp | null>(null)
+  const [wrapUpLoading, setWrapUpLoading] = useState(false)
+  const [followUpDate, setFollowUpDate] = useState("")
+  const handleTranscript = useCallback((t: string) => { transcriptRef.current = t }, [])
+  const getSources = useCallback(() => {
+    const call = callRef.current as any
+    return {
+      remote: (call?.remoteStream ?? (audioRef.current?.srcObject as MediaStream | null) ?? null) as MediaStream | null,
+      local: (call?.localStream ?? null) as MediaStream | null,
+    }
+  }, [])
 
   // ── Timer ─────────────────────────────────────────────────────────────────
 
@@ -150,6 +165,34 @@ export function DialerModal({
     // Auto-select disposition based on whether call was ever active
     setDisposition(seconds > 0 ? "answered_not_interested" : "no_answer")
   }, [seconds])
+
+  // After the call: persist the transcript right away, then ask for a short
+  // summary + suggested disposition (the agent still confirms before saving).
+  useEffect(() => {
+    if (phase !== "ended") return
+    const transcript = transcriptRef.current
+    if (!transcript.trim()) return
+    if (eventIdRef.current) saveCallTranscript(eventIdRef.current, transcript)
+    let cancelled = false
+    setWrapUpLoading(true)
+    fetch("/api/copilot/summarize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId, transcript }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((w: CallWrapUp | null) => {
+        if (cancelled || !w) return
+        setWrapUp(w)
+        setDisposition(w.disposition)
+        setNotes((n) => n || w.summary)
+        setFollowUpDate(w.follow_up_date ?? "")
+      })
+      .catch(() => {})
+      .finally(() => !cancelled && setWrapUpLoading(false))
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase === "ended"])
 
   // ── Start call (on mount) ─────────────────────────────────────────────────
 
@@ -270,6 +313,7 @@ export function DialerModal({
         disposition,
         notes,
         seconds,
+        { aiSummary: wrapUp?.summary ?? null, followUpDate: followUpDate || null },
       )
       if (error) {
         toast.error(`Save failed: ${error}`)
@@ -290,11 +334,12 @@ export function DialerModal({
   const isEnded   = phase === "ended" || phase === "saving"
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4">
       {/* Remote audio playout — required by the Telnyx SDK (client.remoteElement) */}
       <audio ref={audioRef} autoPlay playsInline className="hidden" />
 
-      <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden">
+      <div className="flex w-full max-w-[800px] flex-col items-center gap-4 md:flex-row md:items-start md:justify-center">
+      <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden shrink-0">
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
@@ -406,6 +451,13 @@ export function DialerModal({
               Call outcome
             </p>
 
+            {(wrapUpLoading || wrapUp) && (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                <p className="font-medium text-muted-foreground">AI summary — review before saving</p>
+                <p className="mt-1">{wrapUpLoading ? "Summarising…" : wrapUp?.summary}</p>
+              </div>
+            )}
+
             {/* Disposition select */}
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground" htmlFor="disposition-select">
@@ -440,6 +492,22 @@ export function DialerModal({
               />
             </div>
 
+            {wrapUp && (
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground" htmlFor="follow-up-date">
+                  Follow-up date <span className="text-muted-foreground/60">(optional)</span>
+                </label>
+                <input
+                  id="follow-up-date"
+                  type="date"
+                  value={followUpDate}
+                  onChange={(e) => setFollowUpDate(e.target.value)}
+                  disabled={phase === "saving"}
+                  className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                />
+              </div>
+            )}
+
             {/* Save */}
             <Button
               className="w-full gap-2"
@@ -451,6 +519,15 @@ export function DialerModal({
             </Button>
           </div>
         )}
+      </div>
+
+      <CopilotPanel
+        leadId={leadId}
+        callId={eventIdRef.current}
+        callLive={phase === "dialing" || phase === "active"}
+        getSources={getSources}
+        onTranscript={handleTranscript}
+      />
       </div>
     </div>
   )

@@ -11,6 +11,7 @@ export async function updateLeadStage(leadId: string, stage: LeadStage) {
   if (error) return { error: error.message }
   revalidatePath("/leads")
   revalidatePath(`/leads/${leadId}`)
+  revalidatePath("/dashboard")
   return { error: null }
 }
 
@@ -55,5 +56,22 @@ export async function bulkAssignLeads(leadIds: string[], agentId: string | null)
 
   if (error) return { error: error.message }
   revalidatePath("/leads")
+  return { error: null }
+}
+
+// Hides the follow-up flag until `days` from now. RLS limits agents to
+// their own leads.
+export async function snoozeFollowUp(leadId: string, days: number) {
+  if (!Number.isFinite(days) || days <= 0) return { error: "Invalid snooze length" }
+  const until = new Date(Date.now() + days * 86_400_000).toISOString()
+  const supabase = await createClient()
+  const { error } = await (supabase.from("leads") as any)
+    .update({ follow_up_snoozed_until: until })
+    .eq("id", leadId) as { error: { message: string } | null }
+
+  if (error) return { error: error.message }
+  revalidatePath("/leads")
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath("/dashboard")
   return { error: null }
 }

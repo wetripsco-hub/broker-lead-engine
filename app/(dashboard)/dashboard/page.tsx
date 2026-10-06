@@ -2,7 +2,8 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
-import { Users, TrendingUp, Mail, Phone, MessageSquare, ArrowUpRight, ArrowDownLeft } from "lucide-react"
+import { Users, TrendingUp, Mail, Phone, MessageSquare, ArrowUpRight, ArrowDownLeft, Clock } from "lucide-react"
+import { getFollowUps } from "@/lib/follow-up/query"
 import type { UserRole, OutreachChannel } from "@/types/database"
 
 const CHANNEL_ICON: Record<OutreachChannel, React.ElementType> = {
@@ -46,6 +47,9 @@ export default async function DashboardPage() {
       .gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString()),
   ])
 
+  // RLS-scoped: admin counts everyone's leads, an agent only their own.
+  const followUpsDue = Object.values(await getFollowUps(supabase)).filter((f) => f.due).length
+
   const stats = [
     {
       label: "Total Leads",
@@ -83,6 +87,14 @@ export default async function DashboardPage() {
       icon: Phone,
       sub: "Per lead",
       href: null,
+    },
+    {
+      label: "Follow-ups due today",
+      value: followUpsDue,
+      numeric: true as const,
+      icon: Clock,
+      sub: followUpsDue ? "Emailed, no reply yet" : "All caught up",
+      href: "/leads?filter=followup",
     },
   ]
 
@@ -165,7 +177,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {stats.map(({ label, value, numeric, icon: Icon, sub, href }, i) => {
           const card = (
             <Card

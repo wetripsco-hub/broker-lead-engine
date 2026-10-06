@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { sendTemplateEmail } from "@/app/(dashboard)/leads/[id]/email-actions"
 import { interpolate } from "@/lib/email/resend"
+import { followUpSubject } from "@/lib/follow-up/compute"
 
-interface Template {
+export interface ComposeTemplate {
   id: string
   name: string
   subject: string
   body: string
+  type?: "initial" | "follow_up"
 }
 
 type MergeVars = Record<string, string>
@@ -19,19 +21,35 @@ type MergeVars = Record<string, string>
 interface EmailComposeProps {
   leadId: string
   brokerEmail: string | null
-  templates: Template[]
+  templates: ComposeTemplate[]
   mergeVars: MergeVars
+  /** Follow-up mode: preselects the follow-up template and replies in-thread. */
+  followUp?: { previousSubject: string | null }
+  triggerLabel?: string
+  triggerVariant?: "default" | "outline"
 }
 
-export function EmailCompose({ leadId, brokerEmail, templates, mergeVars }: EmailComposeProps) {
+export function EmailCompose({
+  leadId,
+  brokerEmail,
+  templates,
+  mergeVars,
+  followUp,
+  triggerLabel = "Send email",
+  triggerVariant = "outline",
+}: EmailComposeProps) {
   const [open, setOpen] = useState(false)
-  const [selectedId, setSelectedId] = useState<string>("")
+  const defaultTemplateId = followUp ? (templates.find((t) => t.type === "follow_up")?.id ?? "") : ""
+  const [selectedId, setSelectedId] = useState<string>(defaultTemplateId)
   const [isPending, startTransition] = useTransition()
 
   const selected = templates.find((t) => t.id === selectedId) ?? null
   const preview = selected
     ? {
-        subject: interpolate(selected.subject, mergeVars),
+        subject:
+          followUp?.previousSubject
+            ? followUpSubject(followUp.previousSubject)
+            : interpolate(selected.subject, mergeVars),
         body:    interpolate(selected.body, mergeVars),
       }
     : null
@@ -39,13 +57,13 @@ export function EmailCompose({ leadId, brokerEmail, templates, mergeVars }: Emai
   function handleSend() {
     if (!selectedId) return
     startTransition(async () => {
-      const { error, messageId } = await sendTemplateEmail(leadId, selectedId)
+      const { error, messageId } = await sendTemplateEmail(leadId, selectedId, { asFollowUp: !!followUp })
       if (error) {
         toast.error(`Email failed: ${error}`)
       } else {
         toast.success("Email sent")
         setOpen(false)
-        setSelectedId("")
+        setSelectedId(defaultTemplateId)
       }
     })
   }
@@ -53,7 +71,7 @@ export function EmailCompose({ leadId, brokerEmail, templates, mergeVars }: Emai
   if (!open) {
     return (
       <Button
-        variant="outline"
+        variant={triggerVariant}
         size="sm"
         className="gap-2"
         onClick={() => setOpen(true)}
@@ -61,7 +79,7 @@ export function EmailCompose({ leadId, brokerEmail, templates, mergeVars }: Emai
         title={brokerEmail ? undefined : "No email address for this broker"}
       >
         <Mail className="size-3.5" />
-        Send email
+        {triggerLabel}
       </Button>
     )
   }
@@ -71,7 +89,7 @@ export function EmailCompose({ leadId, brokerEmail, templates, mergeVars }: Emai
       <div className="bg-card border rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
-          <h2 className="font-semibold text-sm">Compose email</h2>
+          <h2 className="font-semibold text-sm">{followUp ? "Send follow-up" : "Compose email"}</h2>
           <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
             <X className="size-4" />
           </button>

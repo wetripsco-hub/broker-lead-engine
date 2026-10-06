@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   UserCog,
+  BookOpen,
 } from "lucide-react"
 import {
   Sidebar,
@@ -35,6 +36,7 @@ import type { UserRole } from "@/types/database"
 const navItems = [
   { href: "/dashboard", label: "Dashboard",     icon: LayoutDashboard },
   { href: "/leads",     label: "Leads",         icon: Users },
+  { href: "/settings/knowledge", label: "Knowledge", icon: BookOpen },
 ]
 
 const secondaryNavItems = [

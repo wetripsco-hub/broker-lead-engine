@@ -14,6 +14,7 @@ export async function createTemplate(formData: FormData) {
   const name    = (formData.get("name") as string)?.trim()
   const subject = (formData.get("subject") as string)?.trim()
   const body    = (formData.get("body") as string)?.trim()
+  const type    = formData.get("type") === "follow_up" ? "follow_up" : "initial"
 
   if (!name || !subject || !body) return { error: "All fields required" }
 
@@ -25,7 +26,7 @@ export async function createTemplate(formData: FormData) {
   const agent = agentRaw as { id: string } | null
 
   const { error } = await (supabase.from("email_templates") as any)
-    .insert({ name, subject, body, created_by: agent?.id ?? null }) as { error: { message: string } | null }
+    .insert({ name, subject, body, type, created_by: agent?.id ?? null }) as { error: { message: string } | null }
 
   if (error) return { error: error.message }
   revalidatePath("/templates")
@@ -42,11 +43,12 @@ export async function updateTemplate(id: string, formData: FormData) {
   const name    = (formData.get("name") as string)?.trim()
   const subject = (formData.get("subject") as string)?.trim()
   const body    = (formData.get("body") as string)?.trim()
+  const type    = formData.get("type") === "follow_up" ? "follow_up" : "initial"
 
   if (!name || !subject || !body) return { error: "All fields required" }
 
   const { error } = await (supabase.from("email_templates") as any)
-    .update({ name, subject, body })
+    .update({ name, subject, body, type })
     .eq("id", id) as { error: { message: string } | null }
 
   if (error) return { error: error.message }
