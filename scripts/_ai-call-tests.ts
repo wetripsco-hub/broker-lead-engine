@@ -1,7 +1,8 @@
 // Offline checks for AI calling — no network, no database, no real calls.
 //   npx tsx scripts/_ai-call-tests.ts
 import { createHmac } from "crypto"
-import { evaluateAiCallGate, toE164, type GateInput } from "../lib/voice-agents/gate"
+import { evaluateAiCallGate, type GateInput } from "../lib/voice-agents/gate"
+import { toE164 } from "../lib/phone"
 import { retellProvider } from "../lib/voice-agents/retell"
 import { processVoiceEvent } from "../lib/voice-agents/process"
 

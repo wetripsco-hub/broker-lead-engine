@@ -5,6 +5,7 @@ import { Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DialerModal } from "./dialer-modal"
 import { CopilotSwitch } from "@/components/copilot/copilot-switch"
+import { toE164 } from "@/lib/phone"
 import {
   resolveTimezone,
   getCallStatus,
@@ -40,6 +41,16 @@ export function CallButton({ leadId, agentId, brokerPhone, brokerName, brokerSta
       <Button variant="outline" size="sm" disabled className="gap-2">
         <Phone className="size-3.5" />
         No phone
+      </Button>
+    )
+  }
+  // Telnyx only ever gets E.164. A phone that can't be normalised is not dialled.
+  const e164 = toE164(brokerPhone)
+  if (!e164) {
+    return (
+      <Button variant="outline" size="sm" disabled className="gap-2" title={`"${brokerPhone}" is not a valid phone number`}>
+        <Phone className="size-3.5" />
+        Invalid phone number
       </Button>
     )
   }
@@ -127,7 +138,7 @@ export function CallButton({ leadId, agentId, brokerPhone, brokerName, brokerSta
         <DialerModal
           leadId={leadId}
           agentId={agentId}
-          brokerPhone={brokerPhone}
+          brokerPhone={e164}
           brokerName={brokerName}
           copilotOn={copilotOn}
           onClose={() => setOpen(false)}

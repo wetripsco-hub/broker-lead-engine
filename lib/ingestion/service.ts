@@ -1,4 +1,5 @@
 import type { BrokerDataProvider } from "@/lib/fmcsa/provider"
+import { toE164 } from "@/lib/phone"
 import type { IngestionSummary } from "@/lib/fmcsa/types"
 import { enrichBrokers } from "@/lib/fmcsa/api-provider"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -83,6 +84,7 @@ export class IngestionService {
           contact_name: r.contactName ?? null,
           email: r.email ?? null,
           phone: r.phone ?? null,
+          phone_e164: toE164(r.phone),
           address_line1: r.addressLine1 ?? null,
           city: r.city ?? null,
           state: r.state ?? null,
@@ -108,6 +110,7 @@ export class IngestionService {
             contact_name: r.contactName ?? null,
             email: r.email ?? null,
             phone: r.phone ?? null,
+            phone_e164: toE164(r.phone),
             address_line1: r.addressLine1 ?? null,
             city: r.city ?? null,
             state: r.state ?? null,

@@ -26,6 +26,7 @@ from broker_scraper import (  # noqa: E402
     save_officials,
 )
 from supabase import create_client  # noqa: E402
+from phone_util import to_e164
 
 
 def main() -> None:
@@ -82,6 +83,7 @@ def main() -> None:
             update["mc_number"] = motus["mc_number"]
         if motus.get("phone"):
             update["phone"] = motus["phone"]
+            update["phone_e164"] = to_e164(motus["phone"])
         if address:
             update.update(
                 {

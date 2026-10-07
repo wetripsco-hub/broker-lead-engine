@@ -20,6 +20,7 @@ import {
 import { CopilotPanel } from "@/components/copilot/copilot-panel"
 import type { CallWrapUp } from "@/lib/copilot/types"
 import { DISPOSITION_LABEL } from "@/lib/call-dispositions"
+import { formatPhoneDisplay, toE164 } from "@/lib/phone"
 import type { DispositionKey } from "@/lib/call-dispositions"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -256,7 +257,7 @@ export function DialerModal({
         const clientState = btoa(JSON.stringify({ leadId, agentId }))
         const fromNumber = process.env.NEXT_PUBLIC_TELNYX_FROM_NUMBER ?? ""
         const call = (client as any).newCall({
-          destinationNumber: brokerPhone,
+          destinationNumber: toE164(brokerPhone) ?? brokerPhone,
           callerNumber: fromNumber,
           clientState,
         })
@@ -385,7 +386,7 @@ export function DialerModal({
             <p className="font-semibold text-base leading-tight">
               {brokerName ?? "Unknown broker"}
             </p>
-            <p className="text-sm text-muted-foreground font-mono mt-0.5">{brokerPhone}</p>
+            <p className="text-sm text-muted-foreground font-mono mt-0.5">{formatPhoneDisplay(brokerPhone)}</p>
           </div>
 
           {/* ── Timer or status label ── */}

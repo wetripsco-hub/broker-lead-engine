@@ -9,6 +9,7 @@ import { EmailCompose } from "@/components/leads/email-compose"
 import { FollowUpBanner } from "@/components/leads/follow-up-banner"
 import { AiCallControls } from "@/components/leads/ai-call-controls"
 import { getFollowUps } from "@/lib/follow-up/query"
+import { formatPhoneDisplay, isValidPhone } from "@/lib/phone"
 import { CallButton } from "@/components/leads/call-button"
 import { LocalTimeCard } from "@/components/leads/local-time-card"
 import { SmsThread } from "@/components/leads/sms-thread"
@@ -312,7 +313,11 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               <InfoRow icon={Hash}     label="MC#"        value={b?.mc_number ? `MC-${b.mc_number}` : null} />
               <InfoRow icon={Hash}     label="DOT#"       value={b?.dot_number} />
               <InfoRow icon={User}     label="Contact"    value={b?.contact_name} />
-              <InfoRow icon={Phone}    label="Phone"      value={b?.phone} />
+              <InfoRow
+                icon={Phone}
+                label="Phone"
+                value={b?.phone ? `${formatPhoneDisplay(b.phone)}${isValidPhone(b.phone) ? "" : "  (invalid phone number)"}` : null}
+              />
               <InfoRow icon={Mail}     label="Email"      value={b?.email} />
               <InfoRow
                 icon={MapPin}
@@ -359,7 +364,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                     )}
                     <span className="flex-1" />
                     {o.telephone && (
-                      <span className="text-xs text-muted-foreground font-mono">{o.telephone}</span>
+                      <span className="text-xs text-muted-foreground font-mono">{formatPhoneDisplay(o.telephone)}</span>
                     )}
                     {o.email && (
                       <a

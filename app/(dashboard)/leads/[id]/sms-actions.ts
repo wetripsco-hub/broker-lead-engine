@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { sendSms } from "@/lib/telnyx/sms"
+import { toE164 } from "@/lib/phone"
 
 export async function sendLeadSms(
   leadId: string,
@@ -10,6 +11,8 @@ export async function sendLeadSms(
   text: string,
 ): Promise<{ error?: string; eventId?: string }> {
   if (!text.trim()) return { error: "Message cannot be empty" }
+  const to = toE164(brokerPhone)
+  if (!to) return { error: "Invalid phone number" }
   if (text.length > 1600) return { error: "Message too long (max 1600 chars)" }
 
   const supabase = await createClient()
@@ -28,7 +31,7 @@ export async function sendLeadSms(
 
   let externalId: string | null = null
   try {
-    const result = await sendSms(brokerPhone, text)
+    const result = await sendSms(to, text)
     externalId = result.id
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : String(err) }
@@ -43,8 +46,8 @@ export async function sendLeadSms(
       message_body: text,
       direction: "outbound",
       external_id: externalId,
-      from_number: process.env.TELNYX_SMS_NUMBER ?? null,
-      to_number: brokerPhone,
+      from_number: toE164(process.env.TELNYX_SMS_NUMBER) ?? null,
+      to_number: to,
     })
     .select("id")
     .single()

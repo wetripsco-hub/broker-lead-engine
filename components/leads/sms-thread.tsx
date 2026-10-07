@@ -5,6 +5,7 @@ import { Send, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { sendLeadSms } from "@/app/(dashboard)/leads/[id]/sms-actions"
+import { formatPhoneDisplay, toE164 } from "@/lib/phone"
 
 interface SmsEvent {
   id: string
@@ -42,6 +43,10 @@ export function SmsThread({ leadId, brokerPhone, brokerName, initialEvents }: Sm
 
   function handleSend() {
     if (!brokerPhone || !text.trim()) return
+    if (!toE164(brokerPhone)) {
+      toast.error("Invalid phone number")
+      return
+    }
     const draft = text.trim()
     setText("")
 
@@ -84,7 +89,7 @@ export function SmsThread({ leadId, brokerPhone, brokerName, initialEvents }: Sm
         <MessageSquare className="size-3.5" />
         SMS Thread
         {brokerPhone && (
-          <span className="font-mono font-normal normal-case text-xs">{brokerPhone}</span>
+          <span className="font-mono font-normal normal-case text-xs">{formatPhoneDisplay(brokerPhone)}</span>
         )}
       </h2>
 

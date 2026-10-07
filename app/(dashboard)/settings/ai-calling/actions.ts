@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { toE164 } from "@/lib/voice-agents/gate"
+import { toE164 } from "@/lib/phone"
 
 export async function saveAiCallingSettings(input: {
   enabled: boolean
@@ -20,13 +20,13 @@ export async function saveAiCallingSettings(input: {
   if (!Number.isFinite(cap) || cap < 0 || cap > 1000) return { error: "Daily cap must be between 0 and 1000" }
 
   const raw = input.testNumbers
-    .split(/[\s,;]+/)
+    .split(/[\n,;]+/)
     .map((s) => s.trim())
     .filter(Boolean)
   const numbers: string[] = []
   for (const r of raw) {
     const n = toE164(r)
-    if (!n) return { error: `"${r}" isn't a valid US/Canada number` }
+    if (!n) return { error: `"${r}" isn't a valid phone number` }
     if (!numbers.includes(n)) numbers.push(n)
   }
 

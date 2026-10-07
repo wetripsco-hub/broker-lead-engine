@@ -1,3 +1,5 @@
+import { toE164 } from "@/lib/phone"
+
 const TELNYX_API = "https://api.telnyx.com/v2"
 
 function apiKey(): string {
@@ -16,8 +18,11 @@ export async function sendSms(
   text: string,
   from?: string,
 ): Promise<SendSmsResult> {
-  const fromNumber = from ?? process.env.TELNYX_SMS_NUMBER
-  if (!fromNumber) throw new Error("TELNYX_SMS_NUMBER not set")
+  // Last line of defence: whatever the caller passed, Telnyx only ever gets E.164.
+  const toNumber = toE164(to)
+  if (!toNumber) throw new Error("Invalid phone number")
+  const fromNumber = toE164(from ?? process.env.TELNYX_SMS_NUMBER)
+  if (!fromNumber) throw new Error("TELNYX_SMS_NUMBER not set or invalid")
 
   const res = await fetch(`${TELNYX_API}/messages`, {
     method: "POST",
@@ -27,7 +32,7 @@ export async function sendSms(
     },
     body: JSON.stringify({
       from: fromNumber,
-      to,
+      to: toNumber,
       text,
       messaging_profile_id: process.env.TELNYX_MESSAGING_PROFILE_ID,
     }),

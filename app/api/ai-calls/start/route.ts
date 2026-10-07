@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { loadKnowledge } from "@/lib/copilot/kb"
-import { evaluateAiCallGate, toE164 } from "@/lib/voice-agents/gate"
+import { evaluateAiCallGate } from "@/lib/voice-agents/gate"
+import { toE164 } from "@/lib/phone"
 import { getVoiceProvider } from "@/lib/voice-agents"
 import { loadAiCallSettings } from "@/lib/voice-agents/settings"
 
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   const { data: leadRaw } = await (supabase.from("leads") as any)
     .select(
       `id, ai_call_consent, do_not_call,
-       brokers ( company_name, contact_name, state, phone, mc_status )`,
+       brokers ( company_name, contact_name, state, phone, phone_e164, mc_status )`,
     )
     .eq("id", leadId)
     .maybeSingle()
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
       contact_name: string | null
       state: string | null
       phone: string | null
+      phone_e164: string | null
       mc_status: string | null
     } | null
   } | null
@@ -65,7 +67,8 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient()
-  const to = toE164(lead.brokers.phone)
+  // The stored E.164 when present; otherwise computed from the raw phone.
+  const to = lead.brokers.phone_e164 ?? toE164(lead.brokers.phone)
   const now = new Date()
 
   const [settings, dnc, active, recent] = await Promise.all([

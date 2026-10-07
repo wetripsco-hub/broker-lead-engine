@@ -22,7 +22,7 @@ export function AiCallingClient({ settings, env, prompt }: Props) {
   const dirty =
     enabled !== settings.enabled ||
     testMode !== settings.testMode ||
-    numbers.split(/[\s,;]+/).filter(Boolean).join(",") !== settings.testNumbers.join(",") ||
+    numbers.split(/[\n,;]+/).filter(Boolean).join(",") !== settings.testNumbers.join(",") ||
     cap !== String(settings.dailyCap)
 
   function save() {
@@ -71,7 +71,7 @@ export function AiCallingClient({ settings, env, prompt }: Props) {
             value={numbers}
             onChange={(e) => setNumbers(e.target.value)}
             rows={3}
-            placeholder="+13215550123"
+            placeholder="+1 (321) 555-0123"
             className="w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
           />
         </div>

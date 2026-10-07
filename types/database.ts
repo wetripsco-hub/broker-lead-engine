@@ -59,6 +59,7 @@ export interface Database {
           contact_name: string | null
           email: string | null
           phone: string | null
+          phone_e164: string | null
           address_line1: string | null
           address_line2: string | null
           city: string | null
@@ -86,6 +87,7 @@ export interface Database {
           contact_name?: string | null
           email?: string | null
           phone?: string | null
+          phone_e164?: string | null
           address_line1?: string | null
           address_line2?: string | null
           city?: string | null
@@ -204,6 +206,7 @@ export interface Database {
           external_id: string | null
           direction: "inbound" | "outbound"
           direct_number: string | null
+          direct_number_e164: string | null
           from_number: string | null
           to_number: string | null
           read_at: string | null
@@ -244,6 +247,7 @@ export interface Database {
           external_id?: string | null
           direction?: "inbound" | "outbound"
           direct_number?: string | null
+          direct_number_e164?: string | null
           from_number?: string | null
           to_number?: string | null
           read_at?: string | null

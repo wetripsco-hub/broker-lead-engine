@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
+import { toE164 } from "@/lib/phone"
 
 export async function logDirectCallStarted(
   agentId: string,
@@ -14,6 +15,9 @@ export async function logDirectCallStarted(
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not authenticated" }
 
+  const e164 = toE164(phoneNumber)
+  if (!e164) return { error: "Invalid phone number" }
+
   const { data, error } = await (supabase.from("outreach_events") as any)
     .insert({
       lead_id: null,
@@ -21,7 +25,8 @@ export async function logDirectCallStarted(
       channel: "call",
       status: "pending",
       direction: "outbound",
-      direct_number: phoneNumber,
+      direct_number: e164,
+      direct_number_e164: e164,
       external_id: externalId,
     })
     .select("id")

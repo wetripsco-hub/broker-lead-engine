@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { NormalizedVoiceEvent } from "./provider"
-import { toE164 } from "./gate"
+import { toE164 } from "@/lib/phone"
 
 type Db = SupabaseClient<any, any, any>
 

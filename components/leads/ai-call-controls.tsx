@@ -6,6 +6,7 @@ import { Bot, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { markAiCallConsent } from "@/app/(dashboard)/leads/actions"
+import { toE164 } from "@/lib/phone"
 import { getCallStatus, resolveTimezone, formatLocalTime } from "@/lib/timezone/broker-time"
 
 interface AiCallControlsProps {
@@ -69,6 +70,7 @@ export function AiCallControls(p: AiCallControlsProps) {
   // Why the button is disabled (server re-checks everything regardless).
   let reason: string | null = null
   if (!p.brokerPhone) reason = "No phone number"
+  else if (!toE164(p.brokerPhone)) reason = "Invalid phone number"
   else if (p.doNotCall) reason = "Marked do-not-call"
   else if (!p.aiEnabled) reason = "AI calling is off (admin setting)"
   else if (!p.consent.granted) reason = "No AI-call consent on file"

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { toE164, type AiCallSettings } from "./gate"
+import { toE164 } from "@/lib/phone"
+import type { AiCallSettings } from "./gate"
 
 export const AI_SETTING_KEYS = [
   "ai_calling_enabled",

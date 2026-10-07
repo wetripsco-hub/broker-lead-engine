@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { toE164 } from "@/lib/phone"
 
 // Telnyx sends call lifecycle + message events here.
 // Set this URL in Telnyx Portal → Connections → your connection → Webhook URL.
@@ -82,17 +83,34 @@ export async function POST(req: NextRequest) {
 
     if (!from || !text) return NextResponse.json({ ok: true })
 
-    // Normalise phone: strip non-digits then reformat as E.164
-    const digits = from.replace(/\D/g, "")
-    const normalised = digits.length === 10 ? `+1${digits}` : `+${digits}`
+    // Telnyx sends E.164, but normalise anyway. Short codes / alphanumeric
+    // senders aren't phone numbers; they're kept as received and can't match.
+    const normalised = toE164(from) ?? from
 
-    // Find broker whose phone matches, then get their lead — the message
-    // still gets logged even when no match is found, so unknown numbers
-    // show up in the inbox instead of being silently dropped.
-    const { data: brokerRow } = await (supabase.from("brokers") as any)
+    // Match the broker on the normalised number, then get their lead — the
+    // message still gets logged even when no match is found, so unknown
+    // numbers show up in the inbox instead of being silently dropped.
+    let { data: brokerRow } = await (supabase.from("brokers") as any)
       .select("id")
-      .or(`phone.eq.${from},phone.eq.${normalised}`)
+      .eq("phone_e164", normalised)
+      .limit(1)
       .maybeSingle()
+
+    // Brokers saved before phone_e164 existed (or by a writer that didn't
+    // fill it) are found by their raw phone, and fixed so the next message
+    // matches directly.
+    if (!brokerRow) {
+      const { data: legacy } = await (supabase.from("brokers") as any)
+        .select("id, phone")
+        .is("phone_e164", null)
+        .or(`phone.eq.${from},phone.eq.${normalised}`)
+        .limit(1)
+        .maybeSingle()
+      if (legacy && toE164((legacy as { phone: string | null }).phone) === normalised) {
+        brokerRow = { id: (legacy as { id: string }).id }
+        await (supabase.from("brokers") as any).update({ phone_e164: normalised }).eq("id", brokerRow.id)
+      }
+    }
 
     let leadId: string | null = null
     let agentIdForLog: string | null = null
@@ -130,7 +148,7 @@ export async function POST(req: NextRequest) {
       direction: "inbound",
       external_id: payload.id as string ?? null,
       from_number: normalised,
-      to_number: to ?? null,
+      to_number: (to ? toE164(to) ?? to : null),
     })
   }
 

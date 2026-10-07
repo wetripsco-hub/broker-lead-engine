@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { formatPhoneDisplay, toE164 } from "@/lib/phone"
 import {
   logDirectCallStarted,
   saveDirectCallEnd,
@@ -161,9 +162,9 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
       toast.error("No agent record linked to your account")
       return
     }
-    const dialed = number.trim()
-    if (dialed.length < 7) {
-      toast.error("Enter a valid phone number")
+    const dialed = toE164(number)
+    if (!dialed) {
+      toast.error("Invalid phone number")
       return
     }
     numberRef.current = dialed
@@ -530,7 +531,7 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
                           style={{ animationDelay: `${Math.min(i * 30, 240)}ms` }}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-mono font-medium truncate">{ev.direct_number}</span>
+                            <span className="text-sm font-mono font-medium truncate">{formatPhoneDisplay(ev.direct_number)}</span>
                             <span
                               className={`text-xs shrink-0 ${
                                 answered

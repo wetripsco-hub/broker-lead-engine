@@ -72,6 +72,7 @@ import pdfplumber
 import requests
 from dotenv import load_dotenv
 from supabase import Client, create_client
+from phone_util import to_e164
 
 # ── Config ───────────────────────────────────────────────────────────────
 
@@ -558,6 +559,7 @@ def save_broker(supabase: Client, record: dict, motus: dict, log_id: str) -> boo
                 "dba_name": motus.get("dba_name"),
                 "contact_name": contact_name,
                 "phone": motus.get("phone") or record.get("phone"),
+                "phone_e164": to_e164(motus.get("phone") or record.get("phone")),
                 "address_line1": address["address_line1"],
                 "address_line2": address.get("address_line2"),
                 "city": address["city"],

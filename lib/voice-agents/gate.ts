@@ -1,14 +1,5 @@
 import { getCallStatus, resolveTimezone } from "@/lib/timezone/broker-time"
 
-/** "+1 (321) 848-4606" / "3218484606" -> "+13218484606"; null if not a US/Canada number. */
-export function toE164(raw: string | null | undefined): string | null {
-  if (!raw) return null
-  const digits = raw.replace(/\D/g, "")
-  if (digits.length === 10) return `+1${digits}`
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`
-  return null
-}
-
 export interface AiCallSettings {
   enabled: boolean
   testMode: boolean
@@ -44,7 +35,7 @@ const HOUR = 3600_000
  */
 export function evaluateAiCallGate(i: GateInput): GateResult {
   if (!i.settings.enabled) return block("disabled", "AI calling is switched off. An admin can enable it in Settings → AI calling.")
-  if (!i.to) return block("no_phone", "This broker has no valid US/Canada phone number.")
+  if (!i.to) return block("no_phone", "Invalid phone number: this broker has no valid phone on file.")
   if (i.lead.doNotCall) return block("do_not_call", "This lead is marked do-not-call.")
   if (i.onDncList) return block("dnc_list", "This phone number is on the do-not-call list.")
   if (!i.lead.aiCallConsent) return block("no_consent", "No AI-call consent is recorded for this lead. An admin must mark consent first.")

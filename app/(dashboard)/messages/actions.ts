@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendSms } from "@/lib/telnyx/sms"
+import { toE164, phoneDigits } from "@/lib/phone"
 
 async function getCurrentAgent(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -26,6 +27,8 @@ export async function sendInboxSms(
   leadId: string | null,
 ): Promise<{ error?: string; eventId?: string }> {
   if (!text.trim()) return { error: "Message cannot be empty" }
+  const to = toE164(toNumber)
+  if (!to) return { error: "Invalid phone number" }
   if (text.length > 1600) return { error: "Message too long (max 1600 chars)" }
 
   const supabase = await createClient()
@@ -34,7 +37,7 @@ export async function sendInboxSms(
 
   let externalId: string | null = null
   try {
-    const result = await sendSms(toNumber, text)
+    const result = await sendSms(to, text)
     externalId = result.id
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : String(err) }
@@ -49,8 +52,8 @@ export async function sendInboxSms(
       message_body: text,
       direction: "outbound",
       external_id: externalId,
-      from_number: process.env.TELNYX_SMS_NUMBER ?? null,
-      to_number: toNumber,
+      from_number: toE164(process.env.TELNYX_SMS_NUMBER) ?? null,
+      to_number: to,
     })
     .select("id")
     .single()
@@ -62,7 +65,8 @@ export async function sendInboxSms(
   return { eventId: (data as { id: string }).id }
 }
 
-export async function markConversationRead(number: string): Promise<{ error?: string }> {
+export async function markConversationRead(rawNumber: string): Promise<{ error?: string }> {
+  const number = toE164(rawNumber) ?? rawNumber // unparsable senders (short codes) stay as-is
   const supabase = await createClient()
   const {
     data: { user },
@@ -89,20 +93,25 @@ export async function markConversationRead(number: string): Promise<{ error?: st
 // FMCSA-sourced), but any agent chatting with an unknown number should be
 // able to promote it to a lead — so this specific write goes through the
 // admin client after confirming the caller is a logged-in user.
-export async function addNumberAsLead(number: string): Promise<{ error?: string; leadId?: string }> {
+export async function addNumberAsLead(rawNumber: string): Promise<{ error?: string; leadId?: string }> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not authenticated" }
 
-  const admin = createAdminClient()
-  const digits = number.replace(/\D/g, "")
-  const syntheticMc = `SMS-${digits}`
+  const number = toE164(rawNumber)
+  if (!number) return { error: "Invalid phone number" }
 
+  const admin = createAdminClient()
+  const syntheticMc = `SMS-${phoneDigits(number)}`
+
+  // Duplicate detection is on the normalised number, so "(214) 370-8737",
+  // "214.370.8737" and "+12143708737" are all the same broker.
   const { data: existingBroker } = await (admin.from("brokers") as any)
     .select("id")
-    .eq("phone", number)
+    .eq("phone_e164", number)
+    .limit(1)
     .maybeSingle()
 
   let brokerId = (existingBroker as { id: string } | null)?.id ?? null
@@ -113,6 +122,7 @@ export async function addNumberAsLead(number: string): Promise<{ error?: string;
         mc_number: syntheticMc,
         company_name: `Unknown (${number})`,
         phone: number,
+        phone_e164: number,
       })
       .select("id")
       .single()
