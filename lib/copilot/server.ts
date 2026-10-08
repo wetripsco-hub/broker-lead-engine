@@ -38,8 +38,12 @@ export async function getCopilotContext(
 
   const b = lead.brokers
   const companyName = b.company_name ?? "your company"
+  // An agent record named after an email address ("someone@gmail.com") would be
+  // read out in the script and quoted to the LLM. Show a fill-in-the-blank instead;
+  // setting a display name in Settings replaces it.
+  const spokenName = agent.name.includes("@") ? "[your name]" : agent.name
   return {
-    agentName: agent.name,
+    agentName: spokenName,
     announceRecording: (settingRaw as { value: unknown } | null)?.value === true,
     llmProvider: llmProvider(),
     lead: {
@@ -51,7 +55,7 @@ export async function getCopilotContext(
     },
     openingScript: interpolate(OPENING_SCRIPT, {
       contact_name: b.contact_name ?? "there",
-      agent_name: agent.name,
+      agent_name: spokenName,
       company_name: companyName,
     }),
   }
