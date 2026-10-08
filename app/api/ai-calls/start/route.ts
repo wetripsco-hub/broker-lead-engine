@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { loadKnowledge } from "@/lib/copilot/kb"
 import { evaluateAiCallGate } from "@/lib/voice-agents/gate"
 import { isAdminInDb } from "@/lib/voice-agents/admin-check"
+import { spokenRepName } from "@/lib/voice-agents/names"
 import { formatLocalTime, resolveTimezone } from "@/lib/timezone/broker-time"
 import { toE164 } from "@/lib/phone"
 import { getVoiceProvider } from "@/lib/voice-agents"
@@ -137,7 +138,7 @@ export async function POST(request: Request) {
     company_name: b.company_name ?? "your company",
     state: b.state ?? "",
     mc_status: b.mc_status ?? "",
-    agent_name: agent.name,
+    agent_name: spokenRepName(agent.name),
     knowledge_base: kb.empty ? "(no knowledge base entries yet)" : kb.text.slice(0, KB_MAX_CHARS),
   }
 

@@ -7,7 +7,9 @@
 // Options: --embed-kb          bake a snapshot of the knowledge base into the prompt
 //                              (default: the app injects the live knowledge base on every call)
 //          --webhook-url=URL   where Vapi sends events (default: <NEXT_PUBLIC_SITE_URL or the Vercel app>/api/webhooks/voice/vapi)
-// Env: VAPI_API_KEY, VAPI_WEBHOOK_SECRET; optional VAPI_VOICE_ID (default Tara), VAPI_LLM_MODEL.
+// Env: VAPI_API_KEY, VAPI_WEBHOOK_SECRET; optional VAPI_VOICE_ID (a Cartesia voice id), VAPI_LLM_MODEL.
+// NOTE: this script is the source of truth. Edits made in the Vapi dashboard are overwritten by --update,
+// and a dashboard save from a stale draft can overwrite what the script pushed. Change things here.
 //
 // Field names are from the official @vapi-ai/server-sdk v2.0.1 types and docs.vapi.ai.
 // Never prints the API key or the webhook secret. Places no call and buys no number.
@@ -70,16 +72,22 @@ function assistantPayload(prompt: string) {
     firstMessage:
       "Hi {{contact_name}}, this is Sarah from Load Linkers, a virtual assistant, and just so you know, this call may be recorded. Do you have a quick minute?",
     firstMessageMode: "assistant-speaks-first",
+    // "Ultra Fast" preset (chosen in the Vapi dashboard): a fast model with minimal
+    // reasoning, Cartesia Sonic voice and Deepgram nova-3-general. Kept here so a
+    // later --update does not undo it.
     model: {
       provider: "openai",
-      model: process.env.VAPI_LLM_MODEL ?? "gpt-5.4-mini",
-      temperature: 0.4,
+      model: process.env.VAPI_LLM_MODEL ?? "gpt-5",
+      reasoningEffort: "minimal",
       messages: [{ role: "system", content: prompt }],
       tools: [{ type: "endCall" }],
     },
-    // A touch faster than the default (1.0) so she sounds brisk and natural.
-    voice: { provider: "vapi", voiceId: process.env.VAPI_VOICE_ID ?? "Tara", speed: Number(process.env.VAPI_VOICE_SPEED ?? 1.1) },
-    transcriber: { provider: "deepgram", model: "nova-3", language: "en" },
+    voice: {
+      provider: "cartesia",
+      model: "sonic-3.5",
+      voiceId: process.env.VAPI_VOICE_ID ?? "a167e0f3-df7e-4d52-a9c3-f949145efdab",
+    },
+    transcriber: { provider: "deepgram", model: "nova-3-general", language: "en" },
     maxDurationSeconds: 300,
     endCallMessage: "Thanks for your time. Goodbye.",
     // Only the two events the app uses.

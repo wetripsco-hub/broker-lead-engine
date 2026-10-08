@@ -4,6 +4,7 @@ import { createHmac } from "crypto"
 import { evaluateAiCallGate, type GateInput } from "../lib/voice-agents/gate"
 import { toE164 } from "../lib/phone"
 import { isAdminInDb } from "../lib/voice-agents/admin-check"
+import { spokenRepName } from "../lib/voice-agents/names"
 import { retellProvider } from "../lib/voice-agents/retell"
 import { vapiProvider } from "../lib/voice-agents/vapi"
 import { parseWebhook } from "../lib/voice-agents"
@@ -286,6 +287,16 @@ async function vapiTests() {
   check("vapi outcome=appointment_booked counts as interested", outcomeOf({ outcome: "appointment_booked", interested: false }).interested === true)
   check("vapi appointment_time becomes the suggested follow-up time", outcomeOf({ outcome: "appointment_booked", appointment_time: "Thursday 2 pm Eastern", callback_time: "" }).callbackTime === "Thursday 2 pm Eastern")
   check("vapi falls back to callback_time when no appointment", outcomeOf({ outcome: "callback", appointment_time: "", callback_time: "Friday 10am" }).callbackTime === "Friday 10am")
+  check("rep name: a real name is kept", spokenRepName("Ali Shahid") === "Ali Shahid")
+  check("rep name: an email address is never spoken", spokenRepName("wetrips.co@gmail.com") === "our Load Linkers team")
+  check("rep name: empty -> neutral phrase", spokenRepName("  ") === "our Load Linkers team" && spokenRepName(null) === "our Load Linkers team")
+  {
+    const prompt = readFileSync("prompts/ai-caller.md", "utf8")
+    check("prompt: says virtual assistant, not 'AI assistant'", /virtual assistant/i.test(prompt) && !/AI assistant/i.test(prompt))
+    check("prompt: does not use the rep-name variable", !prompt.includes("{{agent_name}}"))
+    check("prompt: promises text + email details and a call at the chosen time", /text and email you the details/i.test(prompt) && /quick call at that time/i.test(prompt))
+    check("prompt: says Load Linkers, never reads out an email", /Load Linkers/.test(prompt) && /never read out an email/i.test(prompt))
+  }
   check("vapi status-update in-progress -> started", (vapiProvider.normalizeEvent({ message: { type: "status-update", status: "in-progress", call: { id: "vcall_1" } } }) as any).type === "started")
   check("vapi status-update ringing -> ignored", vapiProvider.normalizeEvent({ message: { type: "status-update", status: "ringing", call: { id: "vcall_1" } } }) === null)
   check("vapi other message types ignored", vapiProvider.normalizeEvent({ message: { type: "transcript", call: { id: "vcall_1" } } }) === null)
