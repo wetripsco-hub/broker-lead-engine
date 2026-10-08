@@ -34,7 +34,13 @@ function fail(msg: string): never {
   process.exit(1)
 }
 
-const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://broker-lead-engine-phi.vercel.app").replace(/\/$/, "")
+// Vapi's servers must be able to reach this URL, so a localhost site URL (as in
+// .env.local during development) is never used: pass --webhook-url=... to point
+// somewhere else on purpose (e.g. an ngrok tunnel).
+const configuredSite = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "")
+const site = /localhost|127\.0\.0\.1|\[::1\]/i.test(configuredSite) || !configuredSite
+  ? "https://broker-lead-engine-phi.vercel.app"
+  : configuredSite
 const webhookUrl = opt("--webhook-url") ?? `${site}/api/webhooks/voice/vapi`
 
 async function loadPrompt(): Promise<string> {
@@ -61,7 +67,7 @@ function assistantPayload(prompt: string) {
     name: NAME,
     // Disclosure comes first, every call: it is an AI voice and the call may be recorded.
     firstMessage:
-      "Hi {{contact_name}}, this is Loadlinkers' AI assistant, and just so you know, this call may be recorded. Do you have thirty seconds?",
+      "Hi {{contact_name}}, this is the Load Linkers AI assistant, and just so you know, this call may be recorded. Do you have thirty seconds?",
     firstMessageMode: "assistant-speaks-first",
     model: {
       provider: "openai",
@@ -85,6 +91,11 @@ function assistantPayload(prompt: string) {
         schema: {
           type: "object",
           properties: {
+            outcome: {
+              type: "string",
+              enum: ["interested", "not_interested", "callback", "unclear"],
+              description: "How the call ended. 'not_interested' ONLY if the person clearly declined. 'unclear' if the call was cut short, had audio problems, or no clear answer was given.",
+            },
             interested: { type: "boolean", description: "True if the person showed interest in Loadlinkers or agreed to a callback." },
             uses_software: { type: "string", description: "What software they currently use for rate confirmations, or 'manual' if by hand. Empty if unknown." },
             callback_time: { type: "string", description: "The day/time the person asked to be called back, as agreed. Empty if none." },

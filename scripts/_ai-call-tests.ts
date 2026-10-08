@@ -278,6 +278,11 @@ async function vapiTests() {
   check("vapi: row id recovered from call name when metadata is missing", noMeta[0].metadata.outreach_event_id === "E7")
   check("vapi: do_not_call from the structured data", (vapiProvider.normalizeEvent(vapiReport({}, { do_not_call: true })) as any[])[1].doNotCall === true)
   check("vapi: 'stop calling me' in the transcript -> do_not_call even if analysis missed it", (vapiProvider.normalizeEvent(vapiReport({}, {}, { artifact: { transcript: "User: please stop calling me" } })) as any[])[1].doNotCall === true)
+  const outcomeOf = (structured: Record<string, any>) => (vapiProvider.normalizeEvent(vapiReport({}, structured)) as any[])[1]
+  check("vapi outcome=unclear -> interest unknown (not 'not interested')", outcomeOf({ outcome: "unclear", interested: false }).interested === null)
+  check("vapi outcome=not_interested -> false", outcomeOf({ outcome: "not_interested", interested: false }).interested === false)
+  check("vapi outcome=callback -> counts as interested", outcomeOf({ outcome: "callback", interested: false }).interested === true)
+  check("vapi without outcome falls back to the interested flag", outcomeOf({ outcome: undefined, interested: true }).interested === true)
   check("vapi status-update in-progress -> started", (vapiProvider.normalizeEvent({ message: { type: "status-update", status: "in-progress", call: { id: "vcall_1" } } }) as any).type === "started")
   check("vapi status-update ringing -> ignored", vapiProvider.normalizeEvent({ message: { type: "status-update", status: "ringing", call: { id: "vcall_1" } } }) === null)
   check("vapi other message types ignored", vapiProvider.normalizeEvent({ message: { type: "transcript", call: { id: "vcall_1" } } }) === null)

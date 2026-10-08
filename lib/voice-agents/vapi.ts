@@ -50,6 +50,17 @@ function seconds(start: unknown, end: unknown): number | undefined {
   return Number.isFinite(s) && Number.isFinite(e) && e >= s ? Math.round((e - s) / 1000) : undefined
 }
 
+// `outcome` is the reliable field: it has an explicit "unclear". The plain
+// `interested` boolean defaults to false when the call was cut short, which
+// would wrongly file the lead as "not interested".
+function interestFrom(data: Record<string, unknown>): boolean | null {
+  const outcome = str(data.outcome)?.toLowerCase()
+  if (outcome === "interested" || outcome === "callback") return true
+  if (outcome === "not_interested") return false
+  if (outcome === "unclear") return null
+  return asBool(data.interested)
+}
+
 export const vapiProvider: VoiceAgentProvider = {
   id: "vapi",
   label: "Vapi",
@@ -145,7 +156,7 @@ export const vapiProvider: VoiceAgentProvider = {
       ...base,
       summary,
       sentiment: str(data.sentiment),
-      interested: asBool(data.interested),
+      interested: interestFrom(data),
       usesSoftware: str(data.uses_software),
       callbackTime: str(data.callback_time),
       extracted: data,
