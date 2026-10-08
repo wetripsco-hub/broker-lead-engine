@@ -99,7 +99,11 @@ async function retellFromTest() {
   const realFetch = globalThis.fetch
   globalThis.fetch = (async (url: any, init?: any) => {
     const u = String(url)
-    if (u.endsWith("/list-phone-numbers")) return new Response(JSON.stringify([{ phone_number: "12142865022" }]), { status: 200 })
+    if (u.endsWith("/list-phone-numbers"))
+      return new Response(
+        JSON.stringify([{ phone_number: "12142865022", sip_outbound_trunk_config: { termination_uri: "sip.telnyx.com", auth_username: "trunk-user-test" } }]),
+        { status: 200 },
+      )
     if (u.endsWith("/v2/create-phone-call")) {
       sent.push(JSON.parse(init.body))
       return new Response(JSON.stringify({ call_id: "call_x" }), { status: 201 })
@@ -111,6 +115,7 @@ async function retellFromTest() {
   check("retell: from number sent exactly as Retell stored it (no +)", sent[0]?.from_number === "12142865022")
   check("retell: destination stays E.164", sent[0]?.to_number === "+12125550100")
   check("retell: call id returned", r.providerCallId === "call_x")
+  check("retell: Telnyx trunk -> X-Telnyx-Username header sent", sent[0]?.custom_sip_headers?.["X-Telnyx-Username"] === "trunk-user-test")
   globalThis.fetch = realFetch
 }
 check("toE164 normalises", toE164("+1 (321) 848-4606") === "+13218484606" && toE164("abc") === null)

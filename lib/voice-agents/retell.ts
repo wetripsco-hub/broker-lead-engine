@@ -30,31 +30,51 @@ function asBool(v: unknown): boolean | null {
   return null
 }
 
-// Retell looks the caller number up by the exact string it stored when the
-// number was imported, and an imported number can be stored without the "+"
-// ("12142865022"). Sending "+12142865022" then fails with 404 "not found", so
-// find the account's number by digits and use its own spelling.
+// What Retell needs to know about the caller number, looked up from the
+// account (cached): its exact stored spelling, and for Telnyx trunks the SIP
+// username that must go out as a header.
+//
+// 1) Retell finds the number by the exact string it stored when it was
+//    imported, and that can lack the "+" ("12142865022"). Sending
+//    "+12142865022" fails with 404 "not found", so use Retell's own spelling.
+// 2) Retell's Telnyx setup guide: with credential auth, Telnyx requires
+//    `X-Telnyx-Username: <username>` on every outbound call; without it the
+//    call is rejected and Retell reports telephony_provider_permission_denied.
 const FROM_CACHE_MS = 10 * 60_000
-const fromCache = new Map<string, { value: string; at: number }>()
+interface FromInfo {
+  number: string
+  telnyxUsername: string | null
+}
+const fromCache = new Map<string, { info: FromInfo; at: number }>()
 
-async function resolveFromNumber(from: string): Promise<string> {
+async function resolveFrom(from: string): Promise<FromInfo> {
   const digits = from.replace(/\D/g, "")
   const cached = fromCache.get(digits)
-  if (cached && Date.now() - cached.at < FROM_CACHE_MS) return cached.value
+  if (cached && Date.now() - cached.at < FROM_CACHE_MS) return cached.info
+  const envUser = process.env.TELNYX_SIP_USERNAME || null
   try {
     const res = await fetch(`${API}/list-phone-numbers`, { headers: { Authorization: `Bearer ${apiKey()}` } })
     if (res.ok) {
-      const list = (await res.json()) as Array<{ phone_number?: string }>
+      const list = (await res.json()) as Array<{
+        phone_number?: string
+        sip_outbound_trunk_config?: { termination_uri?: string; auth_username?: string }
+      }>
       const hit = list.find((n) => typeof n.phone_number === "string" && n.phone_number.replace(/\D/g, "") === digits)
       if (hit?.phone_number) {
-        fromCache.set(digits, { value: hit.phone_number, at: Date.now() })
-        return hit.phone_number
+        const trunk = hit.sip_outbound_trunk_config
+        const isTelnyx = /telnyx/i.test(trunk?.termination_uri ?? "")
+        const info: FromInfo = {
+          number: hit.phone_number,
+          telnyxUsername: envUser ?? (isTelnyx ? trunk?.auth_username ?? null : null),
+        }
+        fromCache.set(digits, { info, at: Date.now() })
+        return info
       }
     }
   } catch {
     /* fall through to the number as configured */
   }
-  return from
+  return { number: from, telnyxUsername: envUser }
 }
 
 export const retellProvider: VoiceAgentProvider = {
@@ -66,11 +86,13 @@ export const retellProvider: VoiceAgentProvider = {
   // setups without elastic SIP trunking.
   async startCall(input: StartCallInput): Promise<StartCallResult> {
     const agentId = process.env.RETELL_AGENT_ID
+    const caller = await resolveFrom(input.from)
     const res = await fetch(`${API}/v2/create-phone-call`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from_number: await resolveFromNumber(input.from),
+        from_number: caller.number,
+        ...(caller.telnyxUsername ? { custom_sip_headers: { "X-Telnyx-Username": caller.telnyxUsername } } : {}),
         to_number: input.to,
         ...(agentId ? { override_agent_id: agentId } : {}),
         retell_llm_dynamic_variables: input.variables,
