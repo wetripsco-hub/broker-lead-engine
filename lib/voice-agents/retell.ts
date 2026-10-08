@@ -30,6 +30,33 @@ function asBool(v: unknown): boolean | null {
   return null
 }
 
+// Retell looks the caller number up by the exact string it stored when the
+// number was imported, and an imported number can be stored without the "+"
+// ("12142865022"). Sending "+12142865022" then fails with 404 "not found", so
+// find the account's number by digits and use its own spelling.
+const FROM_CACHE_MS = 10 * 60_000
+const fromCache = new Map<string, { value: string; at: number }>()
+
+async function resolveFromNumber(from: string): Promise<string> {
+  const digits = from.replace(/\D/g, "")
+  const cached = fromCache.get(digits)
+  if (cached && Date.now() - cached.at < FROM_CACHE_MS) return cached.value
+  try {
+    const res = await fetch(`${API}/list-phone-numbers`, { headers: { Authorization: `Bearer ${apiKey()}` } })
+    if (res.ok) {
+      const list = (await res.json()) as Array<{ phone_number?: string }>
+      const hit = list.find((n) => typeof n.phone_number === "string" && n.phone_number.replace(/\D/g, "") === digits)
+      if (hit?.phone_number) {
+        fromCache.set(digits, { value: hit.phone_number, at: Date.now() })
+        return hit.phone_number
+      }
+    }
+  } catch {
+    /* fall through to the number as configured */
+  }
+  return from
+}
+
 export const retellProvider: VoiceAgentProvider = {
   id: "retell",
 
@@ -43,7 +70,7 @@ export const retellProvider: VoiceAgentProvider = {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from_number: input.from,
+        from_number: await resolveFromNumber(input.from),
         to_number: input.to,
         ...(agentId ? { override_agent_id: agentId } : {}),
         retell_llm_dynamic_variables: input.variables,

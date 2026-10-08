@@ -92,6 +92,27 @@ check("override still respects the test-number list", night({ ...full, settings:
 check("override still respects the daily cap", night({ ...full, callsInLast24h: 20 }) === "daily_cap")
 check("override still blocked by an active call", night({ ...full, hasActiveCall: true }) === "active_call")
 check("override still needs a valid phone", night({ ...full, to: null }) === "no_phone")
+
+// ── Retell caller-number spelling ──────────────────────────────────────────
+async function retellFromTest() {
+  const sent: any[] = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async (url: any, init?: any) => {
+    const u = String(url)
+    if (u.endsWith("/list-phone-numbers")) return new Response(JSON.stringify([{ phone_number: "12142865022" }]), { status: 200 })
+    if (u.endsWith("/v2/create-phone-call")) {
+      sent.push(JSON.parse(init.body))
+      return new Response(JSON.stringify({ call_id: "call_x" }), { status: 201 })
+    }
+    return new Response("{}", { status: 404 })
+  }) as typeof fetch
+  process.env.RETELL_API_KEY = "test-key-not-real"
+  const r = await retellProvider.startCall({ to: "+12125550100", from: "+12142865022", variables: {}, metadata: {} })
+  check("retell: from number sent exactly as Retell stored it (no +)", sent[0]?.from_number === "12142865022")
+  check("retell: destination stays E.164", sent[0]?.to_number === "+12125550100")
+  check("retell: call id returned", r.providerCallId === "call_x")
+  globalThis.fetch = realFetch
+}
 check("toE164 normalises", toE164("+1 (321) 848-4606") === "+13218484606" && toE164("abc") === null)
 
 // ── 2. Retell signature ────────────────────────────────────────────────────
@@ -180,6 +201,7 @@ function fakeDb(tables: Record<string, Row[]>) {
 }
 
 async function main() {
+  await retellFromTest()
   // Role lookup: the database record decides, whatever the session token claims.
   const fakeAdmin = (role: string | undefined, fail = false) => ({
     auth: { admin: { getUserById: async () => (fail ? { data: null, error: new Error("x") } : { data: { user: { user_metadata: role ? { role } : {} } }, error: null }) } },
