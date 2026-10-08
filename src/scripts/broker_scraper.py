@@ -89,7 +89,10 @@ MOTUS_REPORTS_URL = (
     "https://motus.dot.gov/api/report/getSignedUrlByTypeAndDateRange/REGISTER/{start}/{end}"
 )
 MOTUS_API_URL = "https://motus.dot.gov/api/carriers/{usdot}"
-MOTUS_USER_AGENT = "Mozilla/5.0"
+# MOTUS sits behind a bot filter that now rejects a bare "Mozilla/5.0" (and any
+# custom or empty User-Agent) with 403 "Access Denied", while the standard
+# python-requests identity is accepted. So the MOTUS API calls send no custom
+# User-Agent at all and use requests' default. (Checked 2026-10-08.)
 # The MOTUS API answers in ~0.4s, so this is politeness pacing for a
 # government endpoint rather than a wait for anything to load.
 MOTUS_DELAY_SECONDS = 1
@@ -126,6 +129,33 @@ def log(msg: str) -> None:
     print(f"[scraper] {msg}", flush=True)
 
 
+# MOTUS is a government site that occasionally stalls or resets a connection.
+# One timeout used to fail the whole run, so GETs to it are retried a few
+# times with a growing pause. A 403 is NOT retried: it means the bot filter
+# rejected us, and hammering it only makes that worse.
+MOTUS_ATTEMPTS = 3
+MOTUS_TIMEOUT = (10, 30)  # (connect, read) seconds
+
+
+def motus_get(url: str) -> "requests.Response":
+    last: Exception | None = None
+    for attempt in range(1, MOTUS_ATTEMPTS + 1):
+        try:
+            resp = requests.get(url, timeout=MOTUS_TIMEOUT, headers={"Accept": "application/json"})
+            if resp.status_code >= 500 and attempt < MOTUS_ATTEMPTS:
+                last = requests.HTTPError(f"HTTP {resp.status_code}")
+            else:
+                return resp
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last = e
+        if attempt < MOTUS_ATTEMPTS:
+            wait = 3 * attempt
+            log(f"MOTUS did not answer (attempt {attempt}/{MOTUS_ATTEMPTS}); retrying in {wait}s…")
+            time.sleep(wait)
+    assert last is not None
+    raise last
+
+
 # ── Step 1: PDF discovery + parsing ─────────────────────────────────────────
 
 def list_registers(start: "date", end: "date") -> list[dict]:
@@ -137,11 +167,7 @@ def list_registers(start: "date", end: "date") -> list[dict]:
     only publishes on business days, so weekends and federal holidays have
     no register at all.
     """
-    resp = requests.get(
-        MOTUS_REPORTS_URL.format(start=start.isoformat(), end=end.isoformat()),
-        timeout=30,
-        headers={"User-Agent": MOTUS_USER_AGENT, "Accept": "application/json"},
-    )
+    resp = motus_get(MOTUS_REPORTS_URL.format(start=start.isoformat(), end=end.isoformat()))
     resp.raise_for_status()
     entries = resp.json().get("Register") or []
     return sorted(
@@ -481,11 +507,7 @@ def motus_account_lookup(usdot: str) -> dict:
     (with "error" set on failure) so one broken lookup never kills the run.
     """
     try:
-        resp = requests.get(
-            MOTUS_API_URL.format(usdot=usdot),
-            timeout=30,
-            headers={"User-Agent": MOTUS_USER_AGENT, "Accept": "application/json"},
-        )
+        resp = motus_get(MOTUS_API_URL.format(usdot=usdot))
     except Exception as e:  # noqa: BLE001
         return {**MOTUS_EMPTY_RECORD, "error": str(e)}
 
