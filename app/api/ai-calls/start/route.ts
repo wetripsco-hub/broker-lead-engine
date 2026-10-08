@@ -66,10 +66,10 @@ export async function POST(request: Request) {
   if (!lead?.brokers) return fail(404, "Lead not found")
 
   const provider = getVoiceProvider()
-  const from = toE164(process.env.RETELL_FROM_NUMBER)
-  if (!from || !process.env.RETELL_API_KEY || !process.env.RETELL_AGENT_ID) {
+  if (!provider.configured()) {
     return fail(503, "AI calling isn't configured on the server yet.", "not_configured")
   }
+  const from = provider.fromNumber()
 
   const admin = createAdminClient()
   // The stored E.164 when present; otherwise computed from the raw phone.
@@ -179,6 +179,7 @@ export async function POST(request: Request) {
       variables,
       metadata: { lead_id: lead.id, agent_id: agent.id, outreach_event_id: eventId },
       idempotencyKey: `ble-${eventId}`,
+      label: `ble-${eventId}`,
     })
     await (admin.from("outreach_events") as any)
       .update({ provider_call_id: providerCallId, call_status: "registered" })

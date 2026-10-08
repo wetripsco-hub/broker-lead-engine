@@ -8,7 +8,18 @@ import { saveAiCallingSettings } from "./actions"
 
 interface Props {
   settings: { enabled: boolean; testMode: boolean; testNumbers: string[]; dailyCap: number; allowAdminHoursOverride: boolean }
-  env: { provider: string; agentId: string | null; fromNumber: string | null; keySet: boolean; transferSet: boolean }
+  env: {
+    provider: string
+    providerLabel: string
+    configured: boolean
+    agentLabel: string
+    agentId: string | null
+    fromLabel: string
+    fromNumber: string | null
+    keySet: boolean
+    webhookSecretSet: boolean | null
+    transferSet: boolean
+  }
   prompt: string
 }
 
@@ -111,27 +122,40 @@ export function AiCallingClient({ settings, env, prompt }: Props) {
 
       <section className="space-y-3 rounded-lg border bg-card p-5">
         <h2 className="text-sm font-semibold">Provider</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <select
-            value={env.provider === "vapi" ? "vapi" : "retell"}
+            value={env.provider}
             disabled
             aria-label="Voice provider"
             className="h-8 rounded-md border border-input bg-transparent px-2 text-sm opacity-80"
           >
-            <option value="retell">Retell (active)</option>
-            <option value="vapi" disabled>
-              Vapi — coming soon
-            </option>
+            <option value="retell">Retell{env.provider === "retell" ? " (active)" : ""}</option>
+            <option value="vapi">Vapi{env.provider === "vapi" ? " (active)" : ""}</option>
           </select>
-          <span className="text-xs text-muted-foreground">Chosen by the VOICE_PROVIDER environment variable.</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+              env.configured
+                ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                : "bg-destructive/10 text-destructive"
+            }`}
+          >
+            {env.providerLabel}: {env.configured ? "configured" : "not fully configured"}
+          </span>
+          <span className="text-xs text-muted-foreground">Switch with the VOICE_PROVIDER environment variable (retell or vapi).</span>
         </div>
         <dl className="grid grid-cols-[120px_1fr] gap-y-1.5 text-sm">
-          <dt className="text-muted-foreground">Agent ID</dt>
+          <dt className="text-muted-foreground">{env.agentLabel}</dt>
           <dd className="font-mono text-xs break-all">{env.agentId ?? <Missing />}</dd>
-          <dt className="text-muted-foreground">Caller number</dt>
+          <dt className="text-muted-foreground">{env.fromLabel}</dt>
           <dd className="font-mono text-xs">{env.fromNumber ?? <Missing />}</dd>
           <dt className="text-muted-foreground">API key</dt>
           <dd className="text-xs">{env.keySet ? "Set" : <Missing />}</dd>
+          {env.webhookSecretSet !== null && (
+            <>
+              <dt className="text-muted-foreground">Webhook secret</dt>
+              <dd className="text-xs">{env.webhookSecretSet ? "Set" : <Missing />}</dd>
+            </>
+          )}
           <dt className="text-muted-foreground">Human transfer</dt>
           <dd className="text-xs">{env.transferSet ? "Configured" : "Not configured (callback only)"}</dd>
         </dl>

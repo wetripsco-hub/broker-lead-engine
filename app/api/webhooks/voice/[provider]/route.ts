@@ -1,34 +1,27 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getVoiceProviderById } from "@/lib/voice-agents"
+import { getVoiceProviderById, parseWebhook } from "@/lib/voice-agents"
 import { processVoiceEvent } from "@/lib/voice-agents/process"
 
-// Provider webhooks (Retell: call_started / call_ended / call_analyzed).
-// No user session here: authenticity comes from the signature, checked on the
-// RAW body before anything is parsed.
+// Provider webhooks (Retell: call_started / call_ended / call_analyzed;
+// Vapi: status-update / end-of-call-report). No user session here:
+// authenticity comes from the provider's signature or shared secret, checked
+// on the RAW body before anything is parsed.
 export async function POST(request: Request, { params }: { params: Promise<{ provider: string }> }) {
   const { provider: providerId } = await params
   const provider = getVoiceProviderById(providerId)
   if (!provider) return NextResponse.json({ error: "Unknown provider" }, { status: 404 })
 
   const rawBody = await request.text()
-  if (!provider.verifyWebhook(rawBody, request.headers)) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
-  }
-
-  let payload: unknown
-  try {
-    payload = JSON.parse(rawBody)
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
-  }
-
-  const event = provider.normalizeEvent(payload)
-  if (!event) return NextResponse.json({ ok: true, ignored: true }) // events we don't act on
+  const parsed = parseWebhook(provider, rawBody, request.headers)
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status })
+  if (parsed.events.length === 0) return NextResponse.json({ ok: true, ignored: true }) // events we don't act on
 
   try {
-    const result = await processVoiceEvent(createAdminClient(), provider.id, event)
-    return NextResponse.json({ ok: true, ...result })
+    const db = createAdminClient()
+    const results = []
+    for (const event of parsed.events) results.push(await processVoiceEvent(db, provider.id, event))
+    return NextResponse.json({ ok: true, results })
   } catch {
     // 500 makes the provider retry; processing is idempotent so that's safe.
     return NextResponse.json({ error: "Processing failed" }, { status: 500 })

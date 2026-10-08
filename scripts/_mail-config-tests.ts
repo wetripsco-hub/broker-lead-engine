@@ -1,5 +1,6 @@
 // Offline checks that mail addresses come from the environment only.
 //   npx tsx scripts/_mail-config-tests.ts
+export {} // module scope
 let failed = 0
 const check = (n: string, c: boolean) => { console.log(`${c ? "PASS" : "FAIL"}  ${n}`); if (!c) failed++ }
 

@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto"
+import { toE164 } from "@/lib/phone"
+import { mentionsStopRequest } from "./dnc"
 import type {
   NormalizedVoiceEvent,
   StartCallInput,
@@ -9,9 +11,6 @@ import type {
 const API = "https://api.retellai.com"
 const SIGNATURE_MAX_AGE_MS = 5 * 60 * 1000
 
-// Conservative backstop: even if the analysis step doesn't flag it, an
-// explicit "stop calling me" in the call is treated as do-not-call.
-const STOP_PHRASES = /\b(stop calling|don'?t call( me)?( again)?|do not call|remove me|take me off)\b/i
 
 function apiKey(): string {
   const k = process.env.RETELL_API_KEY
@@ -77,8 +76,16 @@ async function resolveFrom(from: string): Promise<FromInfo> {
   return { number: from, telnyxUsername: envUser }
 }
 
-export const retellProvider: VoiceAgentProvider = {
+export const retellProvider = {
   id: "retell",
+  label: "Retell",
+
+  configured(): boolean {
+    return Boolean(process.env.RETELL_API_KEY && process.env.RETELL_AGENT_ID && toE164(process.env.RETELL_FROM_NUMBER))
+  },
+  fromNumber(): string {
+    return toE164(process.env.RETELL_FROM_NUMBER) ?? ""
+  },
 
   // Retell docs: with a number imported over custom telephony (Telnyx SIP
   // trunk), outbound goes through create-phone-call — Retell dials the trunk's
@@ -173,9 +180,9 @@ export const retellProvider: VoiceAgentProvider = {
       ev.transcript = str(call.transcript)
       ev.recordingUrl = str(call.recording_url)
       const flagged = asBool(custom.do_not_call) === true
-      const said = STOP_PHRASES.test(`${ev.summary ?? ""}\n${ev.transcript ?? ""}`)
+      const said = mentionsStopRequest(ev.summary, ev.transcript)
       ev.doNotCall = flagged || said
     }
     return ev
   },
-}
+} satisfies VoiceAgentProvider

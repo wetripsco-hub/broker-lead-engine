@@ -12,6 +12,8 @@ export interface StartCallInput {
   metadata: Record<string, string>
   /** Lets the provider de-duplicate a retried start. */
   idempotencyKey?: string
+  /** Short label stored on the provider's call record (also a webhook fallback for finding our row). */
+  label?: string
 }
 
 export interface StartCallResult {
@@ -44,9 +46,18 @@ export interface NormalizedVoiceEvent {
 
 export interface VoiceAgentProvider {
   readonly id: string
+  /** Name shown in Settings. */
+  readonly label: string
+  /** All environment settings this provider needs are present. */
+  configured(): boolean
+  /** Caller-id number to pass as StartCallInput.from ("" when the provider picks it, e.g. Vapi's phoneNumberId). */
+  fromNumber(): string
   startCall(input: StartCallInput): Promise<StartCallResult>
   /** Must be given the exact raw body string, never a re-serialised one. */
   verifyWebhook(rawBody: string, headers: Headers): boolean
-  /** Returns null for events we don't act on. */
-  normalizeEvent(payload: unknown): NormalizedVoiceEvent | null
+  /**
+   * Returns null for events we don't act on. A provider that reports a whole
+   * call in one message (Vapi's end-of-call-report) returns several events.
+   */
+  normalizeEvent(payload: unknown): NormalizedVoiceEvent | NormalizedVoiceEvent[] | null
 }

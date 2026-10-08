@@ -75,7 +75,7 @@ export async function processVoiceEvent(
     if (ev.transcript) patch.transcript = ev.transcript
     if (ev.recordingUrl) patch.recording_url = ev.recordingUrl
     if (ev.costUsd != null) patch.cost_usd = ev.costUsd
-    const unanswered = /no_answer|voicemail|dial_|busy|failed|invalid/i.test(ev.disconnectionReason ?? "")
+    const unanswered = /no[_-]?answer|did-not-answer|voicemail|dial_|busy|failed|invalid|rejected/i.test(ev.disconnectionReason ?? "")
     patch.status = unanswered || !ev.durationSeconds ? "no_answer" : "answered"
   }
 

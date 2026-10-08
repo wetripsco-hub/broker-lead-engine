@@ -5,6 +5,9 @@ import { evaluateAiCallGate, type GateInput } from "../lib/voice-agents/gate"
 import { toE164 } from "../lib/phone"
 import { isAdminInDb } from "../lib/voice-agents/admin-check"
 import { retellProvider } from "../lib/voice-agents/retell"
+import { vapiProvider } from "../lib/voice-agents/vapi"
+import { parseWebhook } from "../lib/voice-agents"
+import { readFileSync } from "fs"
 import { processVoiceEvent } from "../lib/voice-agents/process"
 
 let failed = 0
@@ -205,8 +208,102 @@ function fakeDb(tables: Record<string, Row[]>) {
   return { from: builder } as any
 }
 
+
+// ── Vapi ───────────────────────────────────────────────────────────────────
+function vapiReport(over: Record<string, any> = {}, structured: Record<string, any> = {}, extra: Record<string, any> = {}) {
+  return {
+    message: {
+      type: "end-of-call-report",
+      endedReason: "customer-ended-call",
+      cost: 0.42,
+      startedAt: "2026-10-08T10:00:00.000Z",
+      endedAt: "2026-10-08T10:01:12.000Z",
+      artifact: { transcript: "AI: Hi\nUser: not now", recordingUrl: "https://rec.example/x.wav" },
+      analysis: { summary: "Busy, asked for Friday.", structuredData: { interested: true, callback_time: "Friday 2pm", sentiment: "neutral", do_not_call: false, ...structured } },
+      customer: { number: "+12125550100" },
+      call: { id: "vcall_1", name: "ble-E1", assistantOverrides: { metadata: { lead_id: "L1", agent_id: "A1", outreach_event_id: "E1" } } },
+      ...over,
+      ...extra,
+    },
+  }
+}
+
+async function vapiTests() {
+  process.env.VAPI_WEBHOOK_SECRET = "whsec-test-not-real"
+  process.env.VAPI_API_KEY = "vapi-key-test-not-real"
+  process.env.VAPI_ASSISTANT_ID = "asst_1"
+  process.env.VAPI_PHONE_NUMBER_ID = "pn_1"
+  const h = (o: Record<string, string>) => new Headers(o)
+
+  check("vapi: x-vapi-secret accepted", vapiProvider.verifyWebhook("{}", h({ "x-vapi-secret": "whsec-test-not-real" })))
+  check("vapi: Authorization Bearer accepted", vapiProvider.verifyWebhook("{}", h({ authorization: "Bearer whsec-test-not-real" })))
+  check("vapi: wrong secret rejected", !vapiProvider.verifyWebhook("{}", h({ "x-vapi-secret": "nope" })))
+  check("vapi: missing secret header rejected", !vapiProvider.verifyWebhook("{}", h({})))
+  delete process.env.VAPI_WEBHOOK_SECRET
+  check("vapi: no secret configured -> rejects everything (fails closed)", !vapiProvider.verifyWebhook("{}", h({ "x-vapi-secret": "" })) && !vapiProvider.verifyWebhook("{}", h({ "x-vapi-secret": "x" })))
+  process.env.VAPI_WEBHOOK_SECRET = "whsec-test-not-real"
+  const good = h({ "x-vapi-secret": "whsec-test-not-real" })
+  check("parseWebhook: bad secret -> 401", (() => { const r = parseWebhook(vapiProvider, JSON.stringify(vapiReport()), h({ "x-vapi-secret": "bad" })); return !r.ok && r.status === 401 })())
+  check("parseWebhook: bad JSON -> 400", (() => { const r = parseWebhook(vapiProvider, "{nope", good); return !r.ok && r.status === 400 })())
+  check("parseWebhook: end-of-call-report -> ended + analyzed", (() => { const r = parseWebhook(vapiProvider, JSON.stringify(vapiReport()), good); return r.ok && r.events.map((e) => e.type).join() === "ended,analyzed" })())
+
+  // start call request
+  const sent: any[] = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async (url: any, init?: any) => {
+    sent.push({ url: String(url), headers: init.headers, body: JSON.parse(init.body) })
+    return new Response(JSON.stringify({ id: "vcall_9" }), { status: 201 })
+  }) as typeof fetch
+  const started = await vapiProvider.startCall({
+    to: toE164("(212) 555-0100")!, from: "", variables: { contact_name: "Sam", company_name: "Acme" },
+    metadata: { lead_id: "L1", agent_id: "A1", outreach_event_id: "E1" }, label: "ble-E1",
+  })
+  globalThis.fetch = realFetch
+  const req = sent[0]
+  check("vapi start: POST https://api.vapi.ai/call", req?.url === "https://api.vapi.ai/call")
+  check("vapi start: Bearer private key", req?.headers?.Authorization === "Bearer vapi-key-test-not-real")
+  check("vapi start: assistantId + phoneNumberId", req?.body?.assistantId === "asst_1" && req?.body?.phoneNumberId === "pn_1")
+  check("vapi start: customer number is E.164", req?.body?.customer?.number === "+12125550100")
+  check("vapi start: metadata carries lead_id, agent_id, outreach_event_id", req?.body?.assistantOverrides?.metadata?.lead_id === "L1" && req?.body?.assistantOverrides?.metadata?.agent_id === "A1" && req?.body?.assistantOverrides?.metadata?.outreach_event_id === "E1")
+  check("vapi start: variables are strings only", Object.values(req?.body?.assistantOverrides?.variableValues ?? {}).every((v) => typeof v === "string"))
+  check("vapi start: call id returned", started.providerCallId === "vcall_9")
+  check("vapi: configured() needs key + assistant + phone number id", vapiProvider.configured())
+
+  // normalisation
+  const evs = vapiProvider.normalizeEvent(vapiReport()) as any[]
+  check("vapi ended: duration 72s, cost, reason, recording, transcript", evs[0].durationSeconds === 72 && evs[0].costUsd === 0.42 && evs[0].disconnectionReason === "customer-ended-call" && evs[0].recordingUrl === "https://rec.example/x.wav" && evs[0].transcript?.includes("not now"))
+  check("vapi analyzed: summary, sentiment, interested, callback", evs[1].summary === "Busy, asked for Friday." && evs[1].sentiment === "neutral" && evs[1].interested === true && evs[1].callbackTime === "Friday 2pm")
+  check("vapi: metadata echoed from assistantOverrides", evs[0].metadata.lead_id === "L1" && evs[0].metadata.outreach_event_id === "E1")
+  const noMeta = vapiProvider.normalizeEvent(vapiReport({}, {}, { call: { id: "vcall_2", name: "ble-E7" } })) as any[]
+  check("vapi: row id recovered from call name when metadata is missing", noMeta[0].metadata.outreach_event_id === "E7")
+  check("vapi: do_not_call from the structured data", (vapiProvider.normalizeEvent(vapiReport({}, { do_not_call: true })) as any[])[1].doNotCall === true)
+  check("vapi: 'stop calling me' in the transcript -> do_not_call even if analysis missed it", (vapiProvider.normalizeEvent(vapiReport({}, {}, { artifact: { transcript: "User: please stop calling me" } })) as any[])[1].doNotCall === true)
+  check("vapi status-update in-progress -> started", (vapiProvider.normalizeEvent({ message: { type: "status-update", status: "in-progress", call: { id: "vcall_1" } } }) as any).type === "started")
+  check("vapi status-update ringing -> ignored", vapiProvider.normalizeEvent({ message: { type: "status-update", status: "ringing", call: { id: "vcall_1" } } }) === null)
+  check("vapi other message types ignored", vapiProvider.normalizeEvent({ message: { type: "transcript", call: { id: "vcall_1" } } }) === null)
+
+  // stored through the same processor, tagged provider=vapi, idempotent
+  const tables: Record<string, Row[]> = {
+    outreach_events: [{ id: "E1", lead_id: "L1", agent_id: "A1", channel: "ai_call", call_status: "queued", provider_call_id: null }],
+    leads: [{ id: "L1", do_not_call: false, brokers: { phone: "(212) 555-0100" } }],
+    do_not_call_numbers: [],
+  }
+  const db = fakeDb(tables)
+  const stop = vapiProvider.normalizeEvent(vapiReport({}, { interested: false, callback_time: "" }, { artifact: { transcript: "User: stop calling me", recordingUrl: "https://rec.example/x.wav" } })) as any[]
+  for (let i = 0; i < 2; i++) for (const e of stop) await processVoiceEvent(db, "vapi", e)
+  const row = tables.outreach_events[0]
+  check("vapi stored: one row, provider=vapi, ended", tables.outreach_events.length === 1 && row.provider === "vapi" && row.provider_call_id === "vcall_1" && row.call_status === "ended")
+  check("vapi stored: duration, cost, recording, summary", row.duration_seconds === 72 && row.cost_usd === 0.42 && row.recording_url === "https://rec.example/x.wav" && row.ai_summary === "Busy, asked for Friday.")
+  check("vapi stored: do-not-call applied to lead and DNC list", tables.leads[0].do_not_call === true && tables.do_not_call_numbers.length === 1)
+
+  // Every provider sits behind the same guards: the start route runs the gate before any provider call.
+  const route = readFileSync("app/api/ai-calls/start/route.ts", "utf8")
+  check("guards: gate runs before provider.startCall (provider-independent)", route.indexOf("evaluateAiCallGate(") > 0 && route.indexOf("evaluateAiCallGate(") < route.indexOf("provider.startCall("))
+}
+
 async function main() {
   await retellFromTest()
+  await vapiTests()
   // Role lookup: the database record decides, whatever the session token claims.
   const fakeAdmin = (role: string | undefined, fail = false) => ({
     auth: { admin: { getUserById: async () => (fail ? { data: null, error: new Error("x") } : { data: { user: { user_metadata: role ? { role } : {} } }, error: null }) } },
