@@ -55,7 +55,7 @@ function seconds(start: unknown, end: unknown): number | undefined {
 // would wrongly file the lead as "not interested".
 function interestFrom(data: Record<string, unknown>): boolean | null {
   const outcome = str(data.outcome)?.toLowerCase()
-  if (outcome === "interested" || outcome === "callback") return true
+  if (outcome === "appointment_booked" || outcome === "interested" || outcome === "callback") return true
   if (outcome === "not_interested") return false
   if (outcome === "unclear") return null
   return asBool(data.interested)
@@ -158,7 +158,8 @@ export const vapiProvider: VoiceAgentProvider = {
       sentiment: str(data.sentiment),
       interested: interestFrom(data),
       usesSoftware: str(data.uses_software),
-      callbackTime: str(data.callback_time),
+      // An agreed demo time and a requested callback time are both "when to follow up".
+      callbackTime: str(data.appointment_time) ?? str(data.callback_time),
       extracted: data,
       transcript,
       recordingUrl: str(artifact.recordingUrl),

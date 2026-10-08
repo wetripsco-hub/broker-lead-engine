@@ -16,7 +16,7 @@ import { readFileSync } from "fs"
 import path from "path"
 
 const API = "https://api.vapi.ai"
-const NAME = "Loadlinkers AI caller"
+const NAME = "Sarah (Load Linkers)"
 const args = process.argv.slice(2)
 const flag = (f: string) => args.includes(f)
 const opt = (name: string) => args.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1)
@@ -65,9 +65,10 @@ async function loadPrompt(): Promise<string> {
 function assistantPayload(prompt: string) {
   return {
     name: NAME,
-    // Disclosure comes first, every call: it is an AI voice and the call may be recorded.
+    // Disclosure stays in the first sentence, every call: she is a virtual assistant
+    // and the call may be recorded.
     firstMessage:
-      "Hi {{contact_name}}, this is the Load Linkers AI assistant, and just so you know, this call may be recorded. Do you have thirty seconds?",
+      "Hi {{contact_name}}, this is Sarah from Load Linkers, a virtual assistant, and just so you know, this call may be recorded. Do you have a quick minute?",
     firstMessageMode: "assistant-speaks-first",
     model: {
       provider: "openai",
@@ -76,7 +77,8 @@ function assistantPayload(prompt: string) {
       messages: [{ role: "system", content: prompt }],
       tools: [{ type: "endCall" }],
     },
-    voice: { provider: "vapi", voiceId: process.env.VAPI_VOICE_ID ?? "Tara" },
+    // A touch faster than the default (1.0) so she sounds brisk and natural.
+    voice: { provider: "vapi", voiceId: process.env.VAPI_VOICE_ID ?? "Tara", speed: Number(process.env.VAPI_VOICE_SPEED ?? 1.1) },
     transcriber: { provider: "deepgram", model: "nova-3", language: "en" },
     maxDurationSeconds: 300,
     endCallMessage: "Thanks for your time. Goodbye.",
@@ -93,9 +95,10 @@ function assistantPayload(prompt: string) {
           properties: {
             outcome: {
               type: "string",
-              enum: ["interested", "not_interested", "callback", "unclear"],
-              description: "How the call ended. 'not_interested' ONLY if the person clearly declined. 'unclear' if the call was cut short, had audio problems, or no clear answer was given.",
+              enum: ["appointment_booked", "interested", "callback", "not_interested", "unclear"],
+              description: "How the call ended. 'appointment_booked' if a day and time for a demo call was agreed. 'not_interested' ONLY if the person clearly declined. 'unclear' if the call was cut short, had audio problems, or no clear answer was given.",
             },
+            appointment_time: { type: "string", description: "The demo call day and time exactly as agreed, with the time zone, for example 'Thursday 2 pm Eastern'. Empty if no time was agreed." },
             interested: { type: "boolean", description: "True if the person showed interest in Loadlinkers or agreed to a callback." },
             uses_software: { type: "string", description: "What software they currently use for rate confirmations, or 'manual' if by hand. Empty if unknown." },
             callback_time: { type: "string", description: "The day/time the person asked to be called back, as agreed. Empty if none." },
