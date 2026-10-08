@@ -104,9 +104,9 @@ function assistantPayload(prompt: string) {
             outcome: {
               type: "string",
               enum: ["appointment_booked", "interested", "callback", "not_interested", "unclear"],
-              description: "How the call ended. 'appointment_booked' if a day and time for a demo call was agreed. 'not_interested' ONLY if the person clearly declined. 'unclear' if the call was cut short, had audio problems, or no clear answer was given.",
+              description: "How the call ended. 'appointment_booked' if a day or part of the day (morning/afternoon) for a quick call was agreed. 'not_interested' ONLY if the person clearly declined. 'unclear' if the call was cut short, had audio problems, or no clear answer was given.",
             },
-            appointment_time: { type: "string", description: "The demo call day and time exactly as agreed, with the time zone, for example 'Thursday 2 pm Eastern'. Empty if no time was agreed." },
+            appointment_time: { type: "string", description: "When the quick call was agreed, as the person said it, for example 'tomorrow morning' or 'Thursday afternoon'. Empty if nothing was agreed." },
             interested: { type: "boolean", description: "True if the person showed interest in Loadlinkers or agreed to a callback." },
             uses_software: { type: "string", description: "What software they currently use for rate confirmations, or 'manual' if by hand. Empty if unknown." },
             callback_time: { type: "string", description: "The day/time the person asked to be called back, as agreed. Empty if none." },

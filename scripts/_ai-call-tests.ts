@@ -296,8 +296,10 @@ async function vapiTests() {
     check("prompt: persona is Alex and congratulates on the MC", /You are Alex/.test(prompt) && /congratulat\w+ them on applying for their MC/i.test(prompt) && /complete package/i.test(prompt))
     check("prompt: Alex still discloses virtual assistant + recording in the opening", /virtual assistant/i.test(prompt) && /may be recorded/i.test(prompt))
     check("prompt: does not use the rep-name variable", !prompt.includes("{{agent_name}}"))
-    check("prompt: promises text + email details and a call at the chosen time", /text and email you the details/i.test(prompt) && /quick call at that time/i.test(prompt))
-    check("prompt: says Load Linkers, never reads out an email", /Load Linkers/.test(prompt) && /never read out an email/i.test(prompt))
+    check("prompt: says 'quick call', never 15 minutes", /quick call/i.test(prompt) && !/15[- ]?minute/i.test(prompt))
+    check("prompt: mentions the website and the text + email", /Load Linkers dot co/i.test(prompt) && /dropping you a text and an email/i.test(prompt))
+    check("prompt: only asks morning or afternoon, then ends the call", /tomorrow morning or afternoon/i.test(prompt) && /Do \*\*not\*\* ask for an exact time/i.test(prompt) && /end the call right away/i.test(prompt))
+    check("prompt: says Load Linkers, never reads out an email", /Load Linkers/.test(prompt) && /never read out anyone's email/i.test(prompt))
   }
   check("vapi status-update in-progress -> started", (vapiProvider.normalizeEvent({ message: { type: "status-update", status: "in-progress", call: { id: "vcall_1" } } }) as any).type === "started")
   check("vapi status-update ringing -> ignored", vapiProvider.normalizeEvent({ message: { type: "status-update", status: "ringing", call: { id: "vcall_1" } } }) === null)
