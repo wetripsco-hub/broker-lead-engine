@@ -18,7 +18,7 @@ import { readFileSync } from "fs"
 import path from "path"
 
 const API = "https://api.vapi.ai"
-const NAME = "Sarah (Load Linkers)"
+const NAME = "Alex (Load Linkers)"
 const args = process.argv.slice(2)
 const flag = (f: string) => args.includes(f)
 const opt = (name: string) => args.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1)
@@ -67,10 +67,10 @@ async function loadPrompt(): Promise<string> {
 function assistantPayload(prompt: string) {
   return {
     name: NAME,
-    // Disclosure stays in the first sentence, every call: she is a virtual assistant
-    // and the call may be recorded.
+    // Disclosure stays in the first sentence, every call: it is a virtual assistant
+    // and the call may be recorded. Then the congratulations and the one-line pitch.
     firstMessage:
-      "Hi {{contact_name}}, this is Sarah from Load Linkers, a virtual assistant, and just so you know, this call may be recorded. Do you have a quick minute?",
+      "Hi {{contact_name}}, this is Alex from Load Linkers, a virtual assistant, and just so you know, this call may be recorded. First off, congratulations on applying for your MC! We provide software that's a complete package for new brokers like you. Do you have a quick minute?",
     firstMessageMode: "assistant-speaks-first",
     // "Ultra Fast" preset (chosen in the Vapi dashboard): a fast model with minimal
     // reasoning, Cartesia Sonic voice and Deepgram nova-3-general. Kept here so a

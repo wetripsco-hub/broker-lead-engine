@@ -293,6 +293,8 @@ async function vapiTests() {
   {
     const prompt = readFileSync("prompts/ai-caller.md", "utf8")
     check("prompt: says virtual assistant, not 'AI assistant'", /virtual assistant/i.test(prompt) && !/AI assistant/i.test(prompt))
+    check("prompt: persona is Alex and congratulates on the MC", /You are Alex/.test(prompt) && /congratulat\w+ them on applying for their MC/i.test(prompt) && /complete package/i.test(prompt))
+    check("prompt: Alex still discloses virtual assistant + recording in the opening", /virtual assistant/i.test(prompt) && /may be recorded/i.test(prompt))
     check("prompt: does not use the rep-name variable", !prompt.includes("{{agent_name}}"))
     check("prompt: promises text + email details and a call at the chosen time", /text and email you the details/i.test(prompt) && /quick call at that time/i.test(prompt))
     check("prompt: says Load Linkers, never reads out an email", /Load Linkers/.test(prompt) && /never read out an email/i.test(prompt))

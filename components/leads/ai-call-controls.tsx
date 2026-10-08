@@ -169,7 +169,7 @@ export function AiCallControls(p: AiCallControlsProps) {
               )}
             </li>
             <li className="text-muted-foreground">
-              This is an AI voice. She introduces herself as Sarah, a virtual assistant from Load Linkers, and says the
+              This is an AI voice. It introduces itself as Alex, a virtual assistant from Load Linkers, and says the
               call may be recorded — disclosure is on.
             </li>
           </ul>
