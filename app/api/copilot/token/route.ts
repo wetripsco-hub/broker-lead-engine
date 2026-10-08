@@ -27,6 +27,15 @@ export async function POST() {
       body: JSON.stringify({ ttl_seconds: 60 }),
       cache: "no-store",
     })
+    // 401/403 = the key itself can't mint temporary tokens (it needs the
+    // Member role or higher). That's a setup problem, not a blip: 503 tells
+    // the client not to keep retrying.
+    if (res.status === 401 || res.status === 403) {
+      return NextResponse.json(
+        { error: "The Deepgram API key can't create temporary tokens (use a key with Member or Admin role)" },
+        { status: 503 },
+      )
+    }
     if (!res.ok) return NextResponse.json({ error: "Token request failed" }, { status: 502 })
     const { access_token, expires_in } = (await res.json()) as { access_token: string; expires_in: number }
     return NextResponse.json({ token: access_token, expiresIn: expires_in })

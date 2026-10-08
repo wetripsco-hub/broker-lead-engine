@@ -33,7 +33,8 @@ interface Options {
 // nova-3, en-US, interim results, smart formatting, 800 ms endpointing.
 const LISTEN_URL =
   "wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&interim_results=true&smart_format=true&endpointing=800"
-const MAX_ATTEMPTS = 8
+// Reconnects after a failed/closed connection: 1 s, 2 s, 4 s, then give up.
+const MAX_RETRIES = 3
 
 interface Channel {
   speaker: Speaker
@@ -54,6 +55,8 @@ interface Channel {
 export function useTranscription({ enabled, getSources, onBrokerActivity, onBrokerUtterance }: Options) {
   const [bubbles, setBubbles] = useState<Bubble[]>([])
   const [status, setStatus] = useState<TranscriptionStatus>("off")
+  // Why the last connection failed, e.g. "closed (code 1006)". Never contains the token.
+  const [detail, setDetail] = useState<string | null>(null)
 
   const idRef = useRef(0)
   const channelsRef = useRef<Channel[]>([])
@@ -63,7 +66,7 @@ export function useTranscription({ enabled, getSources, onBrokerActivity, onBrok
   const recomputeStatus = useCallback(() => {
     const chs = channelsRef.current
     if (chs.length === 0) return setStatus("connecting")
-    if (chs.every((c) => c.attempts >= MAX_ATTEMPTS && !c.live)) return setStatus("unavailable")
+    if (chs.every((c) => c.attempts > MAX_RETRIES && !c.live)) return setStatus("unavailable")
     if (chs.some((c) => !c.live && c.attempts > 0)) return setStatus("reconnecting")
     setStatus(chs.every((c) => c.live) ? "live" : "connecting")
   }, [])
@@ -97,18 +100,32 @@ export function useTranscription({ enabled, getSources, onBrokerActivity, onBrok
     async (ch: Channel) => {
       try {
         const res = await fetch("/api/copilot/token", { method: "POST" })
-        if (!res.ok) throw new Error("token")
+        if (res.status === 503) {
+          // Not configured / key lacks permission: retrying can't fix it.
+          const j = (await res.json().catch(() => ({}))) as { error?: string }
+          setDetail(j.error ?? "transcription isn't configured")
+          ch.attempts = MAX_RETRIES + 1
+          recomputeStatus()
+          return
+        }
+        if (!res.ok) {
+          setDetail(`token request failed (HTTP ${res.status})`)
+          throw new Error("token")
+        }
         const { token } = (await res.json()) as { token: string }
         if (!channelsRef.current.includes(ch)) return // disabled meanwhile
 
-        // Browsers can't set an Authorization header on a WebSocket; Deepgram
-        // accepts the temporary token as ?access_token=.
-        const ws = new WebSocket(`${LISTEN_URL}&access_token=${encodeURIComponent(token)}`)
+        // Browsers can't set an Authorization header on a WebSocket, so the
+        // temporary token goes in the Sec-WebSocket-Protocol header as
+        // ["bearer", <jwt>]. (Verified against Deepgram: ?access_token= and
+        // ["token", <jwt>] never open the socket.)
+        const ws = new WebSocket(LISTEN_URL, ["bearer", token])
         ch.ws = ws
 
         ws.onopen = () => {
           ch.live = true
           ch.attempts = 0
+          setDetail(null)
           recomputeStatus()
           const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : undefined
           const recorder = new MediaRecorder(ch.stream, mime ? { mimeType: mime } : undefined)
@@ -128,8 +145,10 @@ export function useTranscription({ enabled, getSources, onBrokerActivity, onBrok
             /* ignore non-JSON frames */
           }
         }
-        ws.onclose = () => {
+        ws.onclose = (e) => {
           ch.live = false
+          // Browsers report 1006 with no reason when the handshake is rejected.
+          setDetail(`connection closed (code ${e.code}${e.reason ? `: ${e.reason}` : ""})`)
           if (ch.recorder && ch.recorder.state !== "inactive") ch.recorder.stop()
           ch.recorder = null
           if (channelsRef.current.includes(ch)) scheduleRetry(ch)
@@ -146,7 +165,7 @@ export function useTranscription({ enabled, getSources, onBrokerActivity, onBrok
   function scheduleRetry(ch: Channel) {
     ch.attempts++
     recomputeStatus()
-    if (ch.attempts >= MAX_ATTEMPTS) return
+    if (ch.attempts > MAX_RETRIES) return
     ch.retryTimer = setTimeout(() => connect(ch), Math.min(1000 * 2 ** (ch.attempts - 1), 8000))
   }
 
@@ -206,5 +225,5 @@ export function useTranscription({ enabled, getSources, onBrokerActivity, onBrok
     .filter((b) => b.text.trim())
     .map((b) => ({ speaker: b.speaker, text: b.text.trim() }))
 
-  return { bubbles, status, getTurns: () => turnsRef.current }
+  return { bubbles, status, detail, getTurns: () => turnsRef.current }
 }

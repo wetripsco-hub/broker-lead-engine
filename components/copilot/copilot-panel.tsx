@@ -107,7 +107,7 @@ export function CopilotPanel({ leadId, initialOn = false, callId, callLive, getS
     timerRef.current = setTimeout(() => requestSuggestion(), SILENCE_MS)
   }, [requestSuggestion])
 
-  const { bubbles, status, getTurns } = useTranscription({
+  const { bubbles, status, detail, getTurns } = useTranscription({
     enabled: on && callLive,
     getSources,
     onBrokerActivity,
@@ -179,7 +179,7 @@ export function CopilotPanel({ leadId, initialOn = false, callId, callLive, getS
           </>
         ) : (
           <>
-            <StatusLine status={status} callLive={callLive} />
+            <StatusLine status={status} detail={detail} callLive={callLive} />
 
             {/* Suggestions */}
             <div
@@ -259,12 +259,21 @@ export function CopilotPanel({ leadId, initialOn = false, callId, callLive, getS
   )
 }
 
-function StatusLine({ status, callLive }: { status: ReturnType<typeof useTranscription>["status"]; callLive: boolean }) {
+function StatusLine({
+  status,
+  detail,
+  callLive,
+}: {
+  status: ReturnType<typeof useTranscription>["status"]
+  detail: string | null
+  callLive: boolean
+}) {
   if (!callLive) return null
   if (status === "reconnecting" || status === "unavailable") {
     return (
       <Notice tone="error">
-        Transcription disconnected{status === "reconnecting" ? " — reconnecting…" : ""}
+        {status === "reconnecting" ? "Transcription disconnected — reconnecting…" : "Transcription unavailable (gave up after 3 retries)."}
+        {detail && <span className="mt-0.5 block font-mono text-[11px] opacity-80">{detail}</span>}
       </Notice>
     )
   }
