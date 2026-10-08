@@ -22,6 +22,10 @@ interface AiCallControlsProps {
   /** call_status of this lead's most recent AI call, if any. */
   latestCallStatus: string | null
   latestCallAt: string | null
+  /** Test mode is on and this lead's number is a listed test number: hours are skipped. */
+  testHoursExempt: boolean
+  /** Admin + the settings switch is on: the override checkbox may be offered. (UI hint only; the server re-checks.) */
+  canOverrideHours: boolean
 }
 
 const ACTIVE = ["queued", "registered", "in_progress"]
@@ -39,6 +43,7 @@ export function AiCallControls(p: AiCallControlsProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [consentOpen, setConsentOpen] = useState(false)
   const [source, setSource] = useState("")
+  const [overrideHours, setOverrideHours] = useState(false)
   const [pending, startTransition] = useTransition()
   const [now, setNow] = useState<Date | null>(null)
 
@@ -82,7 +87,7 @@ export function AiCallControls(p: AiCallControlsProps) {
         const res = await fetch("/api/ai-calls/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ leadId: p.leadId }),
+          body: JSON.stringify({ leadId: p.leadId, hoursOverride: overrideHours && p.canOverrideHours && !p.testHoursExempt }),
         })
         const json = (await res.json().catch(() => ({}))) as { error?: string }
         if (!res.ok) {
@@ -168,16 +173,39 @@ export function AiCallControls(p: AiCallControlsProps) {
               recorded — disclosure is on.
             </li>
           </ul>
-          {windowState && !insideWindow && (
-            <p className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              Outside 8 AM–6 PM weekdays in the broker&apos;s time. The call will be blocked.
+          {p.testHoursExempt ? (
+            <p className="mt-3 rounded-md bg-blue-500/10 px-3 py-2 text-xs text-blue-800 dark:text-blue-300">
+              Test mode: calling hours skipped.
             </p>
+          ) : (
+            windowState &&
+            !insideWindow && (
+              <div className="mt-3 space-y-2">
+                <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  Outside 8 AM–6 PM weekdays in the broker&apos;s time.
+                  {p.canOverrideHours ? " Tick the box below to override." : " The call will be blocked."}
+                </p>
+                {p.canOverrideHours && (
+                  <label className="flex cursor-pointer items-start gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={overrideHours}
+                      onChange={(e) => setOverrideHours(e.target.checked)}
+                      className="mt-0.5 size-3.5"
+                    />
+                    <span>
+                      Override calling hours <span className="text-muted-foreground">(admin; this is recorded on the call)</span>
+                    </span>
+                  </label>
+                )}
+              </div>
+            )
           )}
           <div className="mt-5 flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setConfirmOpen(false)} disabled={pending}>
               Cancel
             </Button>
-            <Button size="sm" className="gap-2" onClick={place} disabled={pending || (windowState !== null && !insideWindow)}>
+            <Button size="sm" className="gap-2" onClick={place} disabled={pending || (!p.testHoursExempt && windowState !== null && !insideWindow && !(p.canOverrideHours && overrideHours))}>
               <Bot className="size-3.5" />
               {pending ? "Starting…" : `Call ${p.brokerName ?? "broker"}`}
             </Button>

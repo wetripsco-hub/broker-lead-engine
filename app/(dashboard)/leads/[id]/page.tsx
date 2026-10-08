@@ -9,7 +9,9 @@ import { EmailCompose } from "@/components/leads/email-compose"
 import { FollowUpBanner } from "@/components/leads/follow-up-banner"
 import { AiCallControls } from "@/components/leads/ai-call-controls"
 import { getFollowUps } from "@/lib/follow-up/query"
-import { formatPhoneDisplay, isValidPhone } from "@/lib/phone"
+import { formatPhoneDisplay, isValidPhone, toE164 } from "@/lib/phone"
+import { loadAiCallSettings } from "@/lib/voice-agents/settings"
+import { isTestModeExempt } from "@/lib/voice-agents/gate"
 import { CallButton } from "@/components/leads/call-button"
 import { LocalTimeCard } from "@/components/leads/local-time-card"
 import { SmsThread } from "@/components/leads/sms-thread"
@@ -191,6 +193,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   events = events.map((e) => (aiExtra.has(e.id) ? { ...e, ...aiExtra.get(e.id) } : e))
   const latestAiCall = events.find((e) => e.channel === "ai_call")
   const aiEnabled = (aiEnabledRaw as { value: unknown } | null)?.value === true
+  const aiSettings = await loadAiCallSettings(supabase)
+  const aiTo = toE164(b?.phone)
 
   // SMS events in chronological order for thread view
   const smsEvents = (eventsRaw ?? [])
@@ -279,6 +283,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               doNotCall={aiFlags.do_not_call === true}
               latestCallStatus={latestAiCall?.call_status ?? null}
               latestCallAt={latestAiCall?.occurred_at ?? null}
+              testHoursExempt={isTestModeExempt(aiSettings, aiTo)}
+              canOverrideHours={isAdmin && aiSettings.allowAdminHoursOverride}
             />
             {isAdmin ? (
               <StageSelector leadId={lead.id} stage={lead.stage} />

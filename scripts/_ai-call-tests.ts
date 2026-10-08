@@ -3,6 +3,7 @@
 import { createHmac } from "crypto"
 import { evaluateAiCallGate, type GateInput } from "../lib/voice-agents/gate"
 import { toE164 } from "../lib/phone"
+import { isAdminInDb } from "../lib/voice-agents/admin-check"
 import { retellProvider } from "../lib/voice-agents/retell"
 import { processVoiceEvent } from "../lib/voice-agents/process"
 
@@ -18,7 +19,7 @@ const WED_11PM_ET = new Date("2026-10-08T03:00:00Z")
 const SAT_NOON_ET = new Date("2026-10-10T16:00:00Z")
 
 const base: GateInput = {
-  settings: { enabled: true, testMode: false, testNumbers: [], dailyCap: 20 },
+  settings: { enabled: true, testMode: false, testNumbers: [], dailyCap: 20, allowAdminHoursOverride: false },
   lead: { aiCallConsent: true, doNotCall: false, state: "NY", phone: "(212) 555-0100" },
   to: "+12125550100",
   onDncList: false,
@@ -49,6 +50,48 @@ check("gate: daily cap reached -> blocked", code({ callsInLast24h: 20 }) === "da
 check("gate: test mode + number not whitelisted -> blocked", code({ settings: { testMode: true, testNumbers: ["+13215550123"] } }) === "test_mode")
 check("gate: test mode + whitelisted -> ok", code({ settings: { testMode: true, testNumbers: ["+12125550100"] } }) === "ok")
 check("gate: split-zone state near the edge is held back (FL at 8:30 AM ET)", code({ lead: { state: "FL", phone: null }, now: new Date("2026-10-07T12:30:00Z") }) !== "ok")
+
+// ── Calling-hours exemptions ───────────────────────────────────────────────
+const TEST = "+12125550100"
+const night = (o: Parameters<typeof code>[0]) => code({ now: WED_11PM_ET, ...o })
+const ovr = (isAdmin: boolean, requested = true) => ({ hoursOverride: { requested, isAdmin } })
+
+// Test mode
+check("hours: test mode ON + whitelisted number at night -> allowed", night({ settings: { testMode: true, testNumbers: [TEST] } }) === "ok")
+check("hours: test mode ON + whitelisted on a weekend -> allowed", code({ now: SAT_NOON_ET, settings: { testMode: true, testNumbers: [TEST] } }) === "ok")
+check("hours: test mode ON + NON-whitelisted at night -> rejected", night({ settings: { testMode: true, testNumbers: ["+13215550123"] } }) === "test_mode")
+check("hours: test mode OFF + would-be-whitelisted number at night -> no exemption", night({ settings: { testMode: false, testNumbers: [TEST] } }) === "outside_hours")
+check("hours: test-mode exemption reported as test_mode", (() => {
+  const r = evaluateAiCallGate({ ...base, now: WED_11PM_ET, settings: { ...base.settings, testMode: true, testNumbers: [TEST] } })
+  return r.ok && r.hoursExemption === "test_mode"
+})())
+
+// Admin override
+const on = { allowAdminHoursOverride: true }
+check("hours: agent asks for override (setting ON) -> rejected", night({ settings: on, ...ovr(false) }) === "override_not_allowed")
+check("hours: agent asks for override even inside hours -> still rejected", code({ settings: on, ...ovr(false) }) === "override_not_allowed")
+check("hours: admin asks, toggle OFF -> rejected", night({ settings: { allowAdminHoursOverride: false }, ...ovr(true) }) === "override_disabled")
+check("hours: admin, toggle ON, NOT ticked, at night -> blocked as usual", night({ settings: on, ...ovr(true, false) }) === "outside_hours")
+check("hours: admin, toggle ON + ticked at night -> allowed", night({ settings: on, ...ovr(true) }) === "ok")
+check("hours: admin override reported as admin_override", (() => {
+  const r = evaluateAiCallGate({ ...base, now: WED_11PM_ET, settings: { ...base.settings, ...on }, hoursOverride: { requested: true, isAdmin: true } })
+  return r.ok && r.hoursExemption === "admin_override"
+})())
+check("hours: no exemption used in normal hours", (() => {
+  const r = evaluateAiCallGate(base)
+  return r.ok && r.hoursExemption === null
+})())
+
+// Things an override must NEVER bypass
+const full = { settings: on, ...ovr(true) }
+check("override still needs consent", night({ ...full, lead: { aiCallConsent: false } }) === "no_consent")
+check("override still blocked by lead do-not-call", night({ ...full, lead: { doNotCall: true } }) === "do_not_call")
+check("override still blocked by DNC list", night({ ...full, onDncList: true }) === "dnc_list")
+check("override still blocked by master switch", night({ ...full, settings: { ...on, enabled: false } }) === "disabled")
+check("override still respects the test-number list", night({ ...full, settings: { ...on, testMode: true, testNumbers: ["+13215550123"] } }) === "test_mode")
+check("override still respects the daily cap", night({ ...full, callsInLast24h: 20 }) === "daily_cap")
+check("override still blocked by an active call", night({ ...full, hasActiveCall: true }) === "active_call")
+check("override still needs a valid phone", night({ ...full, to: null }) === "no_phone")
 check("toE164 normalises", toE164("+1 (321) 848-4606") === "+13218484606" && toE164("abc") === null)
 
 // ── 2. Retell signature ────────────────────────────────────────────────────
@@ -137,6 +180,15 @@ function fakeDb(tables: Record<string, Row[]>) {
 }
 
 async function main() {
+  // Role lookup: the database record decides, whatever the session token claims.
+  const fakeAdmin = (role: string | undefined, fail = false) => ({
+    auth: { admin: { getUserById: async () => (fail ? { data: null, error: new Error("x") } : { data: { user: { user_metadata: role ? { role } : {} } }, error: null }) } },
+  })
+  check("admin check: DB says admin -> true", (await isAdminInDb(fakeAdmin("admin"), "u1")) === true)
+  check("admin check: DB says agent -> false", (await isAdminInDb(fakeAdmin("agent"), "u1")) === false)
+  check("admin check: no role in DB -> false", (await isAdminInDb(fakeAdmin(undefined), "u1")) === false)
+  check("admin check: lookup error -> false (fails closed)", (await isAdminInDb(fakeAdmin("admin", true), "u1")) === false)
+
   const meta = { lead_id: "L1", agent_id: "A1", outreach_event_id: "E1" }
 
   // Duplicate delivery, and the webhook arriving before provider_call_id was saved.

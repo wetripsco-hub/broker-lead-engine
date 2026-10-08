@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { loadKnowledge } from "@/lib/copilot/kb"
 import { evaluateAiCallGate } from "@/lib/voice-agents/gate"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
+import { formatLocalTime, resolveTimezone } from "@/lib/timezone/broker-time"
 import { toE164 } from "@/lib/phone"
 import { getVoiceProvider } from "@/lib/voice-agents"
 import { loadAiCallSettings } from "@/lib/voice-agents/settings"
@@ -22,8 +24,11 @@ export async function POST(request: Request) {
   if (!user) return fail(401, "Not signed in")
 
   let leadId: string | undefined
+  let hoursOverrideRequested = false
   try {
-    leadId = ((await request.json()) as { leadId?: string }).leadId
+    const body = (await request.json()) as { leadId?: string; hoursOverride?: unknown }
+    leadId = body.leadId
+    hoursOverrideRequested = body.hoursOverride === true
   } catch {
     return fail(400, "Invalid request")
   }
@@ -89,6 +94,10 @@ export async function POST(request: Request) {
       .gte("occurred_at", new Date(now.getTime() - 24 * 3600_000).toISOString()),
   ])
 
+  // Only looked up when an override is actually requested. The answer comes
+  // from the database, not from the request or the session token.
+  const isAdmin = hoursOverrideRequested ? await isAdminInDb(admin, user.id) : false
+
   const gate = evaluateAiCallGate({
     settings,
     lead: {
@@ -102,8 +111,20 @@ export async function POST(request: Request) {
     hasActiveCall: ((active as { data: unknown[] | null }).data ?? []).length > 0,
     callsInLast24h: (recent as { count: number | null }).count ?? 0,
     now,
+    hoursOverride: { requested: hoursOverrideRequested, isAdmin },
   })
-  if (!gate.ok) return fail(409, gate.message, gate.code)
+  if (!gate.ok) return fail(gate.code.startsWith("override_") ? 403 : 409, gate.message, gate.code)
+
+  // Audit trail whenever calling hours were skipped: who, which lead, when,
+  // and what time it was for the broker.
+  const tzInfo = resolveTimezone(lead.brokers.state, lead.brokers.phone)
+  const audit = gate.hoursExemption
+    ? {
+        hours_exemption: gate.hoursExemption,
+        hours_override: gate.hoursExemption === "admin_override",
+        broker_local_time: tzInfo ? formatLocalTime(tzInfo.tz, now) : null,
+      }
+    : {}
 
   // Relevant slice of the knowledge base for the prompt (strings only).
   const kb = await loadKnowledge(
@@ -130,6 +151,7 @@ export async function POST(request: Request) {
       status: "pending",
       call_status: "queued",
       provider: provider.id,
+      ...audit, // only present when hours were skipped, so normal calls don't depend on these columns
     })
     .select("id")
     .single()

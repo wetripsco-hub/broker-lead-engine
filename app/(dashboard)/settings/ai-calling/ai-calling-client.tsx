@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { saveAiCallingSettings } from "./actions"
 
 interface Props {
-  settings: { enabled: boolean; testMode: boolean; testNumbers: string[]; dailyCap: number }
+  settings: { enabled: boolean; testMode: boolean; testNumbers: string[]; dailyCap: number; allowAdminHoursOverride: boolean }
   env: { provider: string; agentId: string | null; fromNumber: string | null; keySet: boolean; transferSet: boolean }
   prompt: string
 }
@@ -17,17 +17,19 @@ export function AiCallingClient({ settings, env, prompt }: Props) {
   const [testMode, setTestMode] = useState(settings.testMode)
   const [numbers, setNumbers] = useState(settings.testNumbers.join("\n"))
   const [cap, setCap] = useState(String(settings.dailyCap))
+  const [override, setOverride] = useState(settings.allowAdminHoursOverride)
   const [pending, startTransition] = useTransition()
 
   const dirty =
     enabled !== settings.enabled ||
     testMode !== settings.testMode ||
     numbers.split(/[\n,;]+/).filter(Boolean).join(",") !== settings.testNumbers.join(",") ||
-    cap !== String(settings.dailyCap)
+    cap !== String(settings.dailyCap) ||
+    override !== settings.allowAdminHoursOverride
 
   function save() {
     startTransition(async () => {
-      const res = await saveAiCallingSettings({ enabled, testMode, testNumbers: numbers, dailyCap: Number(cap) })
+      const res = await saveAiCallingSettings({ enabled, testMode, testNumbers: numbers, dailyCap: Number(cap), allowAdminHoursOverride: override })
       if (res.error) toast.error(res.error)
       else {
         if (res.testNumbers) setNumbers(res.testNumbers.join("\n"))
@@ -74,6 +76,17 @@ export function AiCallingClient({ settings, env, prompt }: Props) {
             placeholder="+1 (321) 555-0123"
             className="w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
           />
+        </div>
+        <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+          <Toggle
+            label="Allow admin calling-hours override"
+            hint="Lets an admin tick “Override calling hours” in the AI Call dialog and skip the 8 AM–6 PM, weekdays check. Agents can never use it. Every use is recorded on the call."
+            checked={override}
+            onChange={setOverride}
+          />
+          <p className="text-xs font-medium text-destructive">
+            Warning: with this on, real brokers can be called at night or on weekends. Consent, do-not-call, the master switch and the test-number list still always apply.
+          </p>
         </div>
         <div className="space-y-1.5">
           <label htmlFor="daily-cap" className="text-xs text-muted-foreground">

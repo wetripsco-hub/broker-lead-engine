@@ -7,6 +7,7 @@ export const AI_SETTING_KEYS = [
   "ai_calling_test_mode",
   "ai_calling_test_numbers",
   "ai_calling_daily_cap",
+  "ai_call_allow_admin_hours_override",
 ] as const
 
 /** Missing rows fall back to the safe defaults: off, test mode on, cap 20. */
@@ -22,5 +23,7 @@ export async function loadAiCallSettings(db: SupabaseClient<any, any, any>): Pro
       .map((n) => toE164(String(n)))
       .filter((n): n is string => !!n),
     dailyCap: Number.isFinite(cap) && cap >= 0 ? cap : 20,
+    // Off unless an admin explicitly turned it on.
+    allowAdminHoursOverride: m.get("ai_call_allow_admin_hours_override") === true,
   }
 }

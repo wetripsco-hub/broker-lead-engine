@@ -9,6 +9,7 @@ export async function saveAiCallingSettings(input: {
   testMode: boolean
   testNumbers: string
   dailyCap: number
+  allowAdminHoursOverride: boolean
 }): Promise<{ error?: string; testNumbers?: string[] }> {
   const supabase = await createClient()
   const {
@@ -36,6 +37,7 @@ export async function saveAiCallingSettings(input: {
     { key: "ai_calling_test_mode", value: !!input.testMode, updated_at: now },
     { key: "ai_calling_test_numbers", value: numbers, updated_at: now },
     { key: "ai_calling_daily_cap", value: cap, updated_at: now },
+    { key: "ai_call_allow_admin_hours_override", value: !!input.allowAdminHoursOverride, updated_at: now },
   ])) as { error: { message: string } | null }
   if (error) return { error: error.message }
 
