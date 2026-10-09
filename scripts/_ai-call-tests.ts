@@ -308,14 +308,30 @@ async function vapiTests() {
   check("contact: stray separators and spaces are ignored", nm("  / John Smith ; ") === "John" && nm("  John   Smith ") === "John")
   check("contact: nothing usable -> 'there'", nm("") === "there" && nm(null) === "there" && nm("   ") === "there" && nm(" / ; ") === "there")
   check("contact: the real examples from the leads", nm("James Bennett IV, William Temple") === "James" && nm("William Temple, Maureen Bennett") === "William" && nm("CHRISTI LEA HILL, RICHARD BRYAN HILL") === "Christi" && nm("Christopher James Wakeley, Mark Anthony Wakeley, Kayla Noel Wakeley") === "Christopher")
+  {
+    const script = readFileSync("scripts/create-vapi-assistant.ts", "utf8")
+    check("assistant: the person can interrupt the opener (their 'Hello?' is not lost)", /firstMessageInterruptionsEnabled:\s*true/.test(script))
+    check("assistant: voicemail is detected and the call is not left talking to it", /voicemailDetection:\s*\{\s*provider:\s*"vapi"/.test(script) && !/voicemailMessage/.test(script.replace(/\/\/.*$/gm, "")))
+    check("assistant: asks 'are you still there?' on silence, at most twice", /customer\.speech\.timeout/.test(script) && /triggerMaxCount:\s*2/.test(script) && /Are you still there\?/.test(script))
+  }
   check("rep name: a real name is kept", spokenRepName("Ali Shahid") === "Ali Shahid")
   check("rep name: an email address is never spoken", spokenRepName("wetrips.co@gmail.com") === "our Load Linkers team")
   check("rep name: empty -> neutral phrase", spokenRepName("  ") === "our Load Linkers team" && spokenRepName(null) === "our Load Linkers team")
   {
     const prompt = readFileSync("prompts/ai-caller.md", "utf8")
     check("prompt: says virtual assistant, not 'AI assistant'", /virtual assistant/i.test(prompt) && !/AI assistant/i.test(prompt))
-    check("prompt: persona is Alex and congratulates on the MC", /You are Alex/.test(prompt) && /congratulat\w+ them on applying for their MC/i.test(prompt) && /complete package/i.test(prompt))
-    check("prompt: Alex still discloses virtual assistant + recording in the opening", /virtual assistant/i.test(prompt) && /may be recorded/i.test(prompt))
+    check("prompt: persona is Alex, the opener congratulates on the MC", /You are Alex/.test(prompt) && /Congratulations on applying for your MC/.test(prompt) && /complete software package/i.test(prompt))
+    const opening = prompt.slice(prompt.indexOf("## Opening"), prompt.indexOf("## Right after they say yes"))
+    check("prompt: the disclosure comes before the congratulations", /virtual assistant/i.test(opening) && /may be recorded/i.test(opening) && opening.indexOf("may be recorded") < opening.indexOf("Congratulations") && /Never skip or delay/.test(opening))
+    check("prompt: no colleague is named (no 'chat with Alex from our team')", /Never invent a name for a colleague/.test(prompt))
+    check("prompt: never repeats a question word for word, asks for the call within two questions", /Never repeat the same question word for word/.test(prompt) && /at most two\*\* questions/.test(prompt))
+    check("prompt: answers 'how did you get my number' truthfully (public FMCSA register)", /public FMCSA register/.test(prompt))
+    {
+      const script = readFileSync("scripts/create-vapi-assistant.ts", "utf8")
+      const fm = script.match(/firstMessage:\s*\n?\s*"([^"]+)"/)?.[1] ?? ""
+      check("first message: disclosure first, then the congratulations, ends with a question", fm.indexOf("virtual assistant") > 0 && fm.indexOf("may be recorded") < fm.indexOf("Congratulations") && fm.trim().endsWith("?") && fm.length < 260, `${fm.length} chars`)
+      check("script: --diff mode exists to catch dashboard edits before an update", /--diff/.test(script) && /server.*never compared or printed/.test(script))
+    }
     check("prompt: does not use the rep-name variable", !prompt.includes("{{agent_name}}"))
     check("prompt: says 'quick call', never 15 minutes", /quick call/i.test(prompt) && !/15[- ]?minute/i.test(prompt))
     check("prompt: mentions the website and the text + email", /Load Linkers dot co/i.test(prompt) && /dropping you a text and an email/i.test(prompt))

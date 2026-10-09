@@ -24,11 +24,12 @@ const flag = (f: string) => args.includes(f)
 const opt = (name: string) => args.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1)
 
 const printOnly = flag("--print")
+const diffOnly = flag("--diff")
 const updateMode = flag("--update")
 const apiKey = process.env.VAPI_API_KEY
 const secret = process.env.VAPI_WEBHOOK_SECRET
 
-if (!printOnly && !apiKey) fail("VAPI_API_KEY is not set (run with --env-file=.env.local).")
+if (!printOnly && !diffOnly && !apiKey) fail("VAPI_API_KEY is not set (run with --env-file=.env.local).")
 if (!secret) fail("VAPI_WEBHOOK_SECRET is not set. Make one: openssl rand -base64 32")
 
 function fail(msg: string): never {
@@ -67,11 +68,29 @@ async function loadPrompt(): Promise<string> {
 function assistantPayload(prompt: string) {
   return {
     name: NAME,
-    // Disclosure stays in the first sentence, every call: it is a virtual assistant
-    // and the call may be recorded. Then the congratulations and the one-line pitch.
+    // The opener chosen in the Vapi dashboard (2026-10-09). The disclosure (virtual
+    // assistant + may be recorded) stays in the first sentences on every call, BEFORE the
+    // congratulations and the one-line pitch.
     firstMessage:
-      "Hi {{contact_name}}, this is Alex from Load Linkers, a virtual assistant, and just so you know, this call may be recorded. First off, congratulations on applying for your MC! We provide software that's a complete package for new brokers like you. Do you have a quick minute?",
+      "Hi {{contact_name}}, this is Alex from Load Linkers. I'm a virtual assistant, and this call may be recorded. Congratulations on applying for your MC. Load Linkers provides a complete software package for new brokers. Do you have a quick minute?",
     firstMessageMode: "assistant-speaks-first",
+    // People often answer "Hello?" or "Who is this?" while the opener is still playing.
+    // With interruptions off, that speech is lost and the line goes quiet; with them
+    // on, the assistant stops and listens.
+    firstMessageInterruptionsEnabled: true,
+    // An answering machine: hang up instead of talking to it (no voicemailMessage is set,
+    // so Vapi ends the call).
+    voicemailDetection: { provider: "vapi", type: "audio" },
+    // The line goes quiet after a question: check the person is there, up to twice,
+    // before the call is allowed to time out.
+    hooks: [
+      {
+        on: "customer.speech.timeout",
+        name: "are_you_there",
+        options: { timeoutSeconds: 8, triggerMaxCount: 2, triggerResetMode: "onUserSpeech" },
+        do: [{ type: "say", exact: "Hello? Are you still there?" }],
+      },
+    ],
     // "Ultra Fast" preset (chosen in the Vapi dashboard): a fast model with minimal
     // reasoning, Cartesia Sonic voice and Deepgram nova-3-general. Kept here so a
     // later --update does not undo it.
@@ -89,6 +108,8 @@ function assistantPayload(prompt: string) {
     },
     transcriber: { provider: "deepgram", model: "nova-3-general", language: "en" },
     maxDurationSeconds: 300,
+    // Keeps the dashboard's "Ultra Fast" preset label on the assistant.
+    metadata: { preset: "ultraFast:2" },
     endCallMessage: "Thanks for your time. Goodbye.",
     // Only the two events the app uses.
     serverMessages: ["status-update", "end-of-call-report"],
@@ -125,6 +146,32 @@ const redact = (v: unknown) =>
 
 async function main() {
   const body = assistantPayload(await loadPrompt())
+
+  if (diffOnly) {
+    // What the dashboard changed compared with this script, before an --update overwrites it.
+    const existingId = process.env.VAPI_ASSISTANT_ID
+    if (!apiKey || !existingId) fail("--diff needs VAPI_API_KEY and VAPI_ASSISTANT_ID.")
+    const res = await fetch(`${API}/assistant/${existingId}`, { headers: { Authorization: `Bearer ${apiKey}` } })
+    if (!res.ok) fail(`Could not read the assistant (${res.status}).`)
+    const live = (await res.json()) as Record<string, any>
+    const norm = (v: unknown) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x))
+    let differences = 0
+    for (const k of Object.keys(body) as Array<keyof typeof body>) {
+      if (k === "server") continue // carries the webhook secret; never compared or printed
+      const want = body[k] as any
+      const have = live[k as string]
+      if (k === "model") {
+        if (have?.messages?.[0]?.content !== (want as any).messages[0].content) { differences++; console.log("- system prompt differs from prompts/ai-caller.md") }
+        const { messages: _a, ...w } = want as any
+        const { messages: _b, ...h } = have ?? {}
+        if (norm(w) !== norm(h)) { differences++; console.log(`- model settings differ: dashboard=${norm(h)}`) }
+        continue
+      }
+      if (norm(want) !== norm(have)) { differences++; console.log(`- ${String(k)} differs: dashboard=${norm(have)?.slice(0, 300)}`) }
+    }
+    console.log(differences ? `\n${differences} difference(s). Copy anything you want to keep into this script / the prompt file before running --update.` : "No differences: the dashboard matches this script.")
+    return
+  }
 
   if (printOnly) {
     console.log(JSON.stringify(redact(body), null, 2))
