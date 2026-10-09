@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { loadKnowledge } from "@/lib/copilot/kb"
 import { evaluateAiCallGate } from "@/lib/voice-agents/gate"
 import { isAdminInDb } from "@/lib/voice-agents/admin-check"
-import { spokenRepName } from "@/lib/voice-agents/names"
+import { spokenContactName, spokenRepName } from "@/lib/voice-agents/names"
 import { formatLocalTime, resolveTimezone } from "@/lib/timezone/broker-time"
 import { toE164 } from "@/lib/phone"
 import { getVoiceProvider } from "@/lib/voice-agents"
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
   )
   const b = lead.brokers
   const variables: Record<string, string> = {
-    contact_name: b.contact_name ?? "there",
+    contact_name: spokenContactName(b.contact_name), // one person, even if the field lists two
     company_name: b.company_name ?? "your company",
     state: b.state ?? "",
     mc_status: b.mc_status ?? "",

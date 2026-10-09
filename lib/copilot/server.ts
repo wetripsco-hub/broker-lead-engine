@@ -1,4 +1,5 @@
 import { interpolate } from "@/lib/email/resend"
+import { spokenContactName } from "@/lib/voice-agents/names"
 import { createClient } from "@/lib/supabase/server"
 import { llmProvider } from "./llm"
 import { OPENING_SCRIPT, type CopilotContext } from "./types"
@@ -54,7 +55,7 @@ export async function getCopilotContext(
       mcStatus: b.mc_status,
     },
     openingScript: interpolate(OPENING_SCRIPT, {
-      contact_name: b.contact_name ?? "there",
+      contact_name: spokenContactName(b.contact_name),
       agent_name: spokenName,
       company_name: companyName,
     }),

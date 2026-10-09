@@ -4,7 +4,7 @@ import { createHmac } from "crypto"
 import { evaluateAiCallGate, type GateInput } from "../lib/voice-agents/gate"
 import { toE164 } from "../lib/phone"
 import { isAdminInDb } from "../lib/voice-agents/admin-check"
-import { spokenRepName } from "../lib/voice-agents/names"
+import { spokenContactName, spokenRepName } from "../lib/voice-agents/names"
 import { retellProvider } from "../lib/voice-agents/retell"
 import { vapiProvider } from "../lib/voice-agents/vapi"
 import { parseWebhook } from "../lib/voice-agents"
@@ -287,6 +287,27 @@ async function vapiTests() {
   check("vapi outcome=appointment_booked counts as interested", outcomeOf({ outcome: "appointment_booked", interested: false }).interested === true)
   check("vapi appointment_time becomes the suggested follow-up time", outcomeOf({ outcome: "appointment_booked", appointment_time: "Thursday 2 pm Eastern", callback_time: "" }).callbackTime === "Thursday 2 pm Eastern")
   check("vapi falls back to callback_time when no appointment", outcomeOf({ outcome: "callback", appointment_time: "", callback_time: "Friday 10am" }).callbackTime === "Friday 10am")
+  const nm = spokenContactName
+  check("contact: a single full name -> first name", nm("Ali Shahid") === "Ali")
+  check("contact: a single word is kept", nm("Madonna") === "Madonna")
+  check("contact: two names with '/' -> first person's first name", nm("TaJae Bodrick / Sam Lee") === "TaJae")
+  check("contact: two names with ';' -> first person", nm("TaJae Bodrick; Sam Lee") === "TaJae")
+  check("contact: two names with '&' -> first person", nm("John Smith & Mary Jones") === "John" && nm("John Smith&Mary Jones") === "John")
+  check("contact: two names with 'and' -> first person", nm("John Smith and Mary Jones") === "John")
+  check("contact: two names with '|' or a new line -> first person", nm("John Smith | Mary Jones") === "John" && nm("John Smith\nMary Jones") === "John")
+  check("contact: two full names separated by a comma -> first person", nm("John Smith, Mary Jones") === "John")
+  check("contact: three or four names -> first person", nm("A One / B Two / C Three") === "A" || nm("Anna One / Bo Two / Cy Three") === "Anna")
+  check("contact: 'Last, First' is turned round", nm("Smith, John") === "John" && nm("SMITH, JOHN") === "John")
+  check("contact: suffix after a comma is dropped", nm("John Smith, Jr.") === "John" && nm("Jane Doe, MD") === "Jane")
+  check("contact: middle names and compound surnames are not read out", nm("Alexander Osman Gulle") === "Alexander" && nm("Antonio De La Garza") === "Antonio")
+  check("contact: hyphenated and apostrophe first names survive", nm("Mary-Ann Smith") === "Mary-Ann" && nm("Pat O'Brien") === "Pat")
+  check("contact: ALL CAPS is read as a name", nm("TAJAE BODRICK") === "Tajae" && nm("MARY-ANN O'BRIEN") === "Mary-Ann" && nm("CASEY ROGER Diaz") === "Casey")
+  check("contact: a name stored in lower case is capitalised, mixed case is kept", nm("cody Lalanne") === "Cody" && nm("jonathan lopez") === "Jonathan" && nm("TaJae Bodrick") === "TaJae" && nm("McKenzie Bay") === "McKenzie")
+  check("contact: titles and a leading initial are skipped", nm("Dr. John Smith") === "John" && nm("J. Edgar Hoover") === "Edgar" && nm("Mrs. Jane Doe") === "Jane")
+  check("contact: names that merely contain 'and' are not split", nm("Alexander Anderson") === "Alexander" && nm("Sandy Landers") === "Sandy")
+  check("contact: stray separators and spaces are ignored", nm("  / John Smith ; ") === "John" && nm("  John   Smith ") === "John")
+  check("contact: nothing usable -> 'there'", nm("") === "there" && nm(null) === "there" && nm("   ") === "there" && nm(" / ; ") === "there")
+  check("contact: the real examples from the leads", nm("James Bennett IV, William Temple") === "James" && nm("William Temple, Maureen Bennett") === "William" && nm("CHRISTI LEA HILL, RICHARD BRYAN HILL") === "Christi" && nm("Christopher James Wakeley, Mark Anthony Wakeley, Kayla Noel Wakeley") === "Christopher")
   check("rep name: a real name is kept", spokenRepName("Ali Shahid") === "Ali Shahid")
   check("rep name: an email address is never spoken", spokenRepName("wetrips.co@gmail.com") === "our Load Linkers team")
   check("rep name: empty -> neutral phrase", spokenRepName("  ") === "our Load Linkers team" && spokenRepName(null) === "our Load Linkers team")
