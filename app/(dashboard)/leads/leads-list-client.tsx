@@ -10,8 +10,9 @@ import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selecto
 import { BulkEmailModal, type BulkRecipient } from "@/components/leads/bulk-email-modal"
 import { ExportMenu } from "@/components/leads/export-menu"
 import { AiCallQueueModal } from "@/components/leads/ai-call-queue-modal"
+import { BulkConsentModal } from "@/components/leads/bulk-consent-modal"
 import { FavoriteButton } from "@/components/leads/favorite-button"
-import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock, Bot, Star } from "lucide-react"
+import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock, Bot, Star, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 import { CallDot, describeCall, type CallDisplayState } from "@/components/leads/call-status"
 import { useNow } from "@/lib/timezone/use-now"
@@ -179,6 +180,7 @@ export function LeadsListClient({
   const [bulkModalOpen, setBulkModalOpen] = useState(false)
   const [aiQueueOpen, setAiQueueOpen] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
+  const [consentOpen, setConsentOpen] = useState(false)
   // Newest first by default: the freshly scraped leads are what you look for.
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
   const [sortMode, setSortMode] = useState<"date" | "callable" | "followup" | "favorites">("date")
@@ -660,6 +662,12 @@ export function LeadsListClient({
               AI call all
             </Button>
             {isAdmin && (
+              <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setConsentOpen(true)}>
+                <ShieldCheck className="size-3.5" />
+                Mark consent
+              </Button>
+            )}
+            {isAdmin && (
               <>
                 <div className="h-4 w-px bg-border" />
                 <select
@@ -692,6 +700,10 @@ export function LeadsListClient({
             </Button>
           </div>
         </div>
+      )}
+
+      {consentOpen && (
+        <BulkConsentModal leadIds={[...selectedIds]} onClose={() => setConsentOpen(false)} onDone={() => {}} />
       )}
 
       {aiQueueOpen && (

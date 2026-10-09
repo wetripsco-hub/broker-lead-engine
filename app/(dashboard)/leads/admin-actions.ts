@@ -85,3 +85,59 @@ export async function deleteLeadPermanently(leadId: string, confirmation: string
   }
   return res
 }
+
+export interface BulkConsentResult {
+  error: string | null
+  marked: number
+  alreadyHad: number
+  skippedDnc: number
+  notFound: number
+}
+
+// Admin-only: records AI-call consent for several leads at once, with the same mandatory
+// source text as the single-lead action. Leads already consented keep their original
+// source/date (not overwritten), and do-not-call leads are never marked.
+export async function markAiCallConsentBulk(leadIds: string[], source: string): Promise<BulkConsentResult> {
+  const empty = { marked: 0, alreadyHad: 0, skippedDnc: 0, notFound: 0 }
+  const text = source.trim()
+  if (!text) return { error: "Say where the consent came from", ...empty }
+  if (text.length > 300) return { error: "Source is too long", ...empty }
+  const ids = [...new Set(leadIds)].filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+  if (ids.length === 0) return { error: "No leads selected", ...empty }
+  if (ids.length > 500) return { error: "Select at most 500 leads at a time", ...empty }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: "Not signed in", ...empty }
+  if (!(await isAdminInDb(createAdminClient(), user.id))) return { error: "admin only", ...empty }
+
+  const { data, error: loadErr } = await (supabase.from("leads") as any)
+    .select("id, ai_call_consent, do_not_call")
+    .in("id", ids)
+  if (loadErr) return { error: loadErr.message, ...empty }
+  const rows = (data ?? []) as Array<{ id: string; ai_call_consent: boolean; do_not_call: boolean }>
+
+  const toMark = rows.filter((r) => !r.ai_call_consent && !r.do_not_call).map((r) => r.id)
+  const result = {
+    marked: 0,
+    alreadyHad: rows.filter((r) => r.ai_call_consent).length,
+    skippedDnc: rows.filter((r) => !r.ai_call_consent && r.do_not_call).length,
+    notFound: ids.length - rows.length,
+  }
+  if (toMark.length > 0) {
+    const { data: done, error } = await (supabase.from("leads") as any)
+      .update({
+        ai_call_consent: true,
+        ai_call_consent_source: text,
+        ai_call_consent_at: new Date().toISOString(),
+      })
+      .in("id", toMark)
+      .select("id")
+    if (error) return { error: error.message, ...result }
+    result.marked = done?.length ?? 0
+  }
+  revalidatePath("/leads")
+  return { error: null, ...result }
+}
