@@ -33,6 +33,8 @@ interface LeadRow {
     // Newly scraped brokers can have no MC number yet (only a DOT).
     mc_number: string | null
     dot_number: string | null
+    // 'active' | 'pending' | 'withdrawn' | 'inactive' | null (not looked up yet)
+    mc_status: string | null
     company_name: string
     contact_name: string | null
     city: string | null
@@ -127,6 +129,16 @@ function LastEmailCell({ info }: { info: FollowUpInfo | undefined }) {
 
 const CALL_RANK: Record<CallDisplayState, number> = { ok: 0, closing: 1, closed: 2, weekend: 3, unknown: 4 }
 
+// MC status as stored by the scraper (lower-case). "unknown" = no status yet.
+const MC_FILTERS: { value: string; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "pending", label: "Pending" },
+  { value: "withdrawn", label: "Withdrawn" },
+  { value: "inactive", label: "Inactive" },
+  { value: "unknown", label: "Unknown" },
+]
+const mcKey = (s: string | null | undefined) => (s ? s.trim().toLowerCase() : "unknown")
+
 const STAGE_FILTERS: { value: LeadStage | "all"; label: string }[] = [
   { value: "all",        label: "All" },
   { value: "new",        label: "New" },
@@ -157,6 +169,7 @@ export function LeadsListClient({
 }) {
   const [stageFilter, setStageFilter] = useState<LeadStage | "all">("all")
   const [agentFilter, setAgentFilter] = useState<string>("all") // "all" | "unassigned" | agentId
+  const [mcFilter, setMcFilter] = useState<string>("all") // "all" | "active" | "pending" | ...
   const [search, setSearch] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkModalOpen, setBulkModalOpen] = useState(false)
@@ -197,6 +210,12 @@ export function LeadsListClient({
     return map
   }, [tzByLead, nowDate])
 
+  const mcCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const l of leads) m.set(mcKey(l.brokers?.mc_status), (m.get(mcKey(l.brokers?.mc_status)) ?? 0) + 1)
+    return m
+  }, [leads])
+
   const followUpCount = leads.filter((l) => followUpByLead[l.id]?.due).length
 
   const callableCount = callByLead
@@ -208,6 +227,7 @@ export function LeadsListClient({
     // "Callable now" = green only (inside the window, not about to close).
     if (followUpOnly && !followUpByLead[l.id]?.due) return false
     if (callableOnly && callByLead?.get(l.id)?.status.state !== "ok") return false
+    if (mcFilter !== "all" && mcKey(l.brokers?.mc_status) !== mcFilter) return false
     if (agentFilter === "unassigned" && l.assigned_agent_id !== null) return false
     if (agentFilter !== "all" && agentFilter !== "unassigned" && l.assigned_agent_id !== agentFilter) return false
     if (search) {
@@ -314,6 +334,19 @@ export function LeadsListClient({
             </Button>
           ))}
         </div>
+        <select
+          value={mcFilter}
+          onChange={(e) => setMcFilter(e.target.value)}
+          aria-label="Filter by MC status"
+          className="h-8 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="all">All MC statuses</option>
+          {MC_FILTERS.filter((f) => (mcCounts.get(f.value) ?? 0) > 0 || f.value === mcFilter).map((f) => (
+            <option key={f.value} value={f.value}>
+              MC {f.label} ({mcCounts.get(f.value) ?? 0})
+            </option>
+          ))}
+        </select>
         {isAdmin && (
           <select
             value={agentFilter}
@@ -376,6 +409,7 @@ export function LeadsListClient({
               filters={{
                 stage: stageFilter,
                 agent: agentFilter,
+                mc_status: mcFilter,
                 search,
                 callable_now: callableOnly,
                 follow_up_due: followUpOnly,

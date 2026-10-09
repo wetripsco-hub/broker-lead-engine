@@ -8,6 +8,7 @@ import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selecto
 import { EmailCompose } from "@/components/leads/email-compose"
 import { FollowUpBanner } from "@/components/leads/follow-up-banner"
 import { AiCallControls } from "@/components/leads/ai-call-controls"
+import { LeadAdminActions } from "@/components/leads/lead-admin-actions"
 import { getFollowUps } from "@/lib/follow-up/query"
 import { formatPhoneDisplay, isValidPhone, toE164 } from "@/lib/phone"
 import { loadAiCallSettings } from "@/lib/voice-agents/settings"
@@ -290,6 +291,25 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               <StageSelector leadId={lead.id} stage={lead.stage} />
             ) : (
               <StageBadge stage={lead.stage} />
+            )}
+            {/* Admin only: any admin can edit or delete. The server re-checks the role in the database. */}
+            {isAdmin && b && (
+              <LeadAdminActions
+                leadId={lead.id}
+                eventCount={events.length}
+                broker={{
+                  company_name: b.company_name,
+                  contact_name: b.contact_name,
+                  email: b.email,
+                  phone: b.phone,
+                  address_line1: b.address_line1,
+                  city: b.city,
+                  state: b.state,
+                  zip: b.zip,
+                  mc_number: b.mc_number,
+                  dot_number: b.dot_number,
+                }}
+              />
             )}
           </div>
         </div>
