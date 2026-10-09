@@ -23,7 +23,7 @@ import {
   formatLocalTime,
   type CallStatus,
 } from "@/lib/timezone/broker-time"
-import { bulkAssignLeads } from "./actions"
+import { bulkAssignLeads, bulkUpdateStage } from "./actions"
 import type { FollowUpInfo } from "@/lib/follow-up/compute"
 import type { LeadStage } from "@/types/database"
 
@@ -181,6 +181,7 @@ export function LeadsListClient({
   const [aiQueueOpen, setAiQueueOpen] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
   const [consentOpen, setConsentOpen] = useState(false)
+  const [isSettingStage, setIsSettingStage] = useState(false)
   // Newest first by default: the freshly scraped leads are what you look for.
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
   const [sortMode, setSortMode] = useState<"date" | "callable" | "followup" | "favorites">("date")
@@ -661,6 +662,29 @@ export function LeadsListClient({
               <Bot className="size-3.5" />
               AI call all
             </Button>
+            <select
+              defaultValue=""
+              disabled={isSettingStage}
+              onChange={async (e) => {
+                const stage = e.target.value as LeadStage
+                e.target.value = ""
+                if (!stage) return
+                setIsSettingStage(true)
+                const { error, updated } = await bulkUpdateStage([...selectedIds], stage)
+                if (error) toast.error(`Failed to update status: ${error}`)
+                else toast.success(`${updated} lead${updated === 1 ? "" : "s"} set to ${stage}`)
+                setIsSettingStage(false)
+              }}
+              className="h-8 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              aria-label="Set status for selected leads"
+            >
+              <option value="" disabled>Set status…</option>
+              <option value="new">New</option>
+              <option value="contacted">Contacted</option>
+              <option value="interested">Interested</option>
+              <option value="converted">Converted</option>
+              <option value="dead">Dead</option>
+            </select>
             {isAdmin && (
               <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setConsentOpen(true)}>
                 <ShieldCheck className="size-3.5" />

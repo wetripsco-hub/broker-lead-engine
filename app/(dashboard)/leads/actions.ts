@@ -102,3 +102,24 @@ export async function snoozeFollowUp(leadId: string, days: number) {
   revalidatePath("/dashboard")
   return { error: null }
 }
+
+const STAGES: LeadStage[] = ["new", "contacted", "interested", "converted", "dead"]
+
+// Sets the stage on several leads at once. Row-level security limits agents to their own
+// leads; `updated` is how many rows actually changed.
+export async function bulkUpdateStage(leadIds: string[], stage: LeadStage) {
+  if (!STAGES.includes(stage)) return { error: "Invalid stage", updated: 0 }
+  const ids = [...new Set(leadIds)]
+  if (ids.length === 0) return { error: "No leads selected", updated: 0 }
+  if (ids.length > 500) return { error: "Select at most 500 leads at a time", updated: 0 }
+
+  const supabase = await createClient()
+  const { data, error } = (await (supabase.from("leads") as any).update({ stage }).in("id", ids).select("id")) as {
+    data: Array<{ id: string }> | null
+    error: { message: string } | null
+  }
+  if (error) return { error: error.message, updated: 0 }
+  revalidatePath("/leads")
+  revalidatePath("/dashboard")
+  return { error: null, updated: data?.length ?? 0 }
+}
