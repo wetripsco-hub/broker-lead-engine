@@ -9,6 +9,7 @@ import { EmailCompose } from "@/components/leads/email-compose"
 import { FollowUpBanner } from "@/components/leads/follow-up-banner"
 import { AiCallControls } from "@/components/leads/ai-call-controls"
 import { LeadAdminActions } from "@/components/leads/lead-admin-actions"
+import { FavoriteButton } from "@/components/leads/favorite-button"
 import { getFollowUps } from "@/lib/follow-up/query"
 import { formatPhoneDisplay, isValidPhone, toE164 } from "@/lib/phone"
 import { loadAiCallSettings } from "@/lib/voice-agents/settings"
@@ -210,6 +211,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   }>
 
   const followUp = (await getFollowUps(supabase, lead.id))[lead.id]
+  // Personal star; if the favorites migration isn't run yet this is simply empty.
+  const { data: favRow } = await (supabase.from("lead_favorites") as any).select("lead_id").eq("lead_id", lead.id).maybeSingle()
+  const isFavorite = !!favRow
   // Events are newest-first, so the first sent outbound email is the latest.
   const previousSubject =
     events.find((e) => e.channel === "email" && e.direction === "outbound" && e.status !== "failed" && e.status !== "pending")
@@ -238,8 +242,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         {/* Title row, then the actions on their own row when they don't fit beside it. */}
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
           <div className="min-w-0 flex-1 basis-72">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {b?.company_name ?? "Unknown broker"}
+            <h1 className="flex items-start gap-1.5 text-2xl font-semibold tracking-tight">
+              <FavoriteButton leadId={lead.id} favorite={isFavorite} size="md" className="mt-1 -ml-1" />
+              <span>{b?.company_name ?? "Unknown broker"}</span>
             </h1>
             {b?.dba_name && (
               <p className="text-sm text-muted-foreground mt-0.5">dba {b.dba_name}</p>

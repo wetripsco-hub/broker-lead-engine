@@ -10,7 +10,8 @@ import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selecto
 import { BulkEmailModal, type BulkRecipient } from "@/components/leads/bulk-email-modal"
 import { ExportMenu } from "@/components/leads/export-menu"
 import { AiCallQueueModal } from "@/components/leads/ai-call-queue-modal"
-import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock, Bot } from "lucide-react"
+import { FavoriteButton } from "@/components/leads/favorite-button"
+import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock, Bot, Star } from "lucide-react"
 import { toast } from "sonner"
 import { CallDot, describeCall, type CallDisplayState } from "@/components/leads/call-status"
 import { useNow } from "@/lib/timezone/use-now"
@@ -157,6 +158,7 @@ export function LeadsListClient({
   emailStatusByLead,
   allAgents,
   followUpByLead,
+  favoriteIds,
   initialFollowUpOnly,
 }: {
   leads: LeadRow[]
@@ -166,6 +168,7 @@ export function LeadsListClient({
   emailStatusByLead: Record<string, EmailStatusInfo>
   allAgents: Array<{ id: string; name: string }>
   followUpByLead: Record<string, FollowUpInfo>
+  favoriteIds: string[]
   initialFollowUpOnly: boolean
 }) {
   const [stageFilter, setStageFilter] = useState<LeadStage | "all">("all")
@@ -178,9 +181,19 @@ export function LeadsListClient({
   const [isAssigning, setIsAssigning] = useState(false)
   // Newest first by default: the freshly scraped leads are what you look for.
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
-  const [sortMode, setSortMode] = useState<"date" | "callable" | "followup">("date")
+  const [sortMode, setSortMode] = useState<"date" | "callable" | "followup" | "favorites">("date")
   const [callableOnly, setCallableOnly] = useState(false)
   const [followUpOnly, setFollowUpOnly] = useState(initialFollowUpOnly)
+  // The signed-in user's stars (personal). Updated instantly when a star is clicked.
+  const [favorites, setFavorites] = useState<Set<string>>(() => new Set(favoriteIds))
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const setFavorite = (id: string, on: boolean) =>
+    setFavorites((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(id)
+      else next.delete(id)
+      return next
+    })
   // Relative ages and local times depend on the current time, so they're
   // filled in after mount (null until then) — rendering them on the server
   // would mismatch on hydration. A 30s tick is plenty: nothing here shows
@@ -218,6 +231,8 @@ export function LeadsListClient({
     return m
   }, [leads])
 
+  const favoriteCount = leads.filter((l) => favorites.has(l.id)).length
+
   const followUpCount = leads.filter((l) => followUpByLead[l.id]?.due).length
 
   const callableCount = callByLead
@@ -228,6 +243,7 @@ export function LeadsListClient({
     if (stageFilter !== "all" && l.stage !== stageFilter) return false
     // "Callable now" = green only (inside the window, not about to close).
     if (followUpOnly && !followUpByLead[l.id]?.due) return false
+    if (favoritesOnly && !favorites.has(l.id)) return false
     if (callableOnly && callByLead?.get(l.id)?.status.state !== "ok") return false
     if (mcFilter !== "all" && mcKey(l.brokers?.mc_status) !== mcFilter) return false
     if (agentFilter === "unassigned" && l.assigned_agent_id !== null) return false
@@ -249,6 +265,10 @@ export function LeadsListClient({
   })
 
   const filtered = [...matching].sort((a, b) => {
+    if (sortMode === "favorites") {
+      const d = Number(favorites.has(b.id)) - Number(favorites.has(a.id))
+      return d !== 0 ? d : b.created_at.localeCompare(a.created_at) // newest first within each group
+    }
     if (sortMode === "followup") {
       // Most overdue first; leads with nothing due fall to the bottom.
       const da = followUpByLead[a.id]?.due ? followUpByLead[a.id].days : -1
@@ -379,6 +399,20 @@ export function LeadsListClient({
         </button>
         <button
           type="button"
+          aria-pressed={favoritesOnly}
+          onClick={() => setFavoritesOnly((v) => !v)}
+          title="Only the leads you have starred"
+          className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-[background-color,color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
+            favoritesOnly
+              ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+              : "border-input hover:bg-muted"
+          }`}
+        >
+          <Star className={`size-3.5 ${favoritesOnly ? "fill-amber-400 text-amber-500" : ""}`} />
+          Favorites ({favoriteCount})
+        </button>
+        <button
+          type="button"
           aria-pressed={followUpOnly}
           onClick={() => setFollowUpOnly((v) => !v)}
           title="Emailed with no reply yet"
@@ -393,13 +427,14 @@ export function LeadsListClient({
         </button>
         <select
           value={sortMode}
-          onChange={(e) => setSortMode(e.target.value as "date" | "callable" | "followup")}
+          onChange={(e) => setSortMode(e.target.value as "date" | "callable" | "followup" | "favorites")}
           className="h-8 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           aria-label="Sort leads"
         >
           <option value="date">Sort: Date added</option>
           <option value="callable">Sort: Callable now first</option>
           <option value="followup">Sort: Follow-up overdue first</option>
+          <option value="favorites">Sort: Favorites first</option>
         </select>
         <div className="flex items-center gap-1 ml-auto">
           {/* Admin only. The API re-checks the role in the database. */}
@@ -415,6 +450,7 @@ export function LeadsListClient({
                 search,
                 callable_now: callableOnly,
                 follow_up_due: followUpOnly,
+                favorites_only: favoritesOnly,
               }}
             />
           )}
@@ -509,6 +545,13 @@ export function LeadsListClient({
                     className="relative z-10 size-3.5 cursor-pointer"
                     aria-label={`Select ${b?.company_name ?? "lead"}`}
                   />
+                  <div className="pointer-events-none flex min-w-0 items-start gap-1">
+                    <FavoriteButton
+                      leadId={lead.id}
+                      favorite={favorites.has(lead.id)}
+                      onChange={(on) => setFavorite(lead.id, on)}
+                      className="pointer-events-auto relative z-10 -ml-1 mt-0.5"
+                    />
                   <div className="min-w-0 pointer-events-none">
                     <p className="font-medium truncate text-sm">{b?.company_name ?? "—"}</p>
                     <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -521,6 +564,7 @@ export function LeadsListClient({
                         </span>
                       )}
                     </p>
+                  </div>
                   </div>
                   <div className="min-w-0 pointer-events-none leading-tight">
                     <p className="text-sm text-muted-foreground truncate">

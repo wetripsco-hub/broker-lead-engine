@@ -41,6 +41,11 @@ export default async function LeadsPage({
 
   const followUpByLead = await getFollowUps(supabase)
 
+  // This user's stars. If the favorites migration hasn't been run the query just
+  // errors and the list shows no stars, instead of breaking the page.
+  const { data: favRaw } = await (supabase.from("lead_favorites") as any).select("lead_id")
+  const favoriteIds = ((favRaw ?? []) as Array<{ lead_id: string }>).map((f) => f.lead_id)
+
   const { data: myAgentRaw } = await supabase
     .from("agents")
     .select("name")
@@ -85,6 +90,7 @@ export default async function LeadsPage({
         emailStatusByLead={emailStatusByLead}
         allAgents={allAgents}
         followUpByLead={followUpByLead}
+        favoriteIds={favoriteIds}
         initialFollowUpOnly={filter === "followup"}
       />
     </div>
