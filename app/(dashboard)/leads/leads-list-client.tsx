@@ -8,6 +8,7 @@ import { StageBadge } from "@/components/leads/stage-badge"
 import { StageSelector } from "@/components/leads/stage-selector"
 import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selector"
 import { BulkEmailModal, type BulkRecipient } from "@/components/leads/bulk-email-modal"
+import { ExportMenu } from "@/components/leads/export-menu"
 import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock } from "lucide-react"
 import { toast } from "sonner"
 import { CallDot, describeCall, type CallDisplayState } from "@/components/leads/call-status"
@@ -365,28 +366,45 @@ export function LeadsListClient({
           <option value="callable">Sort: Callable now first</option>
           <option value="followup">Sort: Follow-up overdue first</option>
         </select>
-        {filtered.length > 0 && (
-          <div className="flex items-center gap-1 ml-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs px-3"
-              onClick={selectAll}
-              disabled={allFilteredSelected}
-            >
-              Select all
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs px-3"
-              onClick={deselectAll}
-              disabled={selectedIds.size === 0}
-            >
-              Deselect all
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-1 ml-auto">
+          {/* Admin only. The API re-checks the role in the database. */}
+          {isAdmin && (
+            <ExportMenu
+              totalCount={leads.length}
+              filteredIds={filtered.map((l) => l.id)}
+              selectedIds={[...selectedIds]}
+              filters={{
+                stage: stageFilter,
+                agent: agentFilter,
+                search,
+                callable_now: callableOnly,
+                follow_up_due: followUpOnly,
+              }}
+            />
+          )}
+          {filtered.length > 0 && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs px-3"
+                onClick={selectAll}
+                disabled={allFilteredSelected}
+              >
+                Select all
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs px-3"
+                onClick={deselectAll}
+                disabled={selectedIds.size === 0}
+              >
+                Deselect all
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Table */}
