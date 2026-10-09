@@ -536,15 +536,29 @@ export function LeadsListClient({
                   }`}
                   style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
                 >
-                  <Link href={`/leads/${lead.id}`} className="absolute inset-0" aria-label={b?.company_name ?? "View lead"} />
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleOne(lead.id)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="relative z-10 size-3.5 cursor-pointer"
-                    aria-label={`Select ${b?.company_name ?? "lead"}`}
+                  <Link
+                    href={`/leads/${lead.id}`}
+                    className="absolute inset-0"
+                    aria-label={b?.company_name ?? "View lead"}
+                    onClick={(e) => {
+                      // While selecting, a click anywhere on the row toggles it instead of
+                      // opening the lead, so a slightly missed tick box never navigates away.
+                      if (selectedIds.size > 0) {
+                        e.preventDefault()
+                        toggleOne(lead.id)
+                      }
+                    }}
                   />
+                  {/* Padded hit area around the tick box (negative margin keeps the layout). */}
+                  <label className="relative z-10 -m-3 flex cursor-pointer items-center justify-center p-3">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleOne(lead.id)}
+                      className="size-3.5 cursor-pointer"
+                      aria-label={`Select ${b?.company_name ?? "lead"}`}
+                    />
+                  </label>
                   <div className="pointer-events-none flex min-w-0 items-start gap-1">
                     <FavoriteButton
                       leadId={lead.id}
