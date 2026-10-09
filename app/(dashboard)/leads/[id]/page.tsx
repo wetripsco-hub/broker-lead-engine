@@ -235,8 +235,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           <ArrowLeft className="size-3.5" />
           Back to leads
         </Link>
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        {/* Title row, then the actions on their own row when they don't fit beside it. */}
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="min-w-0 flex-1 basis-72">
             <h1 className="text-2xl font-semibold tracking-tight">
               {b?.company_name ?? "Unknown broker"}
             </h1>
@@ -255,7 +256,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <div className="flex flex-wrap items-start gap-2">
             <CallButton
               leadId={lead.id}
               agentId={myAgent?.id ?? ""}
@@ -287,6 +288,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               testHoursExempt={isTestModeExempt(aiSettings, aiTo)}
               canOverrideHours={isAdmin && aiSettings.allowAdminHoursOverride}
             />
+            <span className="mx-1 hidden h-8 w-px bg-border sm:block" aria-hidden />
             {isAdmin ? (
               <StageSelector leadId={lead.id} stage={lead.stage} />
             ) : (

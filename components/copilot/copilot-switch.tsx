@@ -17,7 +17,7 @@ export function CopilotSwitch({
       role="switch"
       aria-checked={on}
       onClick={() => onChange(!on)}
-      className="inline-flex items-center gap-2 text-xs text-muted-foreground transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97]"
+      className="inline-flex h-8 items-center gap-2 text-xs text-muted-foreground transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97]"
     >
       <span className={on ? "font-medium text-foreground" : ""}>{label}</span>
       <span

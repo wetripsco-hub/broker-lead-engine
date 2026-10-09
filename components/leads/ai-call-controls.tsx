@@ -119,7 +119,7 @@ export function AiCallControls(p: AiCallControlsProps) {
   const chip = p.latestCallStatus ? CHIP[p.latestCallStatus] : null
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex flex-col items-start gap-1">
       <div className="flex items-center gap-2">
         {chip && (
           <span
