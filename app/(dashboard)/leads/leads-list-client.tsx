@@ -9,7 +9,8 @@ import { StageSelector } from "@/components/leads/stage-selector"
 import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selector"
 import { BulkEmailModal, type BulkRecipient } from "@/components/leads/bulk-email-modal"
 import { ExportMenu } from "@/components/leads/export-menu"
-import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock } from "lucide-react"
+import { AiCallQueueModal } from "@/components/leads/ai-call-queue-modal"
+import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock, Bot } from "lucide-react"
 import { toast } from "sonner"
 import { CallDot, describeCall, type CallDisplayState } from "@/components/leads/call-status"
 import { useNow } from "@/lib/timezone/use-now"
@@ -173,6 +174,7 @@ export function LeadsListClient({
   const [search, setSearch] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkModalOpen, setBulkModalOpen] = useState(false)
+  const [aiQueueOpen, setAiQueueOpen] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
   // Newest first by default: the freshly scraped leads are what you look for.
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
@@ -595,6 +597,10 @@ export function LeadsListClient({
               <Mail className="size-3.5" />
               {followUpOnly ? "Send follow-up" : "Send email"}
             </Button>
+            <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setAiQueueOpen(true)}>
+              <Bot className="size-3.5" />
+              AI call all
+            </Button>
             {isAdmin && (
               <>
                 <div className="h-4 w-px bg-border" />
@@ -628,6 +634,15 @@ export function LeadsListClient({
             </Button>
           </div>
         </div>
+      )}
+
+      {aiQueueOpen && (
+        <AiCallQueueModal
+          leads={leads
+            .filter((l) => selectedIds.has(l.id))
+            .map((l) => ({ leadId: l.id, label: l.brokers?.company_name ?? "Unknown broker" }))}
+          onClose={() => setAiQueueOpen(false)}
+        />
       )}
 
       {bulkModalOpen && (
