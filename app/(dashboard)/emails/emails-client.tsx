@@ -143,6 +143,8 @@ export function EmailsClient({
   const [addingLead, setAddingLead] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // Conversations ticked for bulk delete (admin only), by thread key.
+  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set())
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const threads = useMemo(() => buildThreads(events), [events])
@@ -251,6 +253,39 @@ It is only removed here, not from the mailbox. This cannot be undone.`,
     setDeleting(false)
   }
 
+  const checkedThreads = filtered.filter((t) => checkedKeys.has(t.key))
+  const allFilteredChecked = filtered.length > 0 && filtered.every((t) => checkedKeys.has(t.key))
+
+  function toggleChecked(key: string) {
+    setCheckedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  async function handleDeleteChecked() {
+    if (checkedThreads.length === 0 || deleting) return
+    const ids = checkedThreads.flatMap((t) => t.events.map((e) => e.id))
+    const ok = window.confirm(
+      `Delete ${checkedThreads.length} conversation${checkedThreads.length === 1 ? "" : "s"} (${ids.length} message${ids.length === 1 ? "" : "s"}) from the CRM?
+
+They are only removed here, not from the mailbox. This cannot be undone.`,
+    )
+    if (!ok) return
+    setDeleting(true)
+    const { error, deleted } = await deleteEmailEvents(ids)
+    if (error) toast.error(`Failed to delete: ${error}`)
+    else {
+      toast.success(`Deleted ${deleted} message${deleted === 1 ? "" : "s"}`)
+      setEvents((prev) => prev.filter((e) => !ids.includes(e.id)))
+      if (selectedKey && checkedKeys.has(selectedKey)) setSelectedKey(null)
+      setCheckedKeys(new Set())
+    }
+    setDeleting(false)
+  }
+
   async function handleSync() {
     setSyncing(true)
     const r = await syncEmailNow()
@@ -318,6 +353,33 @@ It is only removed here, not from the mailbox. This cannot be undone.`,
               Sync now
             </Button>
           </div>
+          {isAdmin && filtered.length > 0 && (
+            <div className="flex items-center gap-2 text-xs">
+              <label className="flex cursor-pointer items-center gap-1.5 text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="size-3.5 cursor-pointer"
+                  checked={allFilteredChecked}
+                  onChange={() =>
+                    setCheckedKeys(allFilteredChecked ? new Set() : new Set(filtered.map((t) => t.key)))
+                  }
+                />
+                Select all
+              </label>
+              {checkedThreads.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto h-7 gap-1.5 px-2.5 text-xs text-destructive hover:text-destructive"
+                  onClick={handleDeleteChecked}
+                  disabled={deleting}
+                >
+                  <Trash2 className="size-3" />
+                  {deleting ? "Deleting…" : `Delete (${checkedThreads.length})`}
+                </Button>
+              )}
+            </div>
+          )}
           <p className="text-[11px] text-muted-foreground">
             {!imapConfigured
               ? isAdmin
@@ -343,12 +405,26 @@ It is only removed here, not from the mailbox. This cannot be undone.`,
             filtered.map((t) => {
               const unread = t.unreadCount > 0
               return (
-                <button
+                <div
                   key={t.key}
-                  onClick={() => selectThread(t)}
-                  className={`w-full flex items-start gap-2.5 px-3 py-3 border-b text-left transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/40 ${
-                    t.key === selectedKey ? "bg-accent" : ""
+                  className={`flex items-start border-b transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/40 ${
+                    t.key === selectedKey ? "bg-accent" : checkedKeys.has(t.key) ? "bg-accent/40" : ""
                   }`}
+                >
+                {isAdmin && (
+                  <label className="-mr-1 flex cursor-pointer items-center self-stretch pl-3 pr-1">
+                    <input
+                      type="checkbox"
+                      className="size-3.5 cursor-pointer"
+                      checked={checkedKeys.has(t.key)}
+                      onChange={() => toggleChecked(t.key)}
+                      aria-label={`Select ${t.displayName}`}
+                    />
+                  </label>
+                )}
+                <button
+                  onClick={() => selectThread(t)}
+                  className="flex min-w-0 flex-1 items-start gap-2.5 px-3 py-3 text-left"
                 >
                   <div className="size-9 rounded-full bg-muted flex items-center justify-center shrink-0 text-sm font-medium">
                     {t.displayName.trim()[0]?.toUpperCase() ?? "#"}
@@ -373,6 +449,7 @@ It is only removed here, not from the mailbox. This cannot be undone.`,
                     </div>
                   </div>
                 </button>
+                </div>
               )
             })
           )}
