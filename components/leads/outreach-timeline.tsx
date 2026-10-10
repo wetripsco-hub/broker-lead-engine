@@ -164,6 +164,9 @@ function AiCallDetails({ ev }: { ev: TimelineEvent }) {
         )}
       </div>
       {ev.ai_summary && <p>{ev.ai_summary}</p>}
+      {ev.call_status === "ended" && ev.status === "no_answer" && !ev.transcript && !ev.ai_summary && (
+        <p>Nobody spoke on this call (not picked up, voicemail, or no audio). The AI did not get to talk.</p>
+      )}
       {(ev.follow_up_date || ev.ai_callback_time) && (
         <p className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-800 dark:text-amber-300">
           Suggested follow-up: {ev.follow_up_date ?? ev.ai_callback_time}
@@ -241,7 +244,9 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
                       {ev.channel === "email" && isInbound
                         ? "Received"
                         : ev.channel === "ai_call"
-                          ? AI_CALL_STATUS_LABEL[ev.call_status ?? ""] ?? STATUS_LABEL[ev.status]
+                          ? ev.call_status === "ended"
+                            ? STATUS_LABEL[ev.status] // finished: show the outcome (Answered / No answer / Failed)
+                            : AI_CALL_STATUS_LABEL[ev.call_status ?? ""] ?? STATUS_LABEL[ev.status]
                           : STATUS_LABEL[ev.status]}
                     </span>
                   </div>
