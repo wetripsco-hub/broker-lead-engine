@@ -164,6 +164,16 @@ function LastEmailCell({ info }: { info: FollowUpInfo | undefined }) {
   )
 }
 
+// Column sorts (click a column header). Text columns start A→Z; the rest start with the
+// biggest / newest first. Leads with nothing in that column always sink to the bottom.
+type ColumnKey = "company" | "location" | "email" | "lastEmail" | "aiCall" | "agent" | "stage"
+type SortMode = "date" | "callable" | "followup" | "favorites" | ColumnKey
+const COLUMN_KEYS: ColumnKey[] = ["company", "location", "email", "lastEmail", "aiCall", "agent", "stage"]
+const isColumnSort = (m: SortMode): m is ColumnKey => (COLUMN_KEYS as string[]).includes(m)
+const TEXT_COLUMNS: ColumnKey[] = ["company", "location", "agent"]
+const EMAIL_RANK: Record<string, number> = { failed: 0, pending: 1, sent: 2, delivered: 3, opened: 4, clicked: 5 }
+const STAGE_RANK: Record<LeadStage, number> = { new: 0, contacted: 1, interested: 2, converted: 3, dead: 4 }
+
 const CALL_RANK: Record<CallDisplayState, number> = { ok: 0, closing: 1, closed: 2, weekend: 3, unknown: 4 }
 
 // MC status as stored by the scraper (lower-case). "unknown" = no status yet.
@@ -220,7 +230,7 @@ export function LeadsListClient({
   const [isSettingStage, setIsSettingStage] = useState(false)
   // Newest first by default: the freshly scraped leads are what you look for.
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
-  const [sortMode, setSortMode] = useState<"date" | "callable" | "followup" | "favorites">("date")
+  const [sortMode, setSortMode] = useState<SortMode>("date")
   const [callableOnly, setCallableOnly] = useState(false)
   const [followUpOnly, setFollowUpOnly] = useState(initialFollowUpOnly)
   // The signed-in user's stars (personal). Updated instantly when a star is clicked.
@@ -321,9 +331,63 @@ export function LeadsListClient({
       if (r !== 0) return r
       return b.created_at.localeCompare(a.created_at) // newest first within a group
     }
+    if (isColumnSort(sortMode)) {
+      const key = (l: LeadRow): string | number | null => {
+        const br = l.brokers
+        switch (sortMode) {
+          case "company": return br?.company_name?.trim().toLowerCase() || null
+          case "location": {
+            const loc = [br?.state, br?.city].filter(Boolean).join(" ").trim().toLowerCase()
+            return loc || null
+          }
+          case "email": {
+            const st = emailStatusByLead[l.id]?.status
+            return st ? (EMAIL_RANK[st] ?? 0) : null
+          }
+          case "lastEmail": {
+            const f = followUpByLead[l.id]
+            return f ? new Date(f.lastEmailAt).getTime() : null
+          }
+          case "aiCall": {
+            const c = aiCallByLead[l.id]
+            return c ? new Date(c.at).getTime() : null
+          }
+          case "agent": return l.agents?.name?.trim().toLowerCase() || null
+          case "stage": return STAGE_RANK[l.stage] ?? null
+        }
+      }
+      const ka = key(a)
+      const kb = key(b)
+      if (ka === null && kb === null) return b.created_at.localeCompare(a.created_at)
+      if (ka === null) return 1
+      if (kb === null) return -1
+      const c = typeof ka === "string" ? ka.localeCompare(kb as string) : ka - (kb as number)
+      if (c !== 0) return sortDir === "desc" ? -c : c
+      return b.created_at.localeCompare(a.created_at)
+    }
     const d = a.created_at.localeCompare(b.created_at)
     return sortDir === "desc" ? -d : d
   })
+
+  function sortByColumn(col: ColumnKey) {
+    if (sortMode === col) setSortDir((d) => (d === "desc" ? "asc" : "desc"))
+    else {
+      setSortMode(col)
+      setSortDir(TEXT_COLUMNS.includes(col) ? "asc" : "desc")
+    }
+  }
+
+  const sortHeader = (col: ColumnKey, label: string) => (
+    <button
+      type="button"
+      onClick={() => sortByColumn(col)}
+      className="flex w-fit items-center gap-1 uppercase tracking-wide hover:text-foreground"
+      title={`Sort by ${label.toLowerCase()}`}
+    >
+      {label}
+      {sortMode === col && (sortDir === "desc" ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
+    </button>
+  )
 
   function toggleOne(id: string) {
     setSelectedIds((prev) => {
@@ -465,11 +529,20 @@ export function LeadsListClient({
           Follow-up ({followUpCount})
         </button>
         <select
-          value={sortMode}
-          onChange={(e) => setSortMode(e.target.value as "date" | "callable" | "followup" | "favorites")}
+          value={isColumnSort(sortMode) ? "__column" : sortMode}
+          onChange={(e) => {
+            const v = e.target.value as SortMode
+            setSortMode(v)
+            if (v === "date") setSortDir("desc")
+          }}
           className="h-8 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           aria-label="Sort leads"
         >
+          {isColumnSort(sortMode) && (
+            <option value="__column" disabled hidden>
+              Sort: by column
+            </option>
+          )}
           <option value="date">Sort: Date added</option>
           <option value="callable">Sort: Callable now first</option>
           <option value="followup">Sort: Follow-up overdue first</option>
@@ -541,13 +614,15 @@ export function LeadsListClient({
                 className="size-3.5 cursor-pointer"
                 aria-label="Select all"
               />
-              <span>Company</span>
-              <span>Location</span>
+              {sortHeader("company", "Company")}
+              {sortHeader("location", "Location")}
               <button
                 type="button"
                 onClick={() => {
-                  if (sortMode !== "date") setSortMode("date")
-                  else setSortDir((d) => (d === "desc" ? "asc" : "desc"))
+                  if (sortMode !== "date") {
+                    setSortMode("date")
+                    setSortDir("desc")
+                  } else setSortDir((d) => (d === "desc" ? "asc" : "desc"))
                 }}
                 className="flex items-center gap-1 uppercase tracking-wide hover:text-foreground w-fit"
                 title={sortDir === "desc" ? "Newest first — click for oldest first" : "Oldest first — click for newest first"}
@@ -556,11 +631,11 @@ export function LeadsListClient({
                 {sortMode === "date" &&
                   (sortDir === "desc" ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
               </button>
-              <span>Email Status</span>
-              <span>Last email</span>
-              <span>AI call</span>
-              {isAdmin && <span>Agent</span>}
-              <span>Stage</span>
+              {sortHeader("email", "Email Status")}
+              {sortHeader("lastEmail", "Last email")}
+              {sortHeader("aiCall", "AI call")}
+              {isAdmin && sortHeader("agent", "Agent")}
+              {sortHeader("stage", "Stage")}
               <span />
             </div>
             {filtered.map((lead, i) => {
