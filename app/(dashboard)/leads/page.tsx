@@ -69,6 +69,24 @@ export default async function LeadsPage({
     emailStatusByLead[e.lead_id] = { status: e.status, openCount: e.open_count ?? 0, clickCount: e.click_count ?? 0 }
   }
 
+  // Latest AI call per lead, for the "AI call" column. Read separately and tolerant: if the
+  // AI-calling columns aren't there the list simply shows no AI results.
+  const { data: aiEventsRaw } = await (supabase.from("outreach_events") as any)
+    .select("lead_id, status, call_status, disposition, duration_seconds, occurred_at")
+    .eq("channel", "ai_call")
+    .order("occurred_at", { ascending: false })
+  const aiCallByLead: Record<string, { status: string; callStatus: string | null; disposition: string | null; seconds: number | null; at: string }> = {}
+  for (const e of (aiEventsRaw ?? []) as any[]) {
+    if (!e.lead_id || aiCallByLead[e.lead_id]) continue
+    aiCallByLead[e.lead_id] = {
+      status: e.status,
+      callStatus: e.call_status ?? null,
+      disposition: e.disposition ?? null,
+      seconds: e.duration_seconds ?? null,
+      at: e.occurred_at,
+    }
+  }
+
   // Full agent roster for the assignment dropdown + "by agent" filter — admin only
   let allAgents: Array<{ id: string; name: string }> = []
   if (isAdmin) {
@@ -81,13 +99,14 @@ export default async function LeadsPage({
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto">
       <LeadsListClient
         leads={leads}
         isAdmin={isAdmin}
         templates={templates}
         currentAgentName={currentAgentName}
         emailStatusByLead={emailStatusByLead}
+        aiCallByLead={aiCallByLead}
         allAgents={allAgents}
         followUpByLead={followUpByLead}
         favoriteIds={favoriteIds}

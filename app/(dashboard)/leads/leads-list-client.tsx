@@ -97,8 +97,42 @@ function EmailStatusCell({ info }: { info: EmailStatusInfo | undefined }) {
 
 // The agent view has no Agent column, so it needs its own track list — a
 // fixed template with one column too many pushes everything after it over.
-const GRID_ADMIN = "grid-cols-[28px_1fr_140px_100px_110px_110px_180px_100px_32px]"
-const GRID_AGENT = "grid-cols-[28px_1fr_140px_100px_110px_110px_100px_32px]"
+const GRID_ADMIN = "grid-cols-[28px_1fr_140px_100px_110px_110px_100px_180px_100px_32px]"
+const GRID_AGENT = "grid-cols-[28px_1fr_140px_100px_110px_110px_100px_100px_32px]"
+
+interface AiCallInfo {
+  status: string
+  callStatus: string | null
+  disposition: string | null
+  seconds: number | null
+  at: string
+}
+
+// The last AI call's outcome, in one short badge.
+function aiCallLabel(i: AiCallInfo): { text: string; cls: string } {
+  if (i.callStatus && i.callStatus !== "ended" && i.callStatus !== "failed") {
+    return { text: "Calling…", cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" }
+  }
+  if (i.disposition === "do_not_call") return { text: "Do not call", cls: "bg-destructive/10 text-destructive" }
+  if (i.disposition === "answered_interested") return { text: "Interested", cls: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" }
+  if (i.disposition === "answered_not_interested") return { text: "Not interested", cls: "bg-muted text-muted-foreground" }
+  if (i.status === "answered") return { text: "Answered", cls: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" }
+  if (i.status === "no_answer") return { text: "No answer", cls: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300" }
+  return { text: "Failed", cls: "bg-destructive/10 text-destructive" }
+}
+
+function AiCallCell({ info, now }: { info: AiCallInfo | undefined; now: number | null }) {
+  if (!info) return <span className="pointer-events-none text-xs text-muted-foreground">—</span>
+  const l = aiCallLabel(info)
+  return (
+    <div className="pointer-events-none min-w-0 leading-tight">
+      <span className={`inline-block w-fit rounded-full px-1.5 py-0.5 text-xs font-medium ${l.cls}`}>{l.text}</span>
+      <p className="mt-0.5 h-4 text-xs text-muted-foreground/70" suppressHydrationWarning>
+        {now !== null ? relativeAge(info.at, now) : ""}
+      </p>
+    </div>
+  )
+}
 
 function relativeAge(iso: string, now: number): string {
   const mins = Math.floor((now - new Date(iso).getTime()) / 60_000)
@@ -157,6 +191,7 @@ export function LeadsListClient({
   templates,
   currentAgentName,
   emailStatusByLead,
+  aiCallByLead,
   allAgents,
   followUpByLead,
   favoriteIds,
@@ -167,6 +202,7 @@ export function LeadsListClient({
   templates: Template[]
   currentAgentName: string
   emailStatusByLead: Record<string, EmailStatusInfo>
+  aiCallByLead: Record<string, AiCallInfo>
   allAgents: Array<{ id: string; name: string }>
   followUpByLead: Record<string, FollowUpInfo>
   favoriteIds: string[]
@@ -522,6 +558,7 @@ export function LeadsListClient({
               </button>
               <span>Email Status</span>
               <span>Last email</span>
+              <span>AI call</span>
               {isAdmin && <span>Agent</span>}
               <span>Stage</span>
               <span />
@@ -619,6 +656,7 @@ export function LeadsListClient({
                   </div>
                   <EmailStatusCell info={emailInfo} />
                   <LastEmailCell info={followUpByLead[lead.id]} />
+                  <AiCallCell info={aiCallByLead[lead.id]} now={now} />
                   {isAdmin && (
                     <div className="relative z-10">
                       <AssignedAgentSelector
