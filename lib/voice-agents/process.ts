@@ -75,7 +75,9 @@ export async function processVoiceEvent(
     if (ev.transcript) patch.transcript = ev.transcript
     if (ev.recordingUrl) patch.recording_url = ev.recordingUrl
     if (ev.costUsd != null) patch.cost_usd = ev.costUsd
-    const unanswered = /no[_-]?answer|did-not-answer|voicemail|dial_|busy|failed|invalid|rejected/i.test(ev.disconnectionReason ?? "")
+    const unanswered = /no[_-]?answer|did-not-answer|voicemail|dial_|busy|failed|invalid|rejected|did-not-receive|silence|timed-out|error/i.test(ev.disconnectionReason ?? "")
+    // "did-not-receive-customer-audio" etc.: the line connected but the person never spoke
+    // and the AI never said a word, so it must not show as an answered call.
     patch.status = unanswered || !ev.durationSeconds ? "no_answer" : "answered"
   }
 
