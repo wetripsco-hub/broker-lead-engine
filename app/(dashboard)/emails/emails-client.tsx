@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Search, Send, UserPlus, Mail, RefreshCw } from "lucide-react"
+import { Search, Send, UserPlus, Mail, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
-import { sendEmailReply, markEmailsRead, addSenderAsLead, syncEmailNow } from "./actions"
+import { sendEmailReply, markEmailsRead, addSenderAsLead, syncEmailNow, deleteEmailEvents } from "./actions"
 
 interface RawEvent {
   id: string
@@ -142,6 +142,7 @@ export function EmailsClient({
   const [sending, setSending] = useState(false)
   const [addingLead, setAddingLead] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const threads = useMemo(() => buildThreads(events), [events])
@@ -227,6 +228,27 @@ export function EmailsClient({
       await refetch()
     }
     setAddingLead(false)
+  }
+
+  async function handleDelete() {
+    if (!selected || deleting) return
+    const n = selected.events.length
+    const ok = window.confirm(
+      `Delete this conversation (${n} message${n === 1 ? "" : "s"}) from the CRM?
+
+It is only removed here, not from the mailbox. This cannot be undone.`,
+    )
+    if (!ok) return
+    setDeleting(true)
+    const ids = selected.events.map((e) => e.id)
+    const { error, deleted } = await deleteEmailEvents(ids)
+    if (error) toast.error(`Failed to delete: ${error}`)
+    else {
+      toast.success(`Deleted ${deleted} message${deleted === 1 ? "" : "s"}`)
+      setEvents((prev) => prev.filter((e) => !ids.includes(e.id)))
+      setSelectedKey(null)
+    }
+    setDeleting(false)
   }
 
   async function handleSync() {
@@ -379,12 +401,27 @@ export function EmailsClient({
                     : ""}
                 </p>
               </div>
+              <div className="flex shrink-0 items-center gap-2">
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 shrink-0 text-destructive hover:text-destructive"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  title="Delete this conversation from the CRM (not from the mailbox)"
+                >
+                  <Trash2 className="size-3.5" />
+                  {deleting ? "Deleting…" : "Delete"}
+                </Button>
+              )}
               {isAdmin && !selected.leadId && selected.counterparty && (
                 <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={handleAddAsLead} disabled={addingLead}>
                   <UserPlus className="size-3.5" />
                   {addingLead ? "Adding…" : "Add as Lead"}
                 </Button>
               )}
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-muted/20">

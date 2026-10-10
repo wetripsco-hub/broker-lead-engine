@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendEmail, fromAddress, conversationProvider } from "@/lib/email/send"
 import { generateMessageId, replyToAddress } from "@/lib/email/message-id"
 import { syncInbox, imapConfigured } from "@/lib/email/imap-sync"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 
 // Reply to an email thread from the platform. Everything about *who* it goes
 // to and which message it answers is derived server-side from the parent
@@ -235,4 +236,32 @@ export async function syncEmailNow(): Promise<{
     console.error("[email sync] agent-triggered sync failed:", message)
     return { error: "Sync failed — ask an admin to check the mail connection." }
   }
+}
+
+// Admin-only: removes email records from this CRM (never from the mailbox itself). The inbox
+// sync reads by UID from where it left off, so deleted mail is not re-imported. The role is
+// read from the database; row-level security on outreach_events is a second lock.
+export async function deleteEmailEvents(eventIds: string[]): Promise<{ error: string | null; deleted: number }> {
+  const ids = [...new Set(eventIds)].filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+  if (ids.length === 0) return { error: "Nothing to delete", deleted: 0 }
+  if (ids.length > 500) return { error: "Too many messages at once", deleted: 0 }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated", deleted: 0 }
+  if (!(await isAdminInDb(createAdminClient(), user.id))) return { error: "Admin access required", deleted: 0 }
+
+  const { data, error } = (await (supabase.from("outreach_events") as any)
+    .delete()
+    .in("id", ids)
+    .eq("channel", "email")
+    .select("id")) as { data: Array<{ id: string }> | null; error: { message: string } | null }
+  if (error) return { error: error.message, deleted: 0 }
+  if (!data || data.length === 0) return { error: "Nothing was deleted (no permission?)", deleted: 0 }
+
+  revalidatePath("/emails")
+  revalidatePath("/leads")
+  return { error: null, deleted: data.length }
 }
