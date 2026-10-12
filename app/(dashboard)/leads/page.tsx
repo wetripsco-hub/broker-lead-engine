@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getFollowUps } from "@/lib/follow-up/query"
+import { fetchAll } from "@/lib/supabase/fetch-all"
 import { LeadsListClient } from "./leads-list-client"
 
 export default async function LeadsPage({
@@ -17,9 +18,11 @@ export default async function LeadsPage({
 
   const isAdmin = user.user_metadata?.role === "admin"
 
-  const { data } = await supabase
-    .from("leads")
-    .select(`
+  // Read in pages: the API returns at most 1000 rows per request.
+  const leads = await fetchAll<any>(() =>
+    supabase
+      .from("leads")
+      .select(`
       id,
       stage,
       assigned_agent_id,
@@ -27,9 +30,9 @@ export default async function LeadsPage({
       brokers ( mc_number, dot_number, mc_status, company_name, contact_name, city, state, phone, email ),
       agents ( name )
     `)
-    .order("created_at", { ascending: false })
-
-  const leads = (data ?? []) as any[]
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false }),
+  )
 
   const { data: templatesRaw } = await supabase
     .from("email_templates")
@@ -56,12 +59,15 @@ export default async function LeadsPage({
   // Latest email status per lead, for the "Email Status" column — one query
   // for all leads, newest first, then keep only the first (latest) row per
   // lead_id client-side (Postgres has no simple "latest per group" select).
-  const { data: emailEventsRaw } = await supabase
-    .from("outreach_events")
-    .select("lead_id, status, open_count, click_count, occurred_at")
-    .eq("channel", "email")
-    .eq("direction", "outbound")
-    .order("occurred_at", { ascending: false })
+  const emailEventsRaw = await fetchAll<any>(() =>
+    supabase
+      .from("outreach_events")
+      .select("lead_id, status, open_count, click_count, occurred_at")
+      .eq("channel", "email")
+      .eq("direction", "outbound")
+      .order("occurred_at", { ascending: false })
+      .order("id", { ascending: false }),
+  )
 
   const emailStatusByLead: Record<string, { status: string; openCount: number; clickCount: number }> = {}
   for (const e of (emailEventsRaw ?? []) as any[]) {
@@ -71,10 +77,13 @@ export default async function LeadsPage({
 
   // Latest AI call per lead, for the "AI call" column. Read separately and tolerant: if the
   // AI-calling columns aren't there the list simply shows no AI results.
-  const { data: aiEventsRaw } = await (supabase.from("outreach_events") as any)
-    .select("lead_id, status, call_status, disposition, duration_seconds, occurred_at")
-    .eq("channel", "ai_call")
-    .order("occurred_at", { ascending: false })
+  const aiEventsRaw = await fetchAll<any>(() =>
+    (supabase.from("outreach_events") as any)
+      .select("lead_id, status, call_status, disposition, duration_seconds, occurred_at")
+      .eq("channel", "ai_call")
+      .order("occurred_at", { ascending: false })
+      .order("id", { ascending: false }),
+  )
   const aiCallByLead: Record<string, { status: string; callStatus: string | null; disposition: string | null; seconds: number | null; at: string }> = {}
   for (const e of (aiEventsRaw ?? []) as any[]) {
     if (!e.lead_id || aiCallByLead[e.lead_id]) continue

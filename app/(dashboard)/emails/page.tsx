@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { imapConfigured } from "@/lib/email/imap-sync"
+import { fetchAll } from "@/lib/supabase/fetch-all"
 import { EmailsClient } from "./emails-client"
 
 export default async function EmailsPage() {
@@ -15,15 +16,18 @@ export default async function EmailsPage() {
 
   // RLS decides what's returned: an agent only gets email for leads assigned
   // to them; admins also get unmatched mail (lead_id null).
-  const { data } = await supabase
-    .from("outreach_events")
-    .select(`
+  const data = await fetchAll<any>(() =>
+    supabase
+      .from("outreach_events")
+      .select(`
       id, lead_id, direction, status, subject, message_body, from_email, to_email,
       message_id, send_error, read_at, occurred_at,
       leads ( id, brokers ( company_name, contact_name ) )
     `)
-    .eq("channel", "email")
-    .order("occurred_at", { ascending: true })
+      .eq("channel", "email")
+      .order("occurred_at", { ascending: true })
+      .order("id", { ascending: true }),
+  )
 
   // email_sync_state is admin-only under RLS (its error text can contain
   // mail-server details), so read it with the admin client and hand agents

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { fetchAll } from "@/lib/supabase/fetch-all"
 import { evaluateFollowUp, type FollowUpInfo, type FollowUpRow } from "./compute"
 
 const COLUMNS =
@@ -13,12 +14,14 @@ export async function getFollowUps(
   supabase: SupabaseClient<any, any, any>,
   leadId?: string,
 ): Promise<Record<string, FollowUpInfo>> {
-  let q = supabase.from("leads_with_followup").select(COLUMNS)
-  if (leadId) q = q.eq("lead_id", leadId)
-  const { data } = await q
+  const rows = await fetchAll<FollowUpRow>(() => {
+    let q = supabase.from("leads_with_followup").select(COLUMNS)
+    if (leadId) q = q.eq("lead_id", leadId)
+    return q.order("lead_id", { ascending: true })
+  })
   const now = new Date()
   const out: Record<string, FollowUpInfo> = {}
-  for (const row of (data ?? []) as FollowUpRow[]) {
+  for (const row of rows) {
     const info = evaluateFollowUp(row, now)
     if (info) out[row.lead_id] = info
   }

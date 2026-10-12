@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
+import { fetchAll } from "@/lib/supabase/fetch-all"
 import { sendEmailReply, markEmailsRead, addSenderAsLead, syncEmailNow, deleteEmailEvents } from "./actions"
 
 interface RawEvent {
@@ -163,12 +164,16 @@ export function EmailsClient({
 
   async function refetch() {
     const supabase = createClient()
-    const { data } = await supabase
-      .from("outreach_events")
-      .select(SELECT)
-      .eq("channel", "email")
-      .order("occurred_at", { ascending: true })
-    if (data) setEvents(data as unknown as RawEvent[])
+    // Paged: the API returns at most 1000 rows per request.
+    const data = await fetchAll<RawEvent>(() =>
+      supabase
+        .from("outreach_events")
+        .select(SELECT)
+        .eq("channel", "email")
+        .order("occurred_at", { ascending: true })
+        .order("id", { ascending: true }),
+    )
+    if (data.length > 0) setEvents(data)
   }
 
   useEffect(() => {
