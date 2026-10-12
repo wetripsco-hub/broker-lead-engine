@@ -20,6 +20,7 @@ interface SmsThreadProps {
   leadId: string
   brokerPhone: string | null
   brokerName: string | null
+  templates?: Array<{ id: string; label: string; text: string }>
   initialEvents: SmsEvent[]
 }
 
@@ -30,7 +31,7 @@ const STATUS_LABEL: Record<string, string> = {
   pending:   "Pending",
 }
 
-export function SmsThread({ leadId, brokerPhone, brokerName, initialEvents }: SmsThreadProps) {
+export function SmsThread({ leadId, brokerPhone, brokerName, templates = [], initialEvents }: SmsThreadProps) {
   const [events, setEvents] = useState<SmsEvent[]>(initialEvents)
   const [text, setText] = useState("")
   const [isPending, startTransition] = useTransition()
@@ -141,7 +142,25 @@ export function SmsThread({ leadId, brokerPhone, brokerName, initialEvents }: Sm
 
         {/* Compose */}
         {brokerPhone ? (
-          <div className="border-t p-3 flex gap-2 items-end">
+          <div className="border-t p-3 space-y-2">
+            {templates.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Quick text:</span>
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => setText(t.text)}
+                    className="rounded-full border border-input px-2.5 py-1 text-xs transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-muted active:scale-[0.97] disabled:opacity-50"
+                    title={t.text}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2 items-end">
             <textarea
               value={text}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setText(e.target.value)}
@@ -160,6 +179,7 @@ export function SmsThread({ leadId, brokerPhone, brokerName, initialEvents }: Sm
               <Send className="size-3.5" />
               Send
             </Button>
+            </div>
           </div>
         ) : (
           <div className="border-t px-4 py-3 text-xs text-muted-foreground italic">

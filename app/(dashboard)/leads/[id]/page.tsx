@@ -17,6 +17,7 @@ import { isTestModeExempt } from "@/lib/voice-agents/gate"
 import { CallButton } from "@/components/leads/call-button"
 import { LocalTimeCard } from "@/components/leads/local-time-card"
 import { SmsThread } from "@/components/leads/sms-thread"
+import { buildSmsTemplates } from "@/lib/sms-templates"
 import { OutreachTimeline } from "@/components/leads/outreach-timeline"
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Hash, User } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -426,6 +427,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             leadId={lead.id}
             brokerPhone={b?.phone ?? null}
             brokerName={b?.company_name ?? null}
+            templates={buildSmsTemplates({ contactName: b?.contact_name ?? null, agentName: myAgent?.name ?? null })}
             initialEvents={smsEvents}
           />
         </div>
