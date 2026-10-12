@@ -158,11 +158,15 @@ export async function POST(req: NextRequest) {
     const toArr = payload.to as Array<{ status: string }> | undefined
     const status = toArr?.[0]?.status
     if (msgId && status) {
+      // delivery_failed = the carrier refused it (e.g. "Not 10DLC registered");
+      // sending_failed = Telnyx could not send it. Both are failures.
       const mapped =
-        status === "delivered" ? "delivered" : status === "sending_failed" ? "failed" : null
+        status === "delivered" ? "delivered" : status === "sending_failed" || status === "delivery_failed" ? "failed" : null
       if (mapped) {
+        const errors = payload.errors as Array<{ title?: string; detail?: string; code?: string }> | undefined
+        const reason = errors?.[0] ? [errors[0].code, errors[0].detail ?? errors[0].title].filter(Boolean).join(" ").slice(0, 300) : null
         await (supabase.from("outreach_events") as any)
-          .update({ status: mapped })
+          .update(mapped === "failed" ? { status: mapped, send_error: reason } : { status: mapped })
           .eq("external_id", msgId)
       }
     }

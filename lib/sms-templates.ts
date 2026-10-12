@@ -10,20 +10,37 @@ export interface SmsTemplate {
 
 export const LOADLINKERS_URL = "https://loadlinkers.co"
 
+// One SMS segment holds 160 characters of plain text (GSM-7). A single curly quote, emoji or
+// other special character switches the whole message to 70 characters per segment, so these
+// texts stay plain ASCII and are checked to fit 160 (see scripts/_sms-template-tests.ts).
+export const SMS_ONE_SEGMENT = 160
+
+// Longest wording that still fits one segment with this contact and agent name.
+function fit(options: string[]): string {
+  return options.find((t) => t.length <= SMS_ONE_SEGMENT) ?? options[options.length - 1]
+}
+
 export function buildSmsTemplates(opts: { contactName: string | null; agentName: string | null }): SmsTemplate[] {
   const first = spokenContactName(opts.contactName)
   const agent = opts.agentName && !opts.agentName.includes("@") ? opts.agentName.trim() : ""
-  const intro = agent ? `Hi ${first}, it's ${agent} from Load Linkers.` : `Hi ${first}, it's the Load Linkers team.`
+  const from = agent ? `${agent} from Load Linkers` : "Load Linkers"
   return [
     {
       id: "trial-link",
       label: "Trial link (after they OK)",
-      text: `${intro} As promised, here are the details: you can check out our software yourself, anytime, at ${LOADLINKERS_URL} with a 7-day trial. Reply here with any questions. Reply STOP to opt out.`,
+      text: fit([
+        `Hi ${first}, ${from}. Check us out anytime at ${LOADLINKERS_URL} (self checkout, 7-day trial). Reply STOP to opt out.`,
+        `Hi ${first}, ${from}. Self checkout, 7-day trial: ${LOADLINKERS_URL} Reply STOP to opt out.`,
+        `Hi ${first}, Load Linkers here. 7-day trial: ${LOADLINKERS_URL} Reply STOP to opt out.`,
+      ]),
     },
     {
       id: "callback",
       label: "Quick call tomorrow",
-      text: `${intro} Thanks for your time today. I'll have our team call you tomorrow for a quick chat, and you can look around anytime at ${LOADLINKERS_URL}. Reply STOP to opt out.`,
+      text: fit([
+        `Hi ${first}, ${from}. Thanks for your time! Our team will call you tomorrow. Details: ${LOADLINKERS_URL} Reply STOP to opt out.`,
+        `Hi ${first}, Load Linkers here. Our team will call you tomorrow. ${LOADLINKERS_URL} Reply STOP to opt out.`,
+      ]),
     },
   ]
 }
