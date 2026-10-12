@@ -172,6 +172,7 @@ export function CopilotPanel({ leadId, initialOn = false, callId, callLive, getS
         {!on ? (
           <>
             {ctx && <ReplyCard label="Opening" text={ctx.openingScript} />}
+            {ctx && <PitchFlow steps={ctx.pitchSteps} />}
             <p className="text-xs text-muted-foreground">
               Copilot is off. Turn it on to transcribe this call and get suggested replies. Nothing is sent to
               any service while it is off.
@@ -189,6 +190,7 @@ export function CopilotPanel({ leadId, initialOn = false, callId, callLive, getS
               aria-busy={sState.kind === "loading"}
             >
               {ctx && <ReplyCard label="Opening" text={ctx.openingScript} />}
+              {ctx && <PitchFlow steps={ctx.pitchSteps} />}
               {suggestion && (
                 <>
                   <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
@@ -298,6 +300,24 @@ function Notice({ children, tone = "muted" }: { children: React.ReactNode; tone?
     >
       {children}
     </p>
+  )
+}
+
+// The scripted pitch after the opening: tap a step to copy it. Collapsed by default so the
+// live suggestions stay in view.
+function PitchFlow({ steps }: { steps: Array<{ label: string; text: string }> }) {
+  if (!steps || steps.length === 0) return null
+  return (
+    <details className="group rounded-lg border bg-muted/20">
+      <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+        Pitch script (after they say yes)
+      </summary>
+      <div className="space-y-2 px-2 pb-2">
+        {steps.map((s) => (
+          <ReplyCard key={s.label} label={s.label} text={s.text} />
+        ))}
+      </div>
+    </details>
   )
 }
 

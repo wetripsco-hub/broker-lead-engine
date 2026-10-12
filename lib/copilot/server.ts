@@ -2,7 +2,7 @@ import { interpolate } from "@/lib/email/resend"
 import { spokenContactName } from "@/lib/voice-agents/names"
 import { createClient } from "@/lib/supabase/server"
 import { llmProvider } from "./llm"
-import { OPENING_SCRIPT, type CopilotContext } from "./types"
+import { OPENING_SCRIPT, PITCH_STEPS, type CopilotContext } from "./types"
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
@@ -59,6 +59,14 @@ export async function getCopilotContext(
       agent_name: spokenName,
       company_name: companyName,
     }),
+    pitchSteps: PITCH_STEPS.map((s) => ({
+      label: s.label,
+      text: interpolate(s.text, {
+        contact_name: spokenContactName(b.contact_name),
+        agent_name: spokenName,
+        company_name: companyName,
+      }),
+    })),
   }
 }
 
