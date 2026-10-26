@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendSms } from "@/lib/telnyx/sms"
 import { toE164, phoneDigits } from "@/lib/phone"
+import { checkSmsAllowed } from "@/lib/sms-guard"
 
 async function getCurrentAgent(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -34,6 +35,15 @@ export async function sendInboxSms(
   const supabase = await createClient()
   const agent = await getCurrentAgent(supabase)
   if ("error" in agent) return { error: agent.error }
+
+  // Same permission rules as the lead page: do-not-call blocks all; admins may text anyone;
+  // agents only leads with SMS permission recorded, or people who texted us first.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+  const allowed = await checkSmsAllowed(supabase, user.id, { leadId, to })
+  if (!allowed.allowed) return { error: allowed.reason }
 
   let externalId: string | null = null
   try {

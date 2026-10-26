@@ -19,9 +19,15 @@ interface CallButtonProps {
   brokerPhone: string | null
   brokerName: string | null
   brokerState: string | null
+  /** For the call script panel. */
+  contactName?: string | null
+  agentName?: string | null
+  callbackPhone?: string | null
+  /** Lead is flagged do-not-call: the call button is disabled. */
+  doNotCall?: boolean
 }
 
-export function CallButton({ leadId, agentId, brokerPhone, brokerName, brokerState }: CallButtonProps) {
+export function CallButton({ leadId, agentId, brokerPhone, brokerName, brokerState, contactName = null, agentName = null, callbackPhone = null, doNotCall = false }: CallButtonProps) {
   const [open, setOpen] = useState(false)
   // Off by default; not remembered between visits so it is never on by accident.
   const [copilotOn, setCopilotOn] = useState(false)
@@ -36,6 +42,14 @@ export function CallButton({ leadId, agentId, brokerPhone, brokerName, brokerSta
     return () => window.removeEventListener("keydown", onKey)
   }, [confirm])
 
+  if (doNotCall) {
+    return (
+      <Button variant="outline" size="sm" disabled className="gap-2" title="This lead is marked do-not-call">
+        <Phone className="size-3.5" />
+        Do not call
+      </Button>
+    )
+  }
   if (!brokerPhone) {
     return (
       <Button variant="outline" size="sm" disabled className="gap-2">
@@ -141,6 +155,9 @@ export function CallButton({ leadId, agentId, brokerPhone, brokerName, brokerSta
           brokerPhone={e164}
           brokerName={brokerName}
           copilotOn={copilotOn}
+          contactName={contactName}
+          agentName={agentName}
+          callbackPhone={callbackPhone}
           onClose={() => setOpen(false)}
         />
       )}

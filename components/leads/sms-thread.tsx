@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { sendLeadSms } from "@/app/(dashboard)/leads/[id]/sms-actions"
 import { formatPhoneDisplay, toE164 } from "@/lib/phone"
+import { CALL_SCRIPT } from "@/lib/call-script/script"
+import { agentNames, fillText, type ScriptVars } from "@/lib/call-script/fill"
+import { contactFirstNameOrNull } from "@/lib/voice-agents/names"
 
 interface SmsEvent {
   id: string
@@ -21,6 +24,15 @@ interface SmsThreadProps {
   brokerPhone: string | null
   brokerName: string | null
   templates?: Array<{ id: string; label: string; text: string }>
+  /** False when the lead cannot be texted by this user; `blockedReason` says why. */
+  canSend?: boolean
+  blockedReason?: string | null
+  /** When SMS permission was recorded on a call (shown as a small note). */
+  smsConsentAt?: string | null
+  /** For filling the script's text templates. */
+  contactName?: string | null
+  agentName?: string | null
+  callbackPhone?: string | null
   initialEvents: SmsEvent[]
 }
 
@@ -31,7 +43,19 @@ const STATUS_LABEL: Record<string, string> = {
   pending:   "Pending",
 }
 
-export function SmsThread({ leadId, brokerPhone, brokerName, templates = [], initialEvents }: SmsThreadProps) {
+export function SmsThread({
+  leadId,
+  brokerPhone,
+  brokerName,
+  templates = [],
+  canSend = true,
+  blockedReason = null,
+  smsConsentAt = null,
+  contactName = null,
+  agentName = null,
+  callbackPhone = null,
+  initialEvents,
+}: SmsThreadProps) {
   const [events, setEvents] = useState<SmsEvent[]>(initialEvents)
   const [text, setText] = useState("")
   const [isPending, startTransition] = useTransition()
@@ -42,8 +66,32 @@ export function SmsThread({ leadId, brokerPhone, brokerName, templates = [], ini
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [events.length])
 
+  // The two "Text after permission" messages from the call script, filled in for this lead.
+  const scriptTemplates = (() => {
+    const a = agentNames(agentName)
+    const vars: ScriptVars = {
+      name: contactFirstNameOrNull(contactName),
+      firstName: a.firstName,
+      fullName: a.fullName,
+      phone: callbackPhone,
+      day: "",
+      time: "",
+    }
+    const section = CALL_SCRIPT.find((s) => s.id === "text")
+    return (section?.items ?? []).map((it) => ({
+      id: `script-${it.id}`,
+      label: `Script: ${it.title}`,
+      text: fillText(it.lines.map((l) => l.text).join(" "), vars),
+    }))
+  })()
+  const allTemplates = [...templates, ...scriptTemplates]
+
   function handleSend() {
-    if (!brokerPhone || !text.trim()) return
+    if (!canSend || !brokerPhone || !text.trim()) return
+    if (/\[(Name|First Name|Full Name|day|time|number|Phone)\]/.test(text)) {
+      toast.error("The text still has a [placeholder]. Fill it in first.")
+      return
+    }
     if (!toE164(brokerPhone)) {
       toast.error("Invalid phone number")
       return
@@ -143,14 +191,24 @@ export function SmsThread({ leadId, brokerPhone, brokerName, templates = [], ini
         {/* Compose */}
         {brokerPhone ? (
           <div className="border-t p-3 space-y-2">
-            {templates.length > 0 && (
+            {!canSend && blockedReason && (
+              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                {blockedReason}
+              </p>
+            )}
+            {canSend && smsConsentAt && (
+              <p className="text-xs text-muted-foreground">
+                SMS permission recorded {new Date(smsConsentAt).toLocaleDateString()}.
+              </p>
+            )}
+            {allTemplates.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">Quick text:</span>
-                {templates.map((t) => (
+                {allTemplates.map((t) => (
                   <button
                     key={t.id}
                     type="button"
-                    disabled={isPending}
+                    disabled={isPending || !canSend}
                     onClick={() => setText(t.text)}
                     className="rounded-full border border-input px-2.5 py-1 text-xs transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-muted active:scale-[0.97] disabled:opacity-50"
                     title={t.text}
@@ -167,14 +225,14 @@ export function SmsThread({ leadId, brokerPhone, brokerName, templates = [], ini
               onKeyDown={handleKeyDown}
               placeholder="Type a message… (Enter to send)"
               rows={2}
-              disabled={isPending}
+              disabled={isPending || !canSend}
               className="flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground disabled:opacity-50"
             />
             <Button
               size="sm"
               className="gap-1.5 shrink-0"
               onClick={handleSend}
-              disabled={!text.trim() || isPending}
+              disabled={!text.trim() || isPending || !canSend}
             >
               <Send className="size-3.5" />
               Send

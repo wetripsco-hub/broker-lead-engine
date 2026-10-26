@@ -7,9 +7,9 @@ import type { CallWrapUp } from "@/lib/copilot/types"
 const DISPOSITIONS: CallWrapUp["disposition"][] = [
   "no_answer",
   "left_voicemail",
-  "answered_interested",
-  "answered_not_interested",
   "callback",
+  "not_interested",
+  "email_requested",
   "wrong_number",
 ]
 
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       summary: typeof raw.summary === "string" ? raw.summary.trim().slice(0, 600) : "",
       disposition: DISPOSITIONS.includes(raw.disposition as CallWrapUp["disposition"])
         ? (raw.disposition as CallWrapUp["disposition"])
-        : "answered_not_interested",
+        : "not_interested",
       follow_up_date:
         typeof raw.follow_up_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.follow_up_date)
           ? raw.follow_up_date

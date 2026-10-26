@@ -38,8 +38,17 @@ export default async function SettingsPage() {
     .maybeSingle()
   const announceRecording = (announceRaw as { value: unknown } | null)?.value === true
 
+  const { data: phoneRaw } = await (supabase.from("app_settings") as any)
+    .select("value")
+    .eq("key", "callback_phone")
+    .maybeSingle()
+  const callbackPhone = typeof (phoneRaw as { value: unknown } | null)?.value === "string"
+    ? ((phoneRaw as { value: string }).value)
+    : ""
+
   return (
     <SettingsClient
+      callbackPhone={callbackPhone}
       announceRecording={announceRecording}
       myAgent={myAgent}
       myEmail={user.email ?? ""}

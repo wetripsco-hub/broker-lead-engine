@@ -19,7 +19,9 @@ import {
 } from "@/app/(dashboard)/leads/[id]/call-actions"
 import { CopilotPanel } from "@/components/copilot/copilot-panel"
 import type { CallWrapUp } from "@/lib/copilot/types"
-import { DISPOSITION_LABEL } from "@/lib/call-dispositions"
+import { DISPOSITION_LABEL, DISPOSITION_MENU, isSmsPermissionOutcome } from "@/lib/call-dispositions"
+import { OUTCOME_NEXT_ACTION } from "@/lib/call-script/script"
+import { CallScriptPanel } from "@/components/leads/call-script-panel"
 import { formatPhoneDisplay, toE164 } from "@/lib/phone"
 import type { DispositionKey } from "@/lib/call-dispositions"
 
@@ -39,6 +41,10 @@ interface DialerModalProps {
   brokerName: string | null
   /** Copilot preference chosen on the lead page before dialing. */
   copilotOn?: boolean
+  /** For the call script panel: the lead's contact name, the caller's name, the admin-set callback number. */
+  contactName?: string | null
+  agentName?: string | null
+  callbackPhone?: string | null
   onClose: () => void
 }
 
@@ -67,14 +73,7 @@ function brokerInitial(name: string | null, phone: string): string {
   return phone[0]
 }
 
-const DISPOSITIONS: DispositionKey[] = [
-  "no_answer",
-  "left_voicemail",
-  "answered_interested",
-  "answered_not_interested",
-  "callback",
-  "wrong_number",
-]
+const DISPOSITIONS: DispositionKey[] = DISPOSITION_MENU
 
 // ─── Phase header config ───────────────────────────────────────────────────────
 
@@ -117,6 +116,9 @@ export function DialerModal({
   brokerPhone,
   brokerName,
   copilotOn = false,
+  contactName = null,
+  agentName = null,
+  callbackPhone = null,
   onClose,
 }: DialerModalProps) {
   const [phase, setPhase] = useState<Phase>("connecting")
@@ -167,7 +169,7 @@ export function DialerModal({
     if (timerRef.current) clearInterval(timerRef.current)
     setPhase("ended")
     // Auto-select disposition based on whether call was ever active
-    setDisposition(seconds > 0 ? "answered_not_interested" : "no_answer")
+    setDisposition(seconds > 0 ? "not_interested" : "no_answer")
   }, [seconds])
 
   // After the call: persist the transcript right away, then ask for a short
@@ -248,7 +250,15 @@ export function DialerModal({
         setPhase("dialing")
 
         // 4. Log call start
-        const { eventId, error: logErr } = await logCallStarted(leadId, agentId, null)
+        const { eventId, error: logErr, blocked } = await logCallStarted(leadId, agentId, null)
+        if (blocked) {
+          // Do-not-call: never place the call.
+          toast.error(logErr ?? "This lead is marked do-not-call.")
+          endedRef.current = true
+          try { (client as any).disconnect?.() } catch { /* ignore */ }
+          onClose()
+          return
+        }
         if (logErr) toast.error(`Log error: ${logErr}`)
         else eventIdRef.current = eventId ?? null
         if (cancelled) return
@@ -342,7 +352,7 @@ export function DialerModal({
       {/* Remote audio playout — required by the Telnyx SDK (client.remoteElement) */}
       <audio ref={audioRef} autoPlay playsInline className="hidden" />
 
-      <div className="flex w-full max-w-[800px] flex-col items-center gap-4 md:flex-row md:items-start md:justify-center">
+      <div className="flex w-full max-w-[1340px] flex-col items-center gap-4 md:flex-row md:flex-wrap md:items-start md:justify-center">
       <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden shrink-0">
 
         {/* ── Header ── */}
@@ -478,6 +488,19 @@ export function DialerModal({
                   <option key={d} value={d}>{DISPOSITION_LABEL[d]}</option>
                 ))}
               </select>
+              <p className="text-xs text-muted-foreground">
+                Next: {OUTCOME_NEXT_ACTION[disposition] ?? "—"}
+              </p>
+              {isSmsPermissionOutcome(disposition) && (
+                <p className="text-xs text-blue-700 dark:text-blue-400">
+                  Saving this records that they gave permission to be texted, with today&apos;s date.
+                </p>
+              )}
+              {disposition === "do_not_call" && (
+                <p className="text-xs font-medium text-destructive">
+                  Saving this stops all calls and texts to this lead and adds the number to the do-not-call list.
+                </p>
+              )}
             </div>
 
             {/* Notes */}
@@ -533,6 +556,7 @@ export function DialerModal({
         getSources={getSources}
         onTranscript={handleTranscript}
       />
+      <CallScriptPanel variant="dialer" contactName={contactName} agentName={agentName} callbackPhone={callbackPhone} />
       </div>
     </div>
   )

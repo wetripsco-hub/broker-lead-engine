@@ -18,6 +18,8 @@ import { CallButton } from "@/components/leads/call-button"
 import { LocalTimeCard } from "@/components/leads/local-time-card"
 import { SmsThread } from "@/components/leads/sms-thread"
 import { buildSmsTemplates } from "@/lib/sms-templates"
+import { CallScriptPanel } from "@/components/leads/call-script-panel"
+import { evaluateSmsPermission } from "@/lib/sms-permission"
 import { OutreachTimeline } from "@/components/leads/outreach-timeline"
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Hash, User } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -177,7 +179,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // keeps working without the AI Call button's data.
   const [{ data: aiFlagsRaw }, { data: aiEventsRaw }, { data: aiEnabledRaw }] = await Promise.all([
     (supabase.from("leads") as any)
-      .select("ai_call_consent, ai_call_consent_source, ai_call_consent_at, do_not_call")
+      .select("ai_call_consent, ai_call_consent_source, ai_call_consent_at, do_not_call, sms_consent_at, sms_consent_source")
       .eq("id", lead.id)
       .maybeSingle(),
     (supabase.from("outreach_events") as any)
@@ -191,6 +193,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     ai_call_consent_source?: string | null
     ai_call_consent_at?: string | null
     do_not_call?: boolean
+    sms_consent_at?: string | null
+    sms_consent_source?: string | null
   }
   const aiExtra = new Map(((aiEventsRaw ?? []) as any[]).map((e) => [e.id, e]))
   events = events.map((e) => (aiExtra.has(e.id) ? { ...e, ...aiExtra.get(e.id) } : e))
@@ -210,6 +214,20 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     occurred_at: string
     agents: { name: string } | null
   }>
+
+  // Who may text this lead: admins anyone (except do-not-call), agents only with recorded permission
+  // or when the person texted first. The server action enforces the same rules.
+  const smsDecision = evaluateSmsPermission({
+    isAdmin,
+    doNotCall: aiFlags.do_not_call === true,
+    hasSmsConsent: !!aiFlags.sms_consent_at,
+    hasInbound: smsEvents.some((e) => e.direction === "inbound"),
+  })
+
+  // Callback number set by an admin in Settings, for the call script's [number] / [Phone].
+  const { data: cbRaw } = await (supabase.from("app_settings") as any).select("value").eq("key", "callback_phone").maybeSingle()
+  const cbValue = (cbRaw as { value: unknown } | null)?.value
+  const callbackPhone = typeof cbValue === "string" && cbValue ? formatPhoneDisplay(cbValue) : null
 
   const followUp = (await getFollowUps(supabase, lead.id))[lead.id]
   // Personal star; if the favorites migration isn't run yet this is simply empty.
@@ -269,6 +287,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               brokerPhone={b?.phone ?? null}
               brokerName={b?.company_name ?? null}
               brokerState={b?.state ?? null}
+              contactName={b?.contact_name ?? null}
+              agentName={myAgent?.name ?? null}
+              callbackPhone={callbackPhone}
+              doNotCall={aiFlags.do_not_call === true}
             />
             <EmailCompose
               leadId={lead.id}
@@ -414,6 +436,14 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             </section>
           )}
 
+          {/* Call script (collapsed until opened) */}
+          <CallScriptPanel
+            variant="page"
+            contactName={b?.contact_name ?? null}
+            agentName={myAgent?.name ?? null}
+            callbackPhone={callbackPhone}
+          />
+
           {/* Outreach timeline */}
           <section>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
@@ -428,6 +458,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             brokerPhone={b?.phone ?? null}
             brokerName={b?.company_name ?? null}
             templates={buildSmsTemplates({ contactName: b?.contact_name ?? null, agentName: myAgent?.name ?? null })}
+            canSend={smsDecision.allowed}
+            blockedReason={smsDecision.allowed ? null : smsDecision.reason}
+            smsConsentAt={aiFlags.sms_consent_at ?? null}
+            contactName={b?.contact_name ?? null}
+            agentName={myAgent?.name ?? null}
+            callbackPhone={callbackPhone}
             initialEvents={smsEvents}
           />
         </div>

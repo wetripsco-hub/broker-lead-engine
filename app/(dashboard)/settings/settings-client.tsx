@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import Link from "next/link"
-import { updateAgentName } from "./actions"
+import { updateAgentName, setCallbackPhone } from "./actions"
 import { setAnnounceRecording } from "./knowledge/actions"
 
 interface Agent {
@@ -20,10 +20,14 @@ interface SettingsClientProps {
   myRole: string
   allAgents: Agent[] | null // admin only
   announceRecording: boolean
+  callbackPhone: string
 }
 
-export function SettingsClient({ myAgent, myEmail, myRole, allAgents, announceRecording }: SettingsClientProps) {
+export function SettingsClient({ myAgent, myEmail, myRole, allAgents, announceRecording, callbackPhone }: SettingsClientProps) {
   const [announce, setAnnounce] = useState(announceRecording)
+  const [phone, setPhone] = useState(callbackPhone)
+  const [phoneSaved, setPhoneSaved] = useState(callbackPhone)
+  const [phonePending, startPhone] = useTransition()
   const [name, setName] = useState(myAgent?.name ?? "")
   const [isPending, startTransition] = useTransition()
   const dirty = name.trim() !== (myAgent?.name ?? "")
@@ -114,6 +118,47 @@ export function SettingsClient({ myAgent, myEmail, myRole, allAgents, announceRe
           )}
         </section>
       )}
+
+      {/* Call script: the number callers leave */}
+      <section className="rounded-lg border bg-card p-5 space-y-3">
+        <h2 className="text-sm font-semibold">Call script</h2>
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground" htmlFor="callback-phone">
+            Callback number
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="callback-phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 214 555 0100"
+              className="flex-1 h-8 rounded-md border border-input bg-transparent px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <Button
+              size="sm"
+              disabled={phonePending || phone.trim() === phoneSaved}
+              onClick={() =>
+                startPhone(async () => {
+                  const r = await setCallbackPhone(phone)
+                  if (r.error) toast.error(r.error)
+                  else {
+                    setPhone(r.saved ?? "")
+                    setPhoneSaved(r.saved ?? "")
+                    toast.success(r.saved ? "Callback number saved" : "Callback number cleared")
+                  }
+                })
+              }
+            >
+              {phonePending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Used where the call script says [number] or [Phone] (voicemail and email). Everyone sees it filled in
+            on the call screen.
+          </p>
+        </div>
+      </section>
 
       {/* Calls & Copilot */}
       <section className="rounded-lg border bg-card p-5 space-y-4">

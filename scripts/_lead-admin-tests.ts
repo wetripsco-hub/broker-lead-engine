@@ -104,7 +104,7 @@ async function main() {
   check("UI: Edit/Delete only rendered for admins on the lead page", /\{isAdmin && b && \(\s*<LeadAdminActions/.test(page))
   const actions = readFileSync("app/(dashboard)/leads/admin-actions.ts", "utf8")
   check("server actions: role is read from the database", /isAdminInDb\(createAdminClient\(\)/.test(actions))
-  check("server actions: data goes through the user's session, service role only for the role lookup", (actions.match(/createAdminClient\(\)/g) ?? []).length === 1)
+  check("server actions: data goes through the user's session, service role only for role lookups", (actions.match(/createAdminClient\(\)/g) ?? []).length === (actions.match(/isAdminInDb\(createAdminClient\(\)/g) ?? []).length)
 
   console.log(failed === 0 ? "\nAll checks passed." : `\n${failed} check(s) FAILED.`)
   process.exit(failed === 0 ? 0 : 1)

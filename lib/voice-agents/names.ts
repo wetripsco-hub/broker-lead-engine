@@ -62,3 +62,10 @@ export function spokenContactName(raw: string | null | undefined): string {
   const given = toks[0] ?? ""
   return given ? tidyCase(given) : "there"
 }
+
+/** Contact's first name, or null when there is nothing usable (the call script then shows a highlighted [Name]). */
+export function contactFirstNameOrNull(raw: string | null | undefined): string | null {
+  if (!(raw ?? "").trim()) return null
+  const n = spokenContactName(raw)
+  return n === "there" ? null : n
+}
