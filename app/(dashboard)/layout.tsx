@@ -54,7 +54,7 @@ export default async function DashboardLayout({
       />
       <main className="flex flex-1 flex-col min-h-screen">
         <header className="flex items-center h-12 px-4 border-b shrink-0">
-          <SidebarTrigger className="-ml-1" />
+          <SidebarTrigger className="-ml-2 size-10 md:-ml-1 md:size-7" />
         </header>
         <div className="flex-1 overflow-y-auto">
           <PageTransition>{children}</PageTransition>

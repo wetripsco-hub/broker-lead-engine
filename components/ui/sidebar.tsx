@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
@@ -10,13 +11,6 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -90,7 +84,11 @@ function SidebarProvider({
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
+    if (isMobile) {
+      setOpenMobile((open) => !open)
+      return
+    }
+    setOpen((open) => !open)
   }, [isMobile, setOpen, setOpenMobile])
 
   // Adds a keyboard shortcut to toggle the sidebar.
@@ -149,6 +147,66 @@ function SidebarProvider({
   )
 }
 
+function MobileDrawer({
+  open,
+  onClose,
+  side,
+  dir,
+  children,
+}: {
+  open: boolean
+  onClose: () => void
+  side: "left" | "right"
+  dir?: string
+  children: React.ReactNode
+}) {
+  // Escape closes it; the page behind does not scroll while it is open.
+  React.useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
+    window.addEventListener("keydown", onKey)
+    const previous = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      document.body.style.overflow = previous
+    }
+  }, [open, onClose])
+
+  if (!open || typeof document === "undefined") return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-50" data-slot="sidebar-mobile">
+      <div
+        className="absolute inset-0 bg-black/30 animate-in fade-in duration-150"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu"
+        dir={dir}
+        data-sidebar="sidebar"
+        data-slot="sidebar"
+        data-mobile="true"
+        // Tapping a link inside the menu closes it (the page changes behind it).
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("a")) onClose()
+        }}
+        className={cn(
+          "absolute inset-y-0 flex w-(--sidebar-width) max-w-[85vw] flex-col bg-sidebar text-sidebar-foreground shadow-xl animate-in duration-200",
+          side === "left" ? "left-0 border-r slide-in-from-left" : "right-0 border-l slide-in-from-right"
+        )}
+        style={{ "--sidebar-width": SIDEBAR_WIDTH_MOBILE } as React.CSSProperties}
+      >
+        <div className="flex h-full w-full flex-col overflow-y-auto">{children}</div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function Sidebar({
   side = "left",
   variant = "sidebar",
@@ -180,28 +238,12 @@ function Sidebar({
   }
 
   if (isMobile) {
+    // A plain drawer (overlay + panel) instead of a dialog library: on phones a menu that opens
+    // on a simple tap and closes on a tap outside, a link, or Escape, with nothing else involved.
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
-        <SheetContent
-          dir={dir}
-          data-sidebar="sidebar"
-          data-slot="sidebar"
-          data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
-          style={
-            {
-              "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-            } as React.CSSProperties
-          }
-          side={side}
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
-          </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
-        </SheetContent>
-      </Sheet>
+      <MobileDrawer open={openMobile} onClose={() => setOpenMobile(false)} side={side} dir={dir}>
+        {children}
+      </MobileDrawer>
     )
   }
 
