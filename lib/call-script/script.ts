@@ -174,6 +174,71 @@ export const CALL_SCRIPT: ScriptSection[] = [
     ],
   },
   {
+    id: "short",
+    title: "Quick version (short script)",
+    hint: "For fast calls. Same flow as above, fewer words.",
+    items: [
+      {
+        id: "short-opener",
+        title: "Opener",
+        lines: [
+          { kind: "say", text: "Hey [Name], it's [First Name] from Loadlinkers. I'm looking at your FMCSA profile, saw your authority went active recently. Quick question: are you still running loads on spreadsheets?" },
+        ],
+      },
+      {
+        id: "short-yes",
+        title: "If yes (Excel / Sheets)",
+        lines: [
+          { kind: "say", text: "Got it. How many loads a week?" },
+          { kind: "note", text: "Listen. Note the number in the CRM." },
+          { kind: "say", text: "Okay. We built Loadlinkers TMS for exactly that: rate cons, FMCSA checks, invoices in one place, and we import your spreadsheet for free. 7-day free trial. Would you be opposed to me texting you the link?" },
+        ],
+      },
+      {
+        id: "short-text-yes",
+        title: "If yes to the text",
+        lines: [
+          { kind: "say", text: "Perfect. Best number to text?" },
+          { kind: "say", text: "And would [day] at [time] work for a quick 15-minute call so I can import a few of your loads live?" },
+          { kind: "note", text: 'Save the outcome "Trial link sent" (or "Demo booked") after the call.' },
+        ],
+      },
+      {
+        id: "short-tms",
+        title: "If they have a TMS",
+        lines: [
+          { kind: "say", text: "Which one? … What's one thing about it you'd change? … That's exactly why we built ours. Would you be opposed to trying the trial?" },
+        ],
+      },
+      {
+        id: "short-ascend",
+        title: "If they say Ascend",
+        lines: [{ kind: "say", text: "Ascend is solid. Ours is simpler and we import your data free. 15 minutes to compare?" }],
+      },
+      {
+        id: "short-email",
+        title: 'If they say "send an email"',
+        lines: [
+          { kind: "say", text: "Happy to. What's more useful, pricing or a quick demo video? … And would [day] at [time] work for a quick call?" },
+          { kind: "note", text: 'Save the outcome "Email requested".' },
+        ],
+      },
+      {
+        id: "short-no",
+        title: "If still no",
+        lines: [{ kind: "say", text: "Cool, no problem. Can I check back in a month?" }],
+      },
+      {
+        id: "short-marketplace",
+        title: "If they want the Marketplace",
+        lines: [
+          { kind: "say", text: "We also run the Loadlinkers Marketplace. We personally connect brokers with freight agents and dispatchers. Free to join. Would you be opposed to me texting that link too?" },
+          { kind: "note", text: 'Only text after they say yes. Save the outcome "Marketplace link sent".' },
+        ],
+      },
+    ],
+  },
+  {
     id: "voicemail",
     title: "Voicemail (20 seconds max)",
     items: [
@@ -237,7 +302,7 @@ export const CALLER_NOTES: string[] = [
 ]
 
 /** The guided view walks these sections, in this order, as the call progresses. */
-export const GUIDED_ORDER = ["opener", "yes", "no", "marketplace", "voicemail"] as const
+export const GUIDED_ORDER = ["opener", "yes", "no", "marketplace", "voicemail", "short"] as const
 
 /** Shown under the outcome menu: what to do next for each outcome (section 9 of the doc). */
 export const OUTCOME_NEXT_ACTION: Record<string, string> = {

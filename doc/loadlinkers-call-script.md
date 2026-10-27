@@ -144,6 +144,34 @@ Use instead of the normal opener when CRM notes show the broker is looking for a
 
 ---
 
+## 10. SHORT SCRIPT (quick version)
+
+**Opener**
+> "Hey [Name], it's [First Name] from Loadlinkers. I'm looking at your FMCSA profile, saw your authority went active recently. Quick question: are you still running loads on spreadsheets?"
+
+**If yes (Excel/Sheets)**
+> "Got it. How many loads a week? … Okay. We built Loadlinkers TMS for exactly that: rate cons, FMCSA checks, invoices in one place, and we import your spreadsheet for free. 7-day free trial. Would you be opposed to me texting you the link?"
+
+**If yes to the text**
+> "Perfect. Best number to text? … And would [day] at [time] work for a quick 15-minute call so I can import a few of your loads live?"
+
+**If they have a TMS**
+> "Which one? … What's one thing about it you'd change? … That's exactly why we built ours. Would you be opposed to trying the trial?"
+
+**If they say Ascend**
+> "Ascend is solid. Ours is simpler and we import your data free. 15 minutes to compare?"
+
+**If they say "send an email"**
+> "Happy to. What's more useful, pricing or a quick demo video? … And would [day] at [time] work for a quick call?"
+
+**If still no**
+> "Cool, no problem. Can I check back in a month?"
+
+**If they want the Marketplace**
+> "We also run the Loadlinkers Marketplace. We personally connect brokers with freight agents and dispatchers. Free to join. Would you be opposed to me texting that link too?"
+
+---
+
 ## Notes for callers
 - Never claim data we don't have (their lanes, load postings, etc.). Only FMCSA profile info is real.
 - Don't call the Marketplace a "load board" — it gives introductions, not loads.

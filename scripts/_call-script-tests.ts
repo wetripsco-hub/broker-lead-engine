@@ -59,6 +59,11 @@ check("agent names: empty -> missing", agentNames("").firstName === null && agen
   const tokens = [...allText.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1])
   const known = new Set(["Name", "First Name", "Full Name", "day", "time", "number", "Phone"])
   check("script: every [placeholder] in the text is one the app can fill", tokens.every((t) => known.has(t)), [...new Set(tokens.filter((t) => !known.has(t)))].join(","))
+  const quick = CALL_SCRIPT.find((s) => s.id === "short")!
+  check("script: the quick version has its 8 parts (opener, yes, text yes, TMS, Ascend, email, still no, Marketplace)", !!quick && quick.items.length === 8)
+  const quickText = quick.items.flatMap((i) => i.lines.map((l) => l.text)).join(" ")
+  check("script: the quick version uses placeholders, no hard-coded caller name or day", /\[First Name\]/.test(quickText) && /\[day\] at \[time\]/.test(quickText) && !/Shahid|Thursday|Wednesday/.test(quickText))
+  check("script: the quick version is reachable in the guided view", (GUIDED_ORDER as readonly string[]).includes("short"))
   const texts = CALL_SCRIPT.find((s) => s.id === "text")!
   check("script: both texts are copyable and end with the STOP opt-out", texts.items.length === 2 && texts.items.every((i) => !!i.copy && /Reply STOP to opt out\.$/.test(i.lines[0].text)))
   const email = CALL_SCRIPT.find((s) => s.id === "email")!.items[0]
