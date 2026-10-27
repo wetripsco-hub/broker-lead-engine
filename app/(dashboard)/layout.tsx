@@ -18,29 +18,26 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/login")
 
-  const { data: agentData } = await supabase
-    .from("agents")
-    .select("id, name")
-    .eq("user_id", user.id)
-    .maybeSingle()
+  // The three look-ups are independent, so they are asked together.
+  const [{ data: agentData }, { count: unreadSmsCount }, { count: unreadEmailCount }] = await Promise.all([
+    supabase.from("agents").select("id, name").eq("user_id", user.id).maybeSingle(),
+    supabase
+      .from("outreach_events")
+      .select("id", { count: "exact", head: true })
+      .eq("channel", "sms")
+      .eq("direction", "inbound")
+      .is("read_at", null),
+    supabase
+      .from("outreach_events")
+      .select("id", { count: "exact", head: true })
+      .eq("channel", "email")
+      .eq("direction", "inbound")
+      .is("read_at", null),
+  ])
 
   const agent = agentData as { id: string; name: string } | null
   const role = (user.user_metadata?.role as UserRole) ?? "agent"
   const userName = agent?.name ?? user.email ?? "User"
-
-  const { count: unreadSmsCount } = await supabase
-    .from("outreach_events")
-    .select("id", { count: "exact", head: true })
-    .eq("channel", "sms")
-    .eq("direction", "inbound")
-    .is("read_at", null)
-
-  const { count: unreadEmailCount } = await supabase
-    .from("outreach_events")
-    .select("id", { count: "exact", head: true })
-    .eq("channel", "email")
-    .eq("direction", "inbound")
-    .is("read_at", null)
 
   return (
     <SidebarProvider>

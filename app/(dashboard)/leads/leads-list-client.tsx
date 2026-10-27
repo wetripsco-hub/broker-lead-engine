@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -370,6 +370,15 @@ export function LeadsListClient({
     return sortDir === "desc" ? -d : d
   })
 
+  // Only the first rows are drawn at first (each row has two drop-downs, so thousands of rows make
+  // the page slow, most of all on phones). Search, filters and sort still work on every lead.
+  const PAGE_ROWS = 100
+  const [visibleRows, setVisibleRows] = useState(PAGE_ROWS)
+  useEffect(() => {
+    setVisibleRows(PAGE_ROWS)
+  }, [filtered.length, sortMode, sortDir])
+  const shownRows = filtered.slice(0, visibleRows)
+
   function sortByColumn(col: ColumnKey) {
     if (sortMode === col) setSortDir((d) => (d === "desc" ? "asc" : "desc"))
     else {
@@ -639,7 +648,7 @@ export function LeadsListClient({
               {sortHeader("stage", "Stage")}
               <span />
             </div>
-            {filtered.map((lead, i) => {
+            {shownRows.map((lead, i) => {
               const b = lead.brokers
               const checked = selectedIds.has(lead.id)
               const emailInfo = emailStatusByLead[lead.id]
@@ -762,6 +771,19 @@ export function LeadsListClient({
                 </div>
               )
             })}
+            {filtered.length > shownRows.length && (
+              <div className="flex items-center justify-center gap-3 border-t px-4 py-3 text-xs text-muted-foreground">
+                <span>
+                  Showing {shownRows.length} of {filtered.length}
+                </span>
+                <Button variant="outline" size="sm" className="h-8" onClick={() => setVisibleRows((n) => n + PAGE_ROWS)}>
+                  Show {Math.min(PAGE_ROWS, filtered.length - shownRows.length)} more
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8" onClick={() => setVisibleRows(filtered.length)}>
+                  Show all
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

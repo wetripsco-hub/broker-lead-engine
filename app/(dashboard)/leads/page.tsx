@@ -18,11 +18,13 @@ export default async function LeadsPage({
 
   const isAdmin = user.user_metadata?.role === "admin"
 
-  // Read in pages: the API returns at most 1000 rows per request.
-  const leads = await fetchAll<any>(() =>
-    supabase
-      .from("leads")
-      .select(`
+  // Everything the page needs is requested at the same time (one wait instead of eight in a row).
+  // Lists are read in pages because the API returns at most 1000 rows per request.
+  const [leads, templatesRes, followUpByLead, favRes, myAgentRes, emailEventsRaw, aiEventsRaw, agentsRes] = await Promise.all([
+    fetchAll<any>(() =>
+      supabase
+        .from("leads")
+        .select(`
       id,
       stage,
       assigned_agent_id,
@@ -30,44 +32,45 @@ export default async function LeadsPage({
       brokers ( mc_number, dot_number, mc_status, company_name, contact_name, city, state, phone, email ),
       agents ( name )
     `)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false }),
-  )
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }),
+    ),
+    supabase.from("email_templates").select("id, name, subject, body, type").order("created_at", { ascending: true }),
+    getFollowUps(supabase),
+    // This user's stars. If the favorites migration hasn't been run the query just errors and the
+    // list shows no stars, instead of breaking the page.
+    (supabase.from("lead_favorites") as any).select("lead_id"),
+    supabase.from("agents").select("name").eq("user_id", user.id).maybeSingle(),
+    // Latest email status per lead: newest first, then the first (latest) row per lead is kept below.
+    fetchAll<any>(() =>
+      supabase
+        .from("outreach_events")
+        .select("lead_id, status, open_count, click_count, occurred_at")
+        .eq("channel", "email")
+        .eq("direction", "outbound")
+        .order("occurred_at", { ascending: false })
+        .order("id", { ascending: false }),
+    ),
+    // Latest AI call per lead. Tolerant: if the AI-calling columns aren't there the list shows none.
+    fetchAll<any>(() =>
+      (supabase.from("outreach_events") as any)
+        .select("lead_id, status, call_status, disposition, duration_seconds, occurred_at")
+        .eq("channel", "ai_call")
+        .order("occurred_at", { ascending: false })
+        .order("id", { ascending: false }),
+    ),
+    // Full agent roster for the assignment dropdown + "by agent" filter: admin only.
+    isAdmin
+      ? supabase.from("agents").select("id, name").eq("active", true).order("name", { ascending: true })
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+  ])
 
-  const { data: templatesRaw } = await supabase
-    .from("email_templates")
-    .select("id, name, subject, body, type")
-    .order("created_at", { ascending: true })
-  const templates = (templatesRaw ?? []) as Array<{
+  const templates = (templatesRes.data ?? []) as Array<{
     id: string; name: string; subject: string; body: string; type: "initial" | "follow_up"
   }>
-
-  const followUpByLead = await getFollowUps(supabase)
-
-  // This user's stars. If the favorites migration hasn't been run the query just
-  // errors and the list shows no stars, instead of breaking the page.
-  const { data: favRaw } = await (supabase.from("lead_favorites") as any).select("lead_id")
-  const favoriteIds = ((favRaw ?? []) as Array<{ lead_id: string }>).map((f) => f.lead_id)
-
-  const { data: myAgentRaw } = await supabase
-    .from("agents")
-    .select("name")
-    .eq("user_id", user.id)
-    .maybeSingle()
-  const currentAgentName = (myAgentRaw as { name: string } | null)?.name ?? ""
-
-  // Latest email status per lead, for the "Email Status" column — one query
-  // for all leads, newest first, then keep only the first (latest) row per
-  // lead_id client-side (Postgres has no simple "latest per group" select).
-  const emailEventsRaw = await fetchAll<any>(() =>
-    supabase
-      .from("outreach_events")
-      .select("lead_id, status, open_count, click_count, occurred_at")
-      .eq("channel", "email")
-      .eq("direction", "outbound")
-      .order("occurred_at", { ascending: false })
-      .order("id", { ascending: false }),
-  )
+  const favoriteIds = (((favRes as any).data ?? []) as Array<{ lead_id: string }>).map((f) => f.lead_id)
+  const currentAgentName = ((myAgentRes.data as { name: string } | null)?.name) ?? ""
+  const allAgents = ((agentsRes.data ?? []) as Array<{ id: string; name: string }>)
 
   const emailStatusByLead: Record<string, { status: string; openCount: number; clickCount: number }> = {}
   for (const e of (emailEventsRaw ?? []) as any[]) {
@@ -75,15 +78,6 @@ export default async function LeadsPage({
     emailStatusByLead[e.lead_id] = { status: e.status, openCount: e.open_count ?? 0, clickCount: e.click_count ?? 0 }
   }
 
-  // Latest AI call per lead, for the "AI call" column. Read separately and tolerant: if the
-  // AI-calling columns aren't there the list simply shows no AI results.
-  const aiEventsRaw = await fetchAll<any>(() =>
-    (supabase.from("outreach_events") as any)
-      .select("lead_id, status, call_status, disposition, duration_seconds, occurred_at")
-      .eq("channel", "ai_call")
-      .order("occurred_at", { ascending: false })
-      .order("id", { ascending: false }),
-  )
   const aiCallByLead: Record<string, { status: string; callStatus: string | null; disposition: string | null; seconds: number | null; at: string }> = {}
   for (const e of (aiEventsRaw ?? []) as any[]) {
     if (!e.lead_id || aiCallByLead[e.lead_id]) continue
@@ -94,17 +88,6 @@ export default async function LeadsPage({
       seconds: e.duration_seconds ?? null,
       at: e.occurred_at,
     }
-  }
-
-  // Full agent roster for the assignment dropdown + "by agent" filter — admin only
-  let allAgents: Array<{ id: string; name: string }> = []
-  if (isAdmin) {
-    const { data: agentsRaw } = await supabase
-      .from("agents")
-      .select("id, name")
-      .eq("active", true)
-      .order("name", { ascending: true })
-    allAgents = (agentsRaw ?? []) as Array<{ id: string; name: string }>
   }
 
   return (
