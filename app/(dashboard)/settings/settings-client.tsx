@@ -41,7 +41,7 @@ export function SettingsClient({ myAgent, myEmail, myRole, allAgents, announceRe
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-8">
+    <div className="p-3 sm:p-6 max-w-2xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">Account and profile</p>

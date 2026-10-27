@@ -138,7 +138,7 @@ export function CopilotPanel({ leadId, initialOn = false, callId, callLive, getS
   return (
     <aside
       aria-label="Sales Copilot"
-      className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl md:w-[380px]"
+      className="flex w-full max-w-sm flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl md:max-h-[90vh] md:w-[380px] md:max-w-none"
     >
       {/* Header + toggle */}
       <div className="flex items-center justify-between border-b px-4 py-3">

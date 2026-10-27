@@ -348,11 +348,40 @@ export function DialerModal({
   const isEnded   = phase === "ended" || phase === "saving"
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/50">
       {/* Remote audio playout — required by the Telnyx SDK (client.remoteElement) */}
       <audio ref={audioRef} autoPlay playsInline className="hidden" />
 
-      <div className="flex w-full max-w-[1340px] flex-col items-center gap-4 md:flex-row md:flex-wrap md:items-start md:justify-center">
+      <div className="mx-auto flex min-h-full w-full max-w-[1340px] flex-col items-center gap-3 p-2 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-4 md:flex-row md:flex-wrap md:content-center md:items-start md:justify-center md:gap-4">
+      {/* Phones: call controls stay on screen while the script or copilot below is scrolled. */}
+      {!isEnded && (
+        <div className="sticky top-0 z-20 flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border bg-card/95 px-3 py-2 shadow-lg backdrop-blur md:hidden">
+          <div className="min-w-0">
+            <p className={`truncate text-xs font-semibold ${cfg.color}`}>{cfg.label}</p>
+            <p className="font-mono text-sm tabular-nums">{formatDuration(seconds)}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleMute}
+              disabled={phase !== "active"}
+              aria-label={muted ? "Unmute" : "Mute"}
+              className={`flex size-11 items-center justify-center rounded-full bg-muted disabled:opacity-40 ${muted ? "ring-2 ring-destructive" : ""}`}
+            >
+              {muted ? <MicOff className="size-5 text-destructive" /> : <Mic className="size-5" />}
+            </button>
+            <button
+              type="button"
+              onClick={hangUp}
+              disabled={phase === "connecting"}
+              aria-label="End call"
+              className="flex size-11 items-center justify-center rounded-full bg-destructive disabled:opacity-40"
+            >
+              <PhoneOff className="size-5 text-white" />
+            </button>
+          </div>
+        </div>
+      )}
       <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden shrink-0">
 
         {/* ── Header ── */}
@@ -426,7 +455,7 @@ export function DialerModal({
 
         {/* ── Call controls (connecting / dialing / active) ── */}
         {!isEnded && (
-          <div className="flex items-center justify-center gap-6 px-6 pb-7">
+          <div className="hidden items-center justify-center gap-6 px-6 pb-7 md:flex">
             {/* Mute */}
             <div className="flex flex-col items-center gap-1.5">
               <button

@@ -97,8 +97,9 @@ function EmailStatusCell({ info }: { info: EmailStatusInfo | undefined }) {
 
 // The agent view has no Agent column, so it needs its own track list — a
 // fixed template with one column too many pushes everything after it over.
-const GRID_ADMIN = "grid-cols-[28px_1fr_140px_100px_110px_110px_100px_180px_100px_32px]"
-const GRID_AGENT = "grid-cols-[28px_1fr_140px_100px_110px_110px_100px_100px_32px]"
+// Phones show a compact row (tick box, company, stage, arrow); the other columns appear from md up.
+const GRID_ADMIN = "grid-cols-[28px_minmax(0,1fr)_auto_20px] md:grid-cols-[28px_1fr_140px_100px_110px_110px_100px_180px_100px_32px]"
+const GRID_AGENT = "grid-cols-[28px_minmax(0,1fr)_auto_20px] md:grid-cols-[28px_1fr_140px_100px_110px_110px_100px_100px_32px]"
 
 interface AiCallInfo {
   status: string
@@ -606,7 +607,7 @@ export function LeadsListClient({
           </div>
         ) : (
           <div>
-            <div className={`grid ${isAdmin ? GRID_ADMIN : GRID_AGENT} gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide items-center`}>
+            <div className={`hidden md:grid ${isAdmin ? GRID_ADMIN : GRID_AGENT} gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide items-center`}>
               <input
                 type="checkbox"
                 checked={allFilteredSelected}
@@ -646,7 +647,7 @@ export function LeadsListClient({
               return (
                 <div
                   key={lead.id}
-                  className={`relative grid ${isAdmin ? GRID_ADMIN : GRID_AGENT} gap-4 px-4 py-3 border-b last:border-0 items-center transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/40 group animate-in-fade ${
+                  className={`relative grid ${isAdmin ? GRID_ADMIN : GRID_AGENT} gap-2 md:gap-4 px-3 md:px-4 py-3 border-b last:border-0 items-center transition-colors duration-150 ease-[var(--ease-out)] hover:bg-muted/40 group animate-in-fade ${
                     checked ? "bg-accent/40" : opened ? "bg-green-500/5" : ""
                   }`}
                   style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
@@ -693,9 +694,13 @@ export function LeadsListClient({
                         </span>
                       )}
                     </p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground md:hidden">
+                      {[b?.city, b?.state].filter(Boolean).join(", ") || "—"}
+                      {callByLead?.get(lead.id)?.clock ? ` · ${callByLead.get(lead.id)!.clock}` : ""}
+                    </p>
                   </div>
                   </div>
-                  <div className="min-w-0 pointer-events-none leading-tight">
+                  <div className="hidden min-w-0 pointer-events-none leading-tight md:block">
                     <p className="text-sm text-muted-foreground truncate">
                       {[b?.city, b?.state].filter(Boolean).join(", ") || "—"}
                     </p>
@@ -721,7 +726,7 @@ export function LeadsListClient({
                         })()}
                     </p>
                   </div>
-                  <div className="min-w-0 pointer-events-none leading-tight" title={new Date(lead.created_at).toLocaleString()}>
+                  <div className="hidden min-w-0 pointer-events-none leading-tight md:block" title={new Date(lead.created_at).toLocaleString()}>
                     <p className="text-sm text-muted-foreground" suppressHydrationWarning>
                       {new Date(lead.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                     </p>
@@ -729,11 +734,13 @@ export function LeadsListClient({
                       {now !== null ? relativeAge(lead.created_at, now) : ""}
                     </p>
                   </div>
-                  <EmailStatusCell info={emailInfo} />
-                  <LastEmailCell info={followUpByLead[lead.id]} />
-                  <AiCallCell info={aiCallByLead[lead.id]} now={now} />
+                  <div className="hidden md:contents">
+                    <EmailStatusCell info={emailInfo} />
+                    <LastEmailCell info={followUpByLead[lead.id]} />
+                    <AiCallCell info={aiCallByLead[lead.id]} now={now} />
+                  </div>
                   {isAdmin && (
-                    <div className="relative z-10">
+                    <div className="relative z-10 hidden md:block">
                       <AssignedAgentSelector
                         leadId={lead.id}
                         assignedAgentId={lead.assigned_agent_id}
@@ -761,8 +768,8 @@ export function LeadsListClient({
 
       {/* Floating action bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in-rise">
-          <div className="flex items-center gap-3 rounded-full border bg-card shadow-lg px-4 py-2.5">
+        <div className="fixed bottom-3 left-1/2 z-40 flex w-[calc(100vw-1rem)] -translate-x-1/2 justify-center animate-in-rise md:bottom-6 md:w-auto">
+          <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border bg-card px-3 py-2.5 shadow-lg md:gap-3 md:rounded-full md:px-4">
             <span className="text-sm font-medium">
               {selectedIds.size} lead{selectedIds.size === 1 ? "" : "s"} selected
             </span>

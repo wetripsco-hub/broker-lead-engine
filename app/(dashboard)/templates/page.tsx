@@ -27,7 +27,7 @@ export default async function TemplatesPage() {
   }>
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-3xl mx-auto">
       <TemplatesClient templates={templates} isAdmin={isAdmin} />
     </div>
   )

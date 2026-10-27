@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Search, Send, UserPlus, MessageSquare } from "lucide-react"
+import { Search, Send, UserPlus, MessageSquare, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -224,7 +224,7 @@ export function MessagesClient({ initialEvents }: { initialEvents: RawEvent[] })
   return (
     <div className="flex h-full border-t">
       {/* Left panel — conversation list */}
-      <div className="w-80 shrink-0 border-r flex flex-col">
+      <div className={`w-full shrink-0 flex-col border-r md:flex md:w-80 ${selected ? "hidden" : "flex"}`}>
         <div className="p-3 border-b">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
@@ -285,7 +285,7 @@ export function MessagesClient({ initialEvents }: { initialEvents: RawEvent[] })
       </div>
 
       {/* Right panel — chat window */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`min-w-0 flex-1 flex-col md:flex ${selected ? "flex" : "hidden"}`}>
         {!selected ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-4">
             <MessageSquare className="size-10 text-muted-foreground/30" />
@@ -294,8 +294,16 @@ export function MessagesClient({ initialEvents }: { initialEvents: RawEvent[] })
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b shrink-0">
-              <div className="min-w-0">
+            <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-3 border-b shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedNumber(null)}
+                aria-label="Back to conversations"
+                className="-ml-1 flex size-9 shrink-0 items-center justify-center rounded-md hover:bg-muted md:hidden"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-medium text-sm truncate">{selected.displayName}</p>
                   {!selected.leadId && <Badge variant="outline" className="text-[10px]">Unknown</Badge>}

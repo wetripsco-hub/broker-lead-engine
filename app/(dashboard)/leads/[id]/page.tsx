@@ -248,7 +248,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-6">
       {/* Back + header */}
       <div>
         <Link

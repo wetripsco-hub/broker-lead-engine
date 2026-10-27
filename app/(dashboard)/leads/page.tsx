@@ -108,7 +108,7 @@ export default async function LeadsPage({
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-7xl mx-auto">
       <LeadsListClient
         leads={leads}
         isAdmin={isAdmin}

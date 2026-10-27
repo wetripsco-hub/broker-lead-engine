@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Search, Send, UserPlus, Mail, RefreshCw, Trash2 } from "lucide-react"
+import { Search, Send, UserPlus, Mail, RefreshCw, Trash2, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -313,7 +313,7 @@ They are only removed here, not from the mailbox. This cannot be undone.`,
   return (
     <div className="flex h-full border-t">
       {/* Left — thread list */}
-      <div className="w-96 shrink-0 border-r flex flex-col">
+      <div className={`w-full shrink-0 flex-col border-r md:flex md:w-96 ${selected ? "hidden" : "flex"}`}>
         <div className="p-3 border-b space-y-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
@@ -462,7 +462,7 @@ They are only removed here, not from the mailbox. This cannot be undone.`,
       </div>
 
       {/* Right — thread */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`min-w-0 flex-1 flex-col md:flex ${selected ? "flex" : "hidden"}`}>
         {!selected ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-4">
             <Mail className="size-10 text-muted-foreground/30" />
@@ -470,8 +470,16 @@ They are only removed here, not from the mailbox. This cannot be undone.`,
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b shrink-0">
-              <div className="min-w-0">
+            <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-3 border-b shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedKey(null)}
+                aria-label="Back to conversations"
+                className="-ml-1 flex size-9 shrink-0 items-center justify-center rounded-md hover:bg-muted md:hidden"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-medium text-sm truncate">{selected.subject}</p>
                   {!selected.leadId && <Badge variant="outline" className="text-[10px]">Unmatched</Badge>}

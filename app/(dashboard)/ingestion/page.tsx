@@ -59,7 +59,7 @@ export default async function IngestionPage() {
   const censusFileInfo = isAdmin ? await getCensusFileInfo() : null
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <IngestionLogClient logs={enrichedLogs} isAdmin={isAdmin} censusFileInfo={censusFileInfo} />
     </div>
   )

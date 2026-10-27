@@ -35,7 +35,7 @@ export default async function AgentsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       <AgentsClient agents={agents} leadCounts={leadCounts} />
     </div>
   )

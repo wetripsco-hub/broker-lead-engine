@@ -20,7 +20,7 @@ export default async function KnowledgePage() {
     .order("created_at", { ascending: true })
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-3xl mx-auto">
       <KnowledgeClient items={(data ?? []) as KbItem[]} isAdmin={isAdmin} />
     </div>
   )

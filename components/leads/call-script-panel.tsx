@@ -303,7 +303,7 @@ export function CallScriptPanel({ contactName, agentName, callbackPhone, variant
     return (
       <aside
         aria-label="Call script"
-        className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl md:w-[460px]"
+        className="flex w-full max-w-sm flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl md:max-h-[90vh] md:w-[460px] md:max-w-none"
       >
         <div className="border-b px-4 py-3">
           <h2 className="text-sm font-semibold">Call script</h2>

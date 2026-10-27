@@ -106,6 +106,13 @@ check("agent names: empty -> missing", agentNames("").firstName === null && agen
   const dialer = read("components/leads/dialer-modal.tsx")
   check("wiring: the dialer stops (no call placed) when the server says blocked", /if \(blocked\)/.test(dialer) && dialer.indexOf("if (blocked)") < dialer.indexOf("newCall("))
   check("wiring: the script panel sits in the call overlay", /<CallScriptPanel variant="dialer"/.test(dialer))
+  // Phones: the call card must never be pushed off the top of the screen.
+  check("mobile: the call overlay scrolls from the top (no centre+scroll clipping)", /fixed inset-0 z-50 overflow-y-auto/.test(dialer) && !/fixed inset-0 z-50 flex items-center justify-center/.test(dialer))
+  check("mobile: mute / end-call stay in a sticky bar on phones", /sticky top-0 z-20[^"]*md:hidden/.test(dialer) && /aria-label="End call"/.test(dialer))
+  check("mobile: side panels are not height-capped on phones", /md:max-h-\[90vh\]/.test(read("components/copilot/copilot-panel.tsx")) && /md:max-h-\[90vh\]/.test(read("components/leads/call-script-panel.tsx")))
+  const list = read("app/(dashboard)/leads/leads-list-client.tsx")
+  check("mobile: leads list collapses to tick box + company + stage on phones", /grid-cols-\[28px_minmax\(0,1fr\)_auto_20px\] md:grid-cols-/.test(list) && /hidden md:grid/.test(list))
+  check("mobile: emails and SMS inboxes show list or thread on phones, with a Back button", /aria-label="Back to conversations"/.test(read("app/(dashboard)/emails/emails-client.tsx")) && /aria-label="Back to conversations"/.test(read("app/(dashboard)/messages/messages-client.tsx")))
   const mig = read("supabase/migrations/20261026000001_sms_consent.sql")
   check("migration: two columns, guarded against direct edits by agents", /sms_consent_at timestamptz/.test(mig) && /sms_consent_source text/.test(mig) && /SMS consent is recorded by the app/.test(mig))
 }

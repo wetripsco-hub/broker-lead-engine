@@ -41,7 +41,7 @@ export default async function AiCallingSettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-2xl mx-auto">
       <AiCallingClient settings={settings} env={env} prompt={prompt} />
     </div>
   )
