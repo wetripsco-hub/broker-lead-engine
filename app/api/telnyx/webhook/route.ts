@@ -1,13 +1,87 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { toE164 } from "@/lib/phone"
+import { startCallRecording } from "@/lib/telnyx/client"
+import { handleCallEvent, type CallEventDeps, type CallRow } from "@/lib/telnyx/call-events"
+import { isValidTelnyxSignature } from "@/lib/telnyx/webhook-signature"
+
+// Copying a call recording into storage can take a while on a long call.
+export const maxDuration = 60
+
+const CALL_ROW = "id, status, disposition, recording_path"
+
+function callEventDeps(supabase: ReturnType<typeof createAdminClient>): CallEventDeps {
+  const events = () => supabase.from("outreach_events") as any
+  return {
+    async findByExternalId(callControlId) {
+      const { data } = await events().select(CALL_ROW).eq("external_id", callControlId).eq("channel", "call").limit(1).maybeSingle()
+      return (data as CallRow | null) ?? null
+    },
+    async linkEvent(eventId, agentId, callControlId) {
+      const { data } = await events()
+        .update({ external_id: callControlId })
+        .eq("id", eventId)
+        .eq("agent_id", agentId)
+        .eq("channel", "call")
+        .is("external_id", null)
+        .select(CALL_ROW)
+        .maybeSingle()
+      return (data as CallRow | null) ?? null
+    },
+    async insertLegacyRow(leadId, agentId, callControlId) {
+      await events().insert({
+        lead_id: leadId,
+        agent_id: agentId,
+        channel: "call",
+        status: "pending",
+        direction: "outbound",
+        external_id: callControlId,
+      })
+    },
+    async updateStatus(id, status) {
+      await events().update({ status }).eq("id", id).is("disposition", null)
+    },
+    startRecording: startCallRecording,
+    async downloadRecording(url) {
+      const res = await fetch(url, { signal: AbortSignal.timeout(40_000) })
+      if (!res.ok) throw new Error(`recording download failed (${res.status})`)
+      return res.arrayBuffer()
+    },
+    async uploadRecording(path, bytes) {
+      const { error } = await supabase.storage
+        .from("call-recordings")
+        .upload(path, bytes, { contentType: "audio/mpeg", upsert: true })
+      if (error) throw new Error(error.message)
+    },
+    async saveRecording(id, path, seconds) {
+      const { error } = await events().update({ recording_path: path, recording_seconds: seconds }).eq("id", id)
+      if (error) throw new Error(error.message)
+    },
+  }
+}
 
 // Telnyx sends call lifecycle + message events here.
 // Set this URL in Telnyx Portal → Connections → your connection → Webhook URL.
 export async function POST(req: NextRequest) {
+  const rawBody = await req.text()
+
+  // Checked once TELNYX_PUBLIC_KEY is set (Telnyx Portal → Keys & Credentials → Public Key).
+  const publicKey = process.env.TELNYX_PUBLIC_KEY
+  if (
+    publicKey &&
+    !isValidTelnyxSignature(
+      rawBody,
+      req.headers.get("telnyx-signature-ed25519"),
+      req.headers.get("telnyx-timestamp"),
+      publicKey,
+    )
+  ) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+  }
+
   let body: Record<string, unknown>
   try {
-    body = await req.json()
+    body = JSON.parse(rawBody)
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
@@ -23,54 +97,10 @@ export async function POST(req: NextRequest) {
 
   // ── Voice call events ──────────────────────────────────────────────────────
 
-  const callControlId = payload.call_control_id as string | undefined
-  const clientState = payload.client_state as string | undefined
-
-  let leadId: string | null = null
-  let agentId: string | null = null
-  if (clientState) {
-    try {
-      const decoded = JSON.parse(Buffer.from(clientState, "base64").toString("utf-8"))
-      leadId = decoded.leadId ?? null
-      agentId = decoded.agentId ?? null
-    } catch {
-      // ignore malformed client_state
-    }
-  }
-
-  if (event === "call.initiated" && leadId && agentId) {
-    await (supabase.from("outreach_events") as any).insert({
-      lead_id: leadId,
-      agent_id: agentId,
-      channel: "call",
-      status: "pending",
-      direction: "outbound",
-      external_id: callControlId ?? null,
-    })
-  }
-
-  if (event === "call.answered" && callControlId) {
-    await (supabase.from("outreach_events") as any)
-      .update({ status: "answered" })
-      .eq("external_id", callControlId)
-  }
-
-  if (event === "call.hangup" && callControlId) {
-    const hangupCause = (payload.hangup_cause as string | undefined) ?? ""
-    const status = hangupCause === "normal_clearing" ? "answered" : "no_answer"
-    await (supabase.from("outreach_events") as any)
-      .update({ status })
-      .eq("external_id", callControlId)
-  }
-
-  if (event === "call.recording.saved" && callControlId) {
-    const recordingUrl =
-      (payload.public_recording_urls as Record<string, string> | undefined)?.mp3 ?? null
-    if (recordingUrl) {
-      await (supabase.from("outreach_events") as any)
-        .update({ recording_url: recordingUrl })
-        .eq("external_id", callControlId)
-    }
+  if (event.startsWith("call.")) {
+    const result = await handleCallEvent(event, payload, callEventDeps(supabase))
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 })
+    return NextResponse.json({ ok: true })
   }
 
   // ── SMS / MMS events ───────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { Mail, Phone, MessageSquare, ArrowUpRight, ArrowDownLeft, Voicemail, Bot } from "lucide-react"
+import { CallRecordingPlayer } from "@/components/calls/call-recording-player"
 import type { OutreachChannel, OutreachStatus } from "@/types/database"
 
 interface TimelineEvent {
@@ -8,6 +9,7 @@ interface TimelineEvent {
   direction: "inbound" | "outbound"
   message_body: string | null
   recording_url: string | null
+  recording_path?: string | null
   occurred_at: string
   agents: { name: string } | null
   opened_at?: string | null
@@ -255,10 +257,12 @@ export function OutreachTimeline({ events }: OutreachTimelineProps) {
                   {ev.channel === "ai_call" ? (
                     <AiCallDetails ev={ev} />
                   ) : ev.channel === "call" ? (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       {duration && <span>Duration: {duration}</span>}
                       {ev.follow_up_date && <span>Follow up: {ev.follow_up_date}</span>}
-                      {ev.recording_url && (
+                      {ev.recording_path ? (
+                        <CallRecordingPlayer eventId={ev.id} />
+                      ) : ev.recording_url && (
                         <a
                           href={ev.recording_url}
                           target="_blank"

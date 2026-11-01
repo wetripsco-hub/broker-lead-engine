@@ -13,6 +13,7 @@ import {
   LogOut,
   UserCog,
   BookOpen,
+  PhoneCall,
 } from "lucide-react"
 import {
   Sidebar,
@@ -156,6 +157,12 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                     label="Agents"
                     icon={UserCog}
                     active={pathname === "/agents" || pathname.startsWith("/agents/")}
+                  />
+                  <NavLink
+                    href="/calls"
+                    label="Call Reviews"
+                    icon={PhoneCall}
+                    active={pathname === "/calls" || pathname.startsWith("/calls/")}
                   />
                   <SidebarMenuItem>
                     <DialerWidget agentId={agentId} />

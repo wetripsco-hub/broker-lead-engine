@@ -202,6 +202,8 @@ export interface Database {
           status: OutreachStatus
           message_body: string | null
           recording_url: string | null
+          recording_path: string | null
+          recording_seconds: number | null
           transcript: string | null
           external_id: string | null
           direction: "inbound" | "outbound"
@@ -243,6 +245,8 @@ export interface Database {
           status?: OutreachStatus
           message_body?: string | null
           recording_url?: string | null
+          recording_path?: string | null
+          recording_seconds?: number | null
           transcript?: string | null
           external_id?: string | null
           direction?: "inbound" | "outbound"

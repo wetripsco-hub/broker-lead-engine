@@ -8,7 +8,7 @@
 
 ## 1. OPENER (every call)
 
-> "Hey [Name]? It's [First Name], [Full Name]. I'm looking at your FMCSA profile here, I saw your authority went active recently, and I was wondering if you could help me out for a moment?"
+> "Hey [Name]? It's [First Name], [Full Name] with Loadlinkers. Just so you know, this call may be recorded for quality. I'm looking at your FMCSA profile here, I saw your authority went active recently, and I was wondering if you could help me out for a moment?"
 
 **Them:** "Sure, what's this about?"
 
@@ -84,7 +84,7 @@
 
 Use instead of the normal opener when CRM notes show the broker is looking for agents (job post, Facebook post, etc.).
 
-> "Hey [Name]? It's [First Name], [Full Name]. I'm looking at your FMCSA profile here, and I was wondering if you could help me out for a moment?"
+> "Hey [Name]? It's [First Name], [Full Name] with Loadlinkers. Just so you know, this call may be recorded for quality. I'm looking at your FMCSA profile here, and I was wondering if you could help me out for a moment?"
 
 > "Well, I'm not even sure if it makes sense for us to talk yet. I'm calling new brokers to see who's looking to bring on freight agents, because finding good agents is usually the hardest part of the first year. Is that something you're working on?"
 
@@ -147,7 +147,7 @@ Use instead of the normal opener when CRM notes show the broker is looking for a
 ## 10. SHORT SCRIPT (quick version)
 
 **Opener**
-> "Hey [Name], it's [First Name] from Loadlinkers. I'm looking at your FMCSA profile, saw your authority went active recently. Quick question: are you still running loads on spreadsheets?"
+> "Hey [Name], it's [First Name] from Loadlinkers. Just so you know, this call may be recorded for quality. I'm looking at your FMCSA profile, saw your authority went active recently. Quick question: are you still running loads on spreadsheets?"
 
 **If yes (Excel/Sheets)**
 > "Got it. How many loads a week? … Okay. We built Loadlinkers TMS for exactly that: rate cons, FMCSA checks, invoices in one place, and we import your spreadsheet for free. 7-day free trial. Would you be opposed to me texting you the link?"

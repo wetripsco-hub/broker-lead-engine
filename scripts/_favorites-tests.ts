@@ -23,7 +23,7 @@ check("action: lead id is validated", /UUID\.test\(leadId\)/.test(action))
 check("action: a missing table gives a clear message, not a crash", /42P01/.test(action) && /migration/.test(action))
 
 const page = read("app/(dashboard)/leads/page.tsx")
-check("list page: loads the user's stars and tolerates a missing table", /lead_favorites/.test(page) && /favRaw \?\? \[\]/.test(page) && /favoriteIds=\{favoriteIds\}/.test(page))
+check("list page: loads the user's stars and tolerates a missing table", /lead_favorites/.test(page) && /favRes as any\)\.data \?\? \[\]/.test(page) && /favoriteIds=\{favoriteIds\}/.test(page))
 const list = read("app/(dashboard)/leads/leads-list-client.tsx")
 check("list: star on every row, Favorites filter and 'Favorites first' sort", /<FavoriteButton/.test(list) && /Favorites \(\{favoriteCount\}\)/.test(list) && /value="favorites"/.test(list))
 check("list: filter uses the live set, so a click shows at once", /favoritesOnly && !favorites\.has\(l\.id\)/.test(list))

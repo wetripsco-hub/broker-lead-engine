@@ -169,7 +169,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // Outreach events for this lead (all channels for timeline; newest first)
   const { data: eventsRaw } = await supabase
     .from("outreach_events")
-    .select("id, channel, status, message_body, recording_url, direction, occurred_at, opened_at, open_count, clicked_at, click_count, subject, from_email, transcript, ai_summary, follow_up_date, agents ( name )")
+    .select("id, channel, status, message_body, recording_url, recording_path, direction, occurred_at, opened_at, open_count, clicked_at, click_count, subject, from_email, transcript, ai_summary, follow_up_date, agents ( name )")
     .eq("lead_id", lead.id)
     .order("occurred_at", { ascending: false })
   let events = (eventsRaw ?? []) as any[]

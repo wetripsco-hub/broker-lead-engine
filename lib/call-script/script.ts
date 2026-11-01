@@ -44,7 +44,7 @@ export const CALL_SCRIPT: ScriptSection[] = [
         id: "opener-main",
         title: "Opener",
         lines: [
-          { kind: "say", text: "Hey [Name]? It's [First Name], [Full Name]. I'm looking at your FMCSA profile here, I saw your authority went active recently, and I was wondering if you could help me out for a moment?" },
+          { kind: "say", text: "Hey [Name]? It's [First Name], [Full Name] with Loadlinkers. Just so you know, this call may be recorded for quality. I'm looking at your FMCSA profile here, I saw your authority went active recently, and I was wondering if you could help me out for a moment?" },
           { kind: "them", text: "Sure, what's this about?" },
           { kind: "say", text: "Well, I'm not even sure if it makes sense for us to talk yet. I'm calling new brokers to see who's still running loads and rate cons on spreadsheets, because that usually costs hours every week and causes billing mistakes. Is that something you're dealing with?" },
           { kind: "goto", text: "Excel / interested: go to YES PATH. Objection: go to NO PATH." },
@@ -166,7 +166,7 @@ export const CALL_SCRIPT: ScriptSection[] = [
         id: "mpf-opener",
         title: "Marketplace-first opener",
         lines: [
-          { kind: "say", text: "Hey [Name]? It's [First Name], [Full Name]. I'm looking at your FMCSA profile here, and I was wondering if you could help me out for a moment?" },
+          { kind: "say", text: "Hey [Name]? It's [First Name], [Full Name] with Loadlinkers. Just so you know, this call may be recorded for quality. I'm looking at your FMCSA profile here, and I was wondering if you could help me out for a moment?" },
           { kind: "say", text: "Well, I'm not even sure if it makes sense for us to talk yet. I'm calling new brokers to see who's looking to bring on freight agents, because finding good agents is usually the hardest part of the first year. Is that something you're working on?" },
           { kind: "goto", text: "Then pitch the Marketplace (Marketplace backup), and mention the TMS trial at the end." },
         ],
@@ -182,7 +182,7 @@ export const CALL_SCRIPT: ScriptSection[] = [
         id: "short-opener",
         title: "Opener",
         lines: [
-          { kind: "say", text: "Hey [Name], it's [First Name] from Loadlinkers. I'm looking at your FMCSA profile, saw your authority went active recently. Quick question: are you still running loads on spreadsheets?" },
+          { kind: "say", text: "Hey [Name], it's [First Name] from Loadlinkers. Just so you know, this call may be recorded for quality. I'm looking at your FMCSA profile, saw your authority went active recently. Quick question: are you still running loads on spreadsheets?" },
         ],
       },
       {

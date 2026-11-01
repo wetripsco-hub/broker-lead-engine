@@ -207,7 +207,7 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
       if (logErr) toast.error(`Log error: ${logErr}`)
       else eventIdRef.current = eventId ?? null
 
-      const clientState = btoa(JSON.stringify({ agentId, directNumber: dialed }))
+      const clientState = btoa(JSON.stringify({ agentId, directNumber: dialed, eventId: eventIdRef.current }))
       const fromNumber = process.env.NEXT_PUBLIC_TELNYX_FROM_NUMBER ?? ""
       const call = (client as any).newCall({
         destinationNumber: dialed,

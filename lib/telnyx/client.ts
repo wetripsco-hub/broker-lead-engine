@@ -55,6 +55,8 @@ export async function startCallRecording(callControlId: string): Promise<void> {
         format: "mp3",
         channels: "dual",
         play_beep: false,
+        // Telnyx ignores a repeat for the same call, so a retried webhook can't double-record.
+        command_id: "record-start",
       }),
     },
   )

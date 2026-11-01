@@ -127,13 +127,16 @@ export function DialerModal({
   const [disposition, setDisposition] = useState<DispositionKey>("no_answer")
   const [notes, setNotes] = useState("")
   const [isPending, startTransition] = useTransition()
+  const [answered, setAnswered] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
 
-  const clientRef   = useRef<unknown>(null)
+  const clientRef  = useRef<unknown>(null)
   const callRef     = useRef<unknown>(null)
   const eventIdRef  = useRef<string | null>(null)
   const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(0)
   const endedRef    = useRef(false) // guard double-fire
+  const answeredRef = useRef(false) // read by handlers registered once, on mount
   const audioRef    = useRef<HTMLAudioElement>(null)
   const transcriptRef = useRef("")
   const [wrapUp, setWrapUp] = useState<CallWrapUp | null>(null)
@@ -169,8 +172,8 @@ export function DialerModal({
     if (timerRef.current) clearInterval(timerRef.current)
     setPhase("ended")
     // Auto-select disposition based on whether call was ever active
-    setDisposition(seconds > 0 ? "not_interested" : "no_answer")
-  }, [seconds])
+    setDisposition(answeredRef.current ? "not_interested" : "no_answer")
+  }, [])
 
   // After the call: persist the transcript right away, then ask for a short
   // summary + suggested disposition (the agent still confirms before saving).
@@ -264,7 +267,7 @@ export function DialerModal({
         if (cancelled) return
 
         // 5. Place call
-        const clientState = btoa(JSON.stringify({ leadId, agentId }))
+        const clientState = btoa(JSON.stringify({ leadId, agentId, eventId: eventIdRef.current }))
         const fromNumber = process.env.NEXT_PUBLIC_TELNYX_FROM_NUMBER ?? ""
         const call = (client as any).newCall({
           destinationNumber: toE164(brokerPhone) ?? brokerPhone,
@@ -278,6 +281,8 @@ export function DialerModal({
           if (n.type !== "callUpdate" || !n.call) return
           const state: string = n.call.state
           if (state === "active") {
+            answeredRef.current = true
+            setAnswered(true)
             setPhase("active")
             startTimeRef.current = Date.now()
             // Mobile browsers block autoplay outside a direct user gesture;
@@ -331,6 +336,7 @@ export function DialerModal({
       )
       if (error) {
         toast.error(`Save failed: ${error}`)
+        setSaveFailed(true)
         setPhase("ended")
       } else {
         toast.success("Call logged")
@@ -346,6 +352,8 @@ export function DialerModal({
   const isPulsing = phase === "dialing"
   const isActive  = phase === "active"
   const isEnded   = phase === "ended" || phase === "saving"
+  // An answered call needs an outcome. The way out after a failed save stops the agent getting stuck.
+  const canSkip   = phase === "ended" && (!answered || saveFailed)
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/50">
@@ -390,9 +398,10 @@ export function DialerModal({
             <Phone className={`size-4 ${cfg.color}`} />
             <span className={`text-sm font-semibold ${cfg.color}`}>{cfg.label}</span>
           </div>
-          {isEnded && (
+          {canSkip && (
             <button
               onClick={onClose}
+              aria-label="Close"
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="size-4" />
@@ -573,6 +582,11 @@ export function DialerModal({
               <CheckCircle2 className="size-4" />
               {phase === "saving" ? "Saving…" : "Save & close"}
             </Button>
+            {canSkip && (
+              <Button variant="ghost" className="w-full" onClick={onClose} disabled={isPending}>
+                Skip
+              </Button>
+            )}
           </div>
         )}
       </div>
