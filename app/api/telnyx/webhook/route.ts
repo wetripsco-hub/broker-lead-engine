@@ -65,7 +65,8 @@ function callEventDeps(supabase: ReturnType<typeof createAdminClient>): CallEven
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
 
-  // Checked once TELNYX_PUBLIC_KEY is set (Telnyx Portal → Keys & Credentials → Public Key).
+  // TELNYX_PUBLIC_KEY comes from Telnyx Portal → Keys & Credentials → Public Key. A wrong key would
+  // reject every call and SMS event, so failures are only logged until TELNYX_WEBHOOK_ENFORCE=true.
   const publicKey = process.env.TELNYX_PUBLIC_KEY
   if (
     publicKey &&
@@ -76,7 +77,10 @@ export async function POST(req: NextRequest) {
       publicKey,
     )
   ) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+    console.error("telnyx webhook: signature check failed")
+    if (process.env.TELNYX_WEBHOOK_ENFORCE === "true") {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+    }
   }
 
   let body: Record<string, unknown>

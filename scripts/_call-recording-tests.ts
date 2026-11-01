@@ -220,7 +220,8 @@ async function main() {
     check("signature: a replayed old event fails", !isValidTelnyxSignature(body, sig, ts, rawKey, new Date(now.getTime() + 600_000)))
     check("signature: missing headers fail", !isValidTelnyxSignature(body, null, ts, rawKey, now) && !isValidTelnyxSignature(body, sig, null, rawKey, now))
     check("signature: a bad key fails without throwing", !isValidTelnyxSignature(body, sig, ts, "bm90LWEta2V5", now))
-    check("webhook: only enforced once the key is set", /const publicKey = process\.env\.TELNYX_PUBLIC_KEY\s+if \(\s+publicKey &&/.test(read("app/api/telnyx/webhook/route.ts")))
+    const route = read("app/api/telnyx/webhook/route.ts")
+    check("webhook: a bad signature is only rejected when enforcing is switched on", /TELNYX_WEBHOOK_ENFORCE === "true"\) \{\s+return NextResponse\.json\(\{ error: "Invalid signature" \}, \{ status: 401 \}\)/.test(route) && (route.match(/status: 401/g) ?? []).length === 1)
   }
 
   console.log(failed === 0 ? "\nAll passed" : `\n${failed} FAILED`)
