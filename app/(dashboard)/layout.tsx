@@ -21,7 +21,13 @@ export default async function DashboardLayout({
   const role = (user.user_metadata?.role as UserRole) ?? "agent"
 
   // The look-ups are independent, so they are asked together.
-  const [{ data: agentData }, { count: unreadSmsCount }, { count: unreadEmailCount }, { count: pendingRequestsCount }] = await Promise.all([
+  const [
+    { data: agentData },
+    { count: unreadSmsCount },
+    { count: unreadEmailCount },
+    { count: pendingRequestsCount },
+    { count: ticketsBadgeCount },
+  ] = await Promise.all([
     supabase.from("agents").select("id, name").eq("user_id", user.id).maybeSingle(),
     supabase
       .from("outreach_events")
@@ -39,6 +45,10 @@ export default async function DashboardLayout({
     role === "admin"
       ? (supabase.from("after_hours_requests") as any).select("id", { count: "exact", head: true }).eq("status", "pending")
       : Promise.resolve({ count: 0 }),
+    // Support badge. Admin: tickets waiting for an answer; agent (RLS: own only): unopened answers.
+    role === "admin"
+      ? (supabase.from("support_tickets") as any).select("id", { count: "exact", head: true }).eq("status", "open")
+      : (supabase.from("support_tickets") as any).select("id", { count: "exact", head: true }).eq("agent_unread", true),
   ])
 
   const agent = agentData as { id: string; name: string } | null
@@ -54,6 +64,7 @@ export default async function DashboardLayout({
         unreadSmsCount={unreadSmsCount ?? 0}
         unreadEmailCount={unreadEmailCount ?? 0}
         pendingRequestsCount={(pendingRequestsCount as number | null) ?? 0}
+        ticketsBadgeCount={(ticketsBadgeCount as number | null) ?? 0}
       />
       <main className="flex flex-1 flex-col min-h-screen">
         <header className="flex items-center h-12 px-4 border-b shrink-0">

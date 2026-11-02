@@ -16,6 +16,7 @@ import {
   PhoneCall,
   Building2,
   Clock,
+  LifeBuoy,
 } from "lucide-react"
 import {
   Sidebar,
@@ -35,6 +36,7 @@ import { logout } from "@/app/(auth)/login/actions"
 import { DialerWidget } from "@/components/dialer/dialer-widget"
 import { UnreadSmsBadge } from "@/components/messages/unread-sms-badge"
 import { PendingRequestsBadge } from "@/components/requests/pending-requests-badge"
+import { TicketsBadge } from "@/components/tickets/tickets-badge"
 import type { UserRole } from "@/types/database"
 
 // `adminOnly` items are not rendered for agents (the pages also redirect them).
@@ -92,9 +94,11 @@ interface AppSidebarProps {
   unreadEmailCount: number
   /** Admin only: after-hours call requests waiting for a decision. */
   pendingRequestsCount?: number
+  /** Admin: tickets waiting for an answer. Agent: answers not opened yet. */
+  ticketsBadgeCount?: number
 }
 
-export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount, pendingRequestsCount = 0 }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount, pendingRequestsCount = 0, ticketsBadgeCount = 0 }: AppSidebarProps) {
   const pathname = usePathname()
   const isAdmin = role === "admin"
   const initials = userName
@@ -144,8 +148,15 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                 active={pathname === "/emails" || pathname.startsWith("/emails/")}
                 badge={<UnreadSmsBadge initialCount={unreadEmailCount} channel="email" />}
               />
+              <NavLink
+                href="/tickets"
+                label="Support"
+                icon={LifeBuoy}
+                active={pathname === "/tickets" || pathname.startsWith("/tickets/")}
+                badge={<TicketsBadge initialCount={ticketsBadgeCount} isAdmin={isAdmin} />}
+              />
               {/* Agent view is intentionally limited to Dashboard, Leads, Company,
-                  Messages and Emails — everything below is admin-only. The server-side
+                  Messages, Emails and Support — everything below is admin-only. The server-side
                   page guards are what actually enforce this; hiding the
                   links is just so an agent never sees a dead end. */}
               {isAdmin && (

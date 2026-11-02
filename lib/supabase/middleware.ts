@@ -39,7 +39,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/ingestion") ||
     request.nextUrl.pathname.startsWith("/settings") ||
     request.nextUrl.pathname.startsWith("/company") ||
-    request.nextUrl.pathname.startsWith("/requests")
+    request.nextUrl.pathname.startsWith("/requests") ||
+    request.nextUrl.pathname.startsWith("/tickets")
 
   if (!user && isDashboardRoute) {
     const url = request.nextUrl.clone()

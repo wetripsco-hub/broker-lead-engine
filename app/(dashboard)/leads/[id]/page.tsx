@@ -26,8 +26,9 @@ import { buildSmsTemplates } from "@/lib/sms-templates"
 import { CallScriptPanel } from "@/components/leads/call-script-panel"
 import { evaluateSmsPermission } from "@/lib/sms-permission"
 import { OutreachTimeline } from "@/components/leads/outreach-timeline"
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Hash, User } from "lucide-react"
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Hash, User, LifeBuoy } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import type { LeadStage } from "@/types/database"
 
 const MC_STATUS_STYLES: Record<string, string> = {
@@ -333,6 +334,19 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               templates={templates}
               mergeVars={mergeVars}
             />
+            {!isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                nativeButton={false}
+                render={<Link href={`/tickets?new=1&lead=${lead.id}`} />}
+                title="Raise a support ticket to the admin about this client"
+              >
+                <LifeBuoy className="size-3.5" />
+                Ask admin
+              </Button>
+            )}
             {isAdmin && <AiCallControls
               leadId={lead.id}
               brokerName={b?.company_name ?? null}
