@@ -14,6 +14,8 @@ import {
   UserCog,
   BookOpen,
   PhoneCall,
+  Building2,
+  Clock,
 } from "lucide-react"
 import {
   Sidebar,
@@ -32,12 +34,15 @@ import { Badge } from "@/components/ui/badge"
 import { logout } from "@/app/(auth)/login/actions"
 import { DialerWidget } from "@/components/dialer/dialer-widget"
 import { UnreadSmsBadge } from "@/components/messages/unread-sms-badge"
+import { PendingRequestsBadge } from "@/components/requests/pending-requests-badge"
 import type { UserRole } from "@/types/database"
 
+// `adminOnly` items are not rendered for agents (the pages also redirect them).
 const navItems = [
   { href: "/dashboard", label: "Dashboard",     icon: LayoutDashboard },
   { href: "/leads",     label: "Leads",         icon: Users },
-  { href: "/settings/knowledge", label: "Knowledge", icon: BookOpen },
+  { href: "/settings/knowledge", label: "Knowledge", icon: BookOpen, adminOnly: true },
+  { href: "/company",   label: "Company",       icon: Building2 },
 ]
 
 const secondaryNavItems = [
@@ -85,9 +90,11 @@ interface AppSidebarProps {
   agentId: string | null
   unreadSmsCount: number
   unreadEmailCount: number
+  /** Admin only: after-hours call requests waiting for a decision. */
+  pendingRequestsCount?: number
 }
 
-export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount, pendingRequestsCount = 0 }: AppSidebarProps) {
   const pathname = usePathname()
   const isAdmin = role === "admin"
   const initials = userName
@@ -114,7 +121,7 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
-              {navItems.map(({ href, label, icon }) => (
+              {navItems.filter((item) => isAdmin || !item.adminOnly).map(({ href, label, icon }) => (
                 <NavLink
                   key={href}
                   href={href}
@@ -137,7 +144,7 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                 active={pathname === "/emails" || pathname.startsWith("/emails/")}
                 badge={<UnreadSmsBadge initialCount={unreadEmailCount} channel="email" />}
               />
-              {/* Agent view is intentionally limited to Dashboard, Leads,
+              {/* Agent view is intentionally limited to Dashboard, Leads, Company,
                   Messages and Emails — everything below is admin-only. The server-side
                   page guards are what actually enforce this; hiding the
                   links is just so an agent never sees a dead end. */}
@@ -157,6 +164,13 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                     label="Agents"
                     icon={UserCog}
                     active={pathname === "/agents" || pathname.startsWith("/agents/")}
+                  />
+                  <NavLink
+                    href="/requests"
+                    label="Requests"
+                    icon={Clock}
+                    active={pathname === "/requests" || pathname.startsWith("/requests/")}
+                    badge={<PendingRequestsBadge initialCount={pendingRequestsCount} />}
                   />
                   <NavLink
                     href="/calls"

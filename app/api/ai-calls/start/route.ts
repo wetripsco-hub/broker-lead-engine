@@ -23,6 +23,8 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return fail(401, "Not signed in")
+  // AI calling is admin-only. The role comes from the database.
+  if (!(await isAdminInDb(createAdminClient(), user.id))) return fail(403, "AI calls are admin only", "admin_only")
 
   let leadId: string | undefined
   let hoursOverrideRequested = false

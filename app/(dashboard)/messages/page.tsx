@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 import { MessagesClient } from "./messages-client"
+import { SMS_INBOX_SELECT, maskSmsEventsForAgent } from "./mask-events"
 
 export default async function MessagesPage() {
   const supabase = await createClient()
@@ -9,21 +12,17 @@ export default async function MessagesPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const { data } = await supabase
-    .from("outreach_events")
-    .select(`
-      id, lead_id, direction, message_body, status, occurred_at,
-      from_number, to_number, read_at,
-      leads ( id, brokers ( company_name, contact_name, phone ) )
-    `)
-    .eq("channel", "sms")
-    .order("occurred_at", { ascending: true })
+  const [{ data }, isAdmin] = await Promise.all([
+    (supabase.from("outreach_events") as any).select(SMS_INBOX_SELECT).eq("channel", "sms").order("occurred_at", { ascending: true }),
+    isAdminInDb(createAdminClient(), user.id),
+  ])
 
-  const events = (data ?? []) as any[]
+  // Agents never get a full number: masked here, on the server.
+  const events = isAdmin ? ((data ?? []) as any[]) : maskSmsEventsForAgent((data ?? []) as any[])
 
   return (
     <div className="h-[calc(100vh-3rem)]">
-      <MessagesClient initialEvents={events} />
+      <MessagesClient initialEvents={events} isAdmin={isAdmin} />
     </div>
   )
 }

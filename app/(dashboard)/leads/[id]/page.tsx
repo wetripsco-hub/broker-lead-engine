@@ -1,6 +1,11 @@
 import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
+import { emailFor, phoneFor, timezonePhone } from "@/lib/mask"
+import { getAgentCallState } from "@/lib/agent-call-rules"
+import { AgentCallBanner } from "@/components/leads/agent-call-banner"
 import { StageSelector } from "@/components/leads/stage-selector"
 import { StageBadge } from "@/components/leads/stage-badge"
 import { NotesEditor } from "@/components/leads/notes-editor"
@@ -71,7 +76,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const isAdmin = user.user_metadata?.role === "admin"
+  // From the database, never the browser. Agents get masked contact data and
+  // the agent call rules; the admin sees everything exactly as before.
+  const isAdmin = await isAdminInDb(createAdminClient(), user.id)
+  const mask = !isAdmin
 
   type LeadDetail = {
     id: string
@@ -198,6 +206,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   }
   const aiExtra = new Map(((aiEventsRaw ?? []) as any[]).map((e) => [e.id, e]))
   events = events.map((e) => (aiExtra.has(e.id) ? { ...e, ...aiExtra.get(e.id) } : e))
+  // Agents: no AI calls in the timeline (AI calling is admin-only) and no
+  // sender addresses.
+  if (mask) events = events.filter((e) => e.channel !== "ai_call").map((e) => ({ ...e, from_email: emailFor(true, e.from_email) }))
   const latestAiCall = events.find((e) => e.channel === "ai_call")
   const aiEnabled = (aiEnabledRaw as { value: unknown } | null)?.value === true
   const aiSettings = await loadAiCallSettings(supabase)
@@ -237,6 +248,14 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const previousSubject =
     events.find((e) => e.channel === "email" && e.direction === "outbound" && e.status !== "failed" && e.status !== "pending")
       ?.subject ?? null
+
+  // Agents only: what the Call button and the cooldown banner start with.
+  const agentCallState =
+    mask && myAgent ? await getAgentCallState(myAgent.id, lead.id, { state: b?.state ?? null, phone: b?.phone ?? null }) : null
+  // Shown on screen. For agents these are masked; the real number only goes
+  // to the dialer to be dialled, never rendered.
+  const shownPhone = phoneFor(mask, b?.phone)
+  const shownEmail = emailFor(mask, b?.email)
 
   const mergeVars = {
     company_name: b?.company_name ?? "",
@@ -281,24 +300,40 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             </div>
           </div>
           <div className="flex flex-wrap items-start gap-2">
-            <CallButton
-              leadId={lead.id}
-              agentId={myAgent?.id ?? ""}
-              brokerPhone={b?.phone ?? null}
-              brokerName={b?.company_name ?? null}
-              brokerState={b?.state ?? null}
-              contactName={b?.contact_name ?? null}
-              agentName={myAgent?.name ?? null}
-              callbackPhone={callbackPhone}
-              doNotCall={aiFlags.do_not_call === true}
-            />
+            {isAdmin ? (
+              <CallButton
+                leadId={lead.id}
+                agentId={myAgent?.id ?? ""}
+                brokerPhone={b?.phone ?? null}
+                brokerName={b?.company_name ?? null}
+                brokerState={b?.state ?? null}
+                contactName={b?.contact_name ?? null}
+                agentName={myAgent?.name ?? null}
+                callbackPhone={callbackPhone}
+                doNotCall={aiFlags.do_not_call === true}
+              />
+            ) : (
+              <CallButton
+                leadId={lead.id}
+                agentId={myAgent?.id ?? ""}
+                // Dial number only (E.164, never rendered); the screen gets `displayPhone`.
+                brokerPhone={b?.phone ? (toE164(b.phone) ?? "invalid") : null}
+                brokerName={b?.company_name ?? null}
+                brokerState={b?.state ?? null}
+                contactName={b?.contact_name ?? null}
+                agentName={myAgent?.name ?? null}
+                callbackPhone={callbackPhone}
+                doNotCall={aiFlags.do_not_call === true}
+                agentRules={{ initialState: agentCallState, displayPhone: shownPhone }}
+              />
+            )}
             <EmailCompose
               leadId={lead.id}
-              brokerEmail={b?.email ?? null}
+              brokerEmail={shownEmail}
               templates={templates}
               mergeVars={mergeVars}
             />
-            <AiCallControls
+            {isAdmin && <AiCallControls
               leadId={lead.id}
               brokerName={b?.company_name ?? null}
               brokerState={b?.state ?? null}
@@ -315,7 +350,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               latestCallAt={latestAiCall?.occurred_at ?? null}
               testHoursExempt={isTestModeExempt(aiSettings, aiTo)}
               canOverrideHours={isAdmin && aiSettings.allowAdminHoursOverride}
-            />
+            />}
             <span className="mx-1 hidden h-8 w-px bg-border sm:block" aria-hidden />
             {isAdmin ? (
               <StageSelector leadId={lead.id} stage={lead.stage} />
@@ -345,13 +380,15 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
 
+      {mask && <AgentCallBanner leadId={lead.id} initialState={agentCallState} />}
+
       {followUp?.due && (
         <FollowUpBanner
           leadId={lead.id}
           days={followUp.days}
           followUpCount={followUp.followUpCount}
           previousSubject={previousSubject}
-          brokerEmail={b?.email ?? null}
+          brokerEmail={shownEmail}
           templates={templates}
           mergeVars={mergeVars}
         />
@@ -372,9 +409,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               <InfoRow
                 icon={Phone}
                 label="Phone"
-                value={b?.phone ? `${formatPhoneDisplay(b.phone)}${isValidPhone(b.phone) ? "" : "  (invalid phone number)"}` : null}
+                value={b?.phone ? `${mask ? shownPhone : formatPhoneDisplay(b.phone)}${isValidPhone(b.phone) ? "" : "  (invalid phone number)"}` : null}
               />
-              <InfoRow icon={Mail}     label="Email"      value={b?.email} />
+              <InfoRow icon={Mail}     label="Email"      value={shownEmail} />
               <InfoRow
                 icon={MapPin}
                 label="Address"
@@ -420,9 +457,14 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                     )}
                     <span className="flex-1" />
                     {o.telephone && (
-                      <span className="text-xs text-muted-foreground font-mono">{formatPhoneDisplay(o.telephone)}</span>
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {mask ? phoneFor(true, o.telephone) : formatPhoneDisplay(o.telephone)}
+                      </span>
                     )}
-                    {o.email && (
+                    {o.email && mask && (
+                      <span className="text-xs text-muted-foreground">{emailFor(true, o.email)}</span>
+                    )}
+                    {o.email && !mask && (
                       <a
                         href={`mailto:${o.email}`}
                         className="text-xs text-muted-foreground hover:text-foreground underline"
@@ -455,7 +497,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           {/* SMS Thread */}
           <SmsThread
             leadId={lead.id}
-            brokerPhone={b?.phone ?? null}
+            brokerPhone={shownPhone}
+            phoneMasked={mask}
             brokerName={b?.company_name ?? null}
             templates={buildSmsTemplates({ contactName: b?.contact_name ?? null, agentName: myAgent?.name ?? null })}
             canSend={smsDecision.allowed}
@@ -470,7 +513,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
         {/* Right column */}
         <div className="space-y-4">
-          <LocalTimeCard state={b?.state ?? null} phone={b?.phone ?? null} />
+          <LocalTimeCard state={b?.state ?? null} phone={mask ? timezonePhone(shownPhone) : (b?.phone ?? null)} />
 
           {/* Assignment */}
           <div className="rounded-lg border bg-card p-4">

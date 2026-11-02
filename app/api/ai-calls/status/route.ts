@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 
 // Small read-only status for one AI call, used by the auto-dial queue to know
 // when a call has ended. Read with the signed-in user's own session, so
@@ -13,6 +15,9 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 })
+  if (!(await isAdminInDb(createAdminClient(), user.id))) {
+    return NextResponse.json({ error: "AI calls are admin only" }, { status: 403 })
+  }
 
   const { data } = await (supabase.from("outreach_events") as any)
     .select("call_status, status, duration_seconds, disposition, sentiment, ai_summary")

@@ -16,6 +16,7 @@ import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock, Bot, Star, Sh
 import { toast } from "sonner"
 import { CallDot, describeCall, type CallDisplayState } from "@/components/leads/call-status"
 import { useNow } from "@/lib/timezone/use-now"
+import { timezonePhone } from "@/lib/mask"
 import {
   resolveTimezone,
   getCallStatus,
@@ -99,7 +100,8 @@ function EmailStatusCell({ info }: { info: EmailStatusInfo | undefined }) {
 // fixed template with one column too many pushes everything after it over.
 // Phones show a compact row (tick box, company, stage, arrow); the other columns appear from md up.
 const GRID_ADMIN = "grid-cols-[28px_minmax(0,1fr)_auto_20px] md:grid-cols-[28px_1fr_140px_100px_110px_110px_100px_180px_100px_32px]"
-const GRID_AGENT = "grid-cols-[28px_minmax(0,1fr)_auto_20px] md:grid-cols-[28px_1fr_140px_100px_110px_110px_100px_100px_32px]"
+// Agents: no AI call column (AI calling is admin-only) and no agent column.
+const GRID_AGENT = "grid-cols-[28px_minmax(0,1fr)_auto_20px] md:grid-cols-[28px_1fr_140px_100px_110px_110px_100px_32px]"
 
 interface AiCallInfo {
   status: string
@@ -253,7 +255,7 @@ export function LeadsListClient({
 
   // Timezone per lead never changes; the calling status does, with the clock.
   const tzByLead = useMemo(
-    () => new Map(leads.map((l) => [l.id, resolveTimezone(l.brokers?.state, l.brokers?.phone)])),
+    () => new Map(leads.map((l) => [l.id, resolveTimezone(l.brokers?.state, timezonePhone(l.brokers?.phone))])),
     [leads],
   )
   const callByLead = useMemo(() => {
@@ -643,7 +645,7 @@ export function LeadsListClient({
               </button>
               {sortHeader("email", "Email Status")}
               {sortHeader("lastEmail", "Last email")}
-              {sortHeader("aiCall", "AI call")}
+              {isAdmin && sortHeader("aiCall", "AI call")}
               {isAdmin && sortHeader("agent", "Agent")}
               {sortHeader("stage", "Stage")}
               <span />
@@ -746,7 +748,7 @@ export function LeadsListClient({
                   <div className="hidden md:contents">
                     <EmailStatusCell info={emailInfo} />
                     <LastEmailCell info={followUpByLead[lead.id]} />
-                    <AiCallCell info={aiCallByLead[lead.id]} now={now} />
+                    {isAdmin && <AiCallCell info={aiCallByLead[lead.id]} now={now} />}
                   </div>
                   {isAdmin && (
                     <div className="relative z-10 hidden md:block">
@@ -800,10 +802,12 @@ export function LeadsListClient({
               <Mail className="size-3.5" />
               {followUpOnly ? "Send follow-up" : "Send email"}
             </Button>
-            <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setAiQueueOpen(true)}>
-              <Bot className="size-3.5" />
-              AI call all
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setAiQueueOpen(true)}>
+                <Bot className="size-3.5" />
+                AI call all
+              </Button>
+            )}
             <select
               defaultValue=""
               disabled={isSettingStage}
@@ -872,7 +876,7 @@ export function LeadsListClient({
         <BulkConsentModal leadIds={[...selectedIds]} onClose={() => setConsentOpen(false)} onDone={() => {}} />
       )}
 
-      {aiQueueOpen && (
+      {isAdmin && aiQueueOpen && (
         <AiCallQueueModal
           leads={leads
             .filter((l) => selectedIds.has(l.id))

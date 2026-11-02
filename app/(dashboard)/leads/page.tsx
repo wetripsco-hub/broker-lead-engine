@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
+import { emailFor, phoneFor } from "@/lib/mask"
 import { getFollowUps } from "@/lib/follow-up/query"
 import { fetchAll } from "@/lib/supabase/fetch-all"
 import { LeadsListClient } from "./leads-list-client"
@@ -16,7 +19,7 @@ export default async function LeadsPage({
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const isAdmin = user.user_metadata?.role === "admin"
+  const isAdmin = await isAdminInDb(createAdminClient(), user.id)
 
   // Everything the page needs is requested at the same time (one wait instead of eight in a row).
   // Lists are read in pages because the API returns at most 1000 rows per request.
@@ -51,14 +54,17 @@ export default async function LeadsPage({
         .order("occurred_at", { ascending: false })
         .order("id", { ascending: false }),
     ),
-    // Latest AI call per lead. Tolerant: if the AI-calling columns aren't there the list shows none.
-    fetchAll<any>(() =>
-      (supabase.from("outreach_events") as any)
-        .select("lead_id, status, call_status, disposition, duration_seconds, occurred_at")
-        .eq("channel", "ai_call")
-        .order("occurred_at", { ascending: false })
-        .order("id", { ascending: false }),
-    ),
+    // Latest AI call per lead (admin only: AI calling is hidden from agents).
+    // Tolerant: if the AI-calling columns aren't there the list shows none.
+    isAdmin
+      ? fetchAll<any>(() =>
+          (supabase.from("outreach_events") as any)
+            .select("lead_id, status, call_status, disposition, duration_seconds, occurred_at")
+            .eq("channel", "ai_call")
+            .order("occurred_at", { ascending: false })
+            .order("id", { ascending: false }),
+        )
+      : Promise.resolve([] as any[]),
     // Full agent roster for the assignment dropdown + "by agent" filter: admin only.
     isAdmin
       ? supabase.from("agents").select("id, name").eq("active", true).order("name", { ascending: true })
@@ -90,10 +96,19 @@ export default async function LeadsPage({
     }
   }
 
+  // Agents get masked phone/email (the list uses them for the time zone and
+  // bulk email; sending looks the address up on the server).
+  const shownLeads = isAdmin
+    ? leads
+    : (leads as any[]).map((l) => ({
+        ...l,
+        brokers: l.brokers ? { ...l.brokers, phone: phoneFor(true, l.brokers.phone), email: emailFor(true, l.brokers.email) } : l.brokers,
+      }))
+
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto">
       <LeadsListClient
-        leads={leads}
+        leads={shownLeads}
         isAdmin={isAdmin}
         templates={templates}
         currentAgentName={currentAgentName}

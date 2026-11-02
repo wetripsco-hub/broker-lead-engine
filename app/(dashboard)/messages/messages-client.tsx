@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
-import { sendInboxSms, markConversationRead, addNumberAsLead } from "./actions"
+import { sendInboxSms, markConversationRead, addNumberAsLead, fetchAgentSmsInbox } from "./actions"
 
 const CHAR_LIMIT = 160
 
@@ -25,10 +25,15 @@ interface RawEvent {
     id: string
     brokers: { company_name: string; contact_name: string | null; phone: string | null } | null
   } | null
+  /** Agents only: conversations group by lead, because their numbers are masked. */
+  conv_key?: string | null
 }
 
 interface Conversation {
+  /** The real number for the admin; "lead:<id>" for agents. */
   number: string
+  /** What is shown (masked for agents). */
+  displayNumber: string
   leadId: string | null
   displayName: string
   lastMessage: string
@@ -44,7 +49,7 @@ function counterpartyNumber(e: RawEvent): string | null {
 function buildConversations(events: RawEvent[]): Conversation[] {
   const map = new Map<string, RawEvent[]>()
   for (const e of events) {
-    const num = counterpartyNumber(e) ?? e.leads?.brokers?.phone ?? null
+    const num = e.conv_key ?? counterpartyNumber(e) ?? e.leads?.brokers?.phone ?? null
     if (!num) continue
     const arr = map.get(num) ?? []
     arr.push(e)
@@ -56,10 +61,14 @@ function buildConversations(events: RawEvent[]): Conversation[] {
       const last = sorted[sorted.length - 1]
       const withLead = sorted.find((e) => e.leads)
       const broker = withLead?.leads?.brokers
+      const displayNumber = number.startsWith("lead:")
+        ? (sorted.map(counterpartyNumber).find((n) => !!n && !n.startsWith("lead:")) ?? broker?.phone ?? "")
+        : number
       return {
         number,
+        displayNumber,
         leadId: withLead?.lead_id ?? null,
-        displayName: broker?.company_name || broker?.contact_name || number,
+        displayName: broker?.company_name || broker?.contact_name || displayNumber,
         lastMessage: last.message_body ?? "",
         lastAt: last.occurred_at,
         unreadCount: sorted.filter((e) => e.direction === "inbound" && !e.read_at).length,
@@ -98,7 +107,7 @@ const SELECT = `
   leads ( id, brokers ( company_name, contact_name, phone ) )
 `
 
-export function MessagesClient({ initialEvents }: { initialEvents: RawEvent[] }) {
+export function MessagesClient({ initialEvents, isAdmin = true }: { initialEvents: RawEvent[]; isAdmin?: boolean }) {
   const [events, setEvents] = useState<RawEvent[]>(initialEvents)
   const [search, setSearch] = useState("")
   const [selectedNumber, setSelectedNumber] = useState<string | null>(null)
@@ -112,17 +121,21 @@ export function MessagesClient({ initialEvents }: { initialEvents: RawEvent[] })
   const filtered = conversations.filter((c) => {
     if (!search) return true
     const q = search.toLowerCase()
-    return c.displayName.toLowerCase().includes(q) || c.number.includes(q)
+    return c.displayName.toLowerCase().includes(q) || c.displayNumber.includes(q)
   })
   const selected = conversations.find((c) => c.number === selectedNumber) ?? null
 
   async function refetch() {
-    const supabase = createClient()
-    const { data } = await supabase
-      .from("outreach_events")
-      .select(SELECT)
-      .eq("channel", "sms")
-      .order("occurred_at", { ascending: true })
+    // Agents: masked on the server. The admin reads straight from the database as before.
+    const data: unknown[] | null = isAdmin
+      ? (
+          await createClient()
+            .from("outreach_events")
+            .select(SELECT)
+            .eq("channel", "sms")
+            .order("occurred_at", { ascending: true })
+        ).data
+      : (await fetchAgentSmsInbox()).events
     if (!data) return
 
     // Notify on anything new we haven't rendered yet, regardless of whether
@@ -169,7 +182,7 @@ export function MessagesClient({ initialEvents }: { initialEvents: RawEvent[] })
     if (convo && convo.unreadCount > 0) {
       setEvents((prev) =>
         prev.map((e) =>
-          e.direction === "inbound" && counterpartyNumber(e) === number && !e.read_at
+          e.direction === "inbound" && (e.conv_key ?? counterpartyNumber(e)) === number && !e.read_at
             ? { ...e, read_at: new Date().toISOString() }
             : e,
         ),
@@ -308,7 +321,7 @@ export function MessagesClient({ initialEvents }: { initialEvents: RawEvent[] })
                   <p className="font-medium text-sm truncate">{selected.displayName}</p>
                   {!selected.leadId && <Badge variant="outline" className="text-[10px]">Unknown</Badge>}
                 </div>
-                <p className="text-xs text-muted-foreground font-mono">{selected.number}</p>
+                <p className="text-xs text-muted-foreground font-mono">{selected.displayNumber}</p>
               </div>
               {!selected.leadId && (
                 <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={handleAddAsLead} disabled={addingLead}>

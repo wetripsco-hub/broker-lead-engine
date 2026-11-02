@@ -31,7 +31,9 @@ export async function sendLeadSms(
     .eq("id", leadId)
     .maybeSingle()
   if (!leadRow) return { error: "Lead not found" }
-  const to = toE164(leadRow.brokers?.phone_e164) ?? toE164(leadRow.brokers?.phone) ?? toE164(brokerPhone)
+  // Never the number the browser sent: agents only ever see it masked.
+  void brokerPhone
+  const to = toE164(leadRow.brokers?.phone_e164) ?? toE164(leadRow.brokers?.phone)
   if (!to) return { error: "Invalid phone number" }
 
   const allowed = await checkSmsAllowed(supabase, user.id, { leadId, to })

@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { imapConfigured } from "@/lib/email/imap-sync"
 import { fetchAll } from "@/lib/supabase/fetch-all"
 import { EmailsClient } from "./emails-client"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
+import { maskEmailEventsForAgent } from "./mask-events"
 
 export default async function EmailsPage() {
   const supabase = await createClient()
@@ -12,7 +14,7 @@ export default async function EmailsPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const isAdmin = user.user_metadata?.role === "admin"
+  const isAdmin = await isAdminInDb(createAdminClient(), user.id)
 
   // RLS decides what's returned: an agent only gets email for leads assigned
   // to them; admins also get unmatched mail (lead_id null).
@@ -43,7 +45,8 @@ export default async function EmailsPage() {
   return (
     <div className="h-[calc(100vh-3rem)]">
       <EmailsClient
-        initialEvents={(data ?? []) as any[]}
+        // Agents never get a broker's full address: masked here, on the server.
+        initialEvents={isAdmin ? ((data ?? []) as any[]) : maskEmailEventsForAgent((data ?? []) as any[])}
         isAdmin={isAdmin}
         imapConfigured={imapConfigured()}
         lastSyncedAt={lastSyncedAt}

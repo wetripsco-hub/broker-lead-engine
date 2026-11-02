@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { fetchAll } from "@/lib/supabase/fetch-all"
-import { sendEmailReply, markEmailsRead, addSenderAsLead, syncEmailNow, deleteEmailEvents } from "./actions"
+import { sendEmailReply, markEmailsRead, addSenderAsLead, syncEmailNow, deleteEmailEvents, fetchAgentEmailInbox } from "./actions"
 
 interface RawEvent {
   id: string
@@ -163,6 +163,12 @@ export function EmailsClient({
   const selected = threads.find((t) => t.key === selectedKey) ?? null
 
   async function refetch() {
+    // Agents: broker addresses are masked on the server.
+    if (!isAdmin) {
+      const { events: masked } = await fetchAgentEmailInbox()
+      if (masked.length > 0) setEvents(masked)
+      return
+    }
     const supabase = createClient()
     // Paged: the API returns at most 1000 rows per request.
     const data = await fetchAll<RawEvent>(() =>

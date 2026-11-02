@@ -18,8 +18,10 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/login")
 
-  // The three look-ups are independent, so they are asked together.
-  const [{ data: agentData }, { count: unreadSmsCount }, { count: unreadEmailCount }] = await Promise.all([
+  const role = (user.user_metadata?.role as UserRole) ?? "agent"
+
+  // The look-ups are independent, so they are asked together.
+  const [{ data: agentData }, { count: unreadSmsCount }, { count: unreadEmailCount }, { count: pendingRequestsCount }] = await Promise.all([
     supabase.from("agents").select("id, name").eq("user_id", user.id).maybeSingle(),
     supabase
       .from("outreach_events")
@@ -33,10 +35,13 @@ export default async function DashboardLayout({
       .eq("channel", "email")
       .eq("direction", "inbound")
       .is("read_at", null),
+    // Admin only: after-hours requests waiting for a decision (sidebar badge).
+    role === "admin"
+      ? (supabase.from("after_hours_requests") as any).select("id", { count: "exact", head: true }).eq("status", "pending")
+      : Promise.resolve({ count: 0 }),
   ])
 
   const agent = agentData as { id: string; name: string } | null
-  const role = (user.user_metadata?.role as UserRole) ?? "agent"
   const userName = agent?.name ?? user.email ?? "User"
 
   return (
@@ -48,6 +53,7 @@ export default async function DashboardLayout({
         agentId={agent?.id ?? null}
         unreadSmsCount={unreadSmsCount ?? 0}
         unreadEmailCount={unreadEmailCount ?? 0}
+        pendingRequestsCount={(pendingRequestsCount as number | null) ?? 0}
       />
       <main className="flex flex-1 flex-col min-h-screen">
         <header className="flex items-center h-12 px-4 border-b shrink-0">

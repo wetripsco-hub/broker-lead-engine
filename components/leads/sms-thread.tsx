@@ -34,6 +34,8 @@ interface SmsThreadProps {
   agentName?: string | null
   callbackPhone?: string | null
   initialEvents: SmsEvent[]
+  /** True when `brokerPhone` is shown masked (agents); the server looks the real number up itself. */
+  phoneMasked?: boolean
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -55,6 +57,7 @@ export function SmsThread({
   agentName = null,
   callbackPhone = null,
   initialEvents,
+  phoneMasked = false,
 }: SmsThreadProps) {
   const [events, setEvents] = useState<SmsEvent[]>(initialEvents)
   const [text, setText] = useState("")
@@ -92,7 +95,7 @@ export function SmsThread({
       toast.error("The text still has a [placeholder]. Fill it in first.")
       return
     }
-    if (!toE164(brokerPhone)) {
+    if (!phoneMasked && !toE164(brokerPhone)) {
       toast.error("Invalid phone number")
       return
     }
@@ -138,7 +141,7 @@ export function SmsThread({
         <MessageSquare className="size-3.5" />
         SMS Thread
         {brokerPhone && (
-          <span className="font-mono font-normal normal-case text-xs">{formatPhoneDisplay(brokerPhone)}</span>
+          <span className="font-mono font-normal normal-case text-xs">{phoneMasked ? brokerPhone : formatPhoneDisplay(brokerPhone)}</span>
         )}
       </h2>
 

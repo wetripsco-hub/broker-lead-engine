@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendSms } from "@/lib/telnyx/sms"
 import { toE164, phoneDigits } from "@/lib/phone"
 import { checkSmsAllowed } from "@/lib/sms-guard"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
+import { SMS_INBOX_SELECT, maskSmsEventsForAgent } from "./mask-events"
 
 async function getCurrentAgent(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -28,8 +30,6 @@ export async function sendInboxSms(
   leadId: string | null,
 ): Promise<{ error?: string; eventId?: string }> {
   if (!text.trim()) return { error: "Message cannot be empty" }
-  const to = toE164(toNumber)
-  if (!to) return { error: "Invalid phone number" }
   if (text.length > 1600) return { error: "Message too long (max 1600 chars)" }
 
   const supabase = await createClient()
@@ -42,6 +42,22 @@ export async function sendInboxSms(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not authenticated" }
+
+  // Agents only see masked numbers, so for them the number always comes from
+  // their lead in the database (RLS: a lead they can't see is not found).
+  let to: string | null
+  if (await isAdminInDb(createAdminClient(), user.id)) {
+    to = toE164(toNumber)
+  } else {
+    if (!leadId) return { error: "Lead not found" }
+    const { data: leadRow } = await (supabase.from("leads") as any)
+      .select("id, brokers ( phone, phone_e164 )")
+      .eq("id", leadId)
+      .maybeSingle()
+    if (!leadRow) return { error: "Lead not found" }
+    to = toE164(leadRow.brokers?.phone_e164) ?? toE164(leadRow.brokers?.phone)
+  }
+  if (!to) return { error: "Invalid phone number" }
   const allowed = await checkSmsAllowed(supabase, user.id, { leadId, to })
   if (!allowed.allowed) return { error: allowed.reason }
 
@@ -82,6 +98,19 @@ export async function markConversationRead(rawNumber: string): Promise<{ error?:
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not authenticated" }
+
+  // Agents' conversations are keyed by lead ("lead:<id>"), not by number.
+  if (rawNumber.startsWith("lead:")) {
+    const { error } = await (supabase.from("outreach_events") as any)
+      .update({ read_at: new Date().toISOString() })
+      .eq("channel", "sms")
+      .eq("direction", "inbound")
+      .eq("lead_id", rawNumber.slice(5))
+      .is("read_at", null)
+    if (error) return { error: error.message }
+    revalidatePath("/messages")
+    return {}
+  }
 
   const { error } = await (supabase.from("outreach_events") as any)
     .update({ read_at: new Date().toISOString() })
@@ -161,4 +190,18 @@ export async function addNumberAsLead(rawNumber: string): Promise<{ error?: stri
   revalidatePath("/messages")
   revalidatePath("/leads")
   return { leadId }
+}
+
+/** The agent's SMS inbox, masked on the server (used for live refresh). */
+export async function fetchAgentSmsInbox(): Promise<{ events: any[] }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { events: [] }
+  const { data } = await (supabase.from("outreach_events") as any)
+    .select(SMS_INBOX_SELECT)
+    .eq("channel", "sms")
+    .order("occurred_at", { ascending: true })
+  return { events: maskSmsEventsForAgent((data ?? []) as any[]) }
 }

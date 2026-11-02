@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 import { KnowledgeClient, type KbItem } from "./knowledge-client"
 
-// Everyone signed in can read the knowledge base (it's what the copilot
-// answers from); only admins get the editor. Writes are enforced by RLS and
-// the server actions, not by this page.
+// Admin only. Agents read the Company page instead; the copilot still reads
+// the knowledge base during their calls (RLS lets every signed-in user select
+// it). Writes are enforced by RLS and the server actions.
 export default async function KnowledgePage() {
   const supabase = await createClient()
   const {
@@ -12,7 +14,8 @@ export default async function KnowledgePage() {
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const isAdmin = user.user_metadata?.role === "admin"
+  const isAdmin = await isAdminInDb(createAdminClient(), user.id)
+  if (!isAdmin) redirect("/company")
 
   const { data } = await (supabase.from("knowledge_base") as any)
     .select("id, title, content, kind, updated_at")

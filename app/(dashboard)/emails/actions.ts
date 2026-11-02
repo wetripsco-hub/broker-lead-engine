@@ -8,6 +8,8 @@ import { sendEmail, fromAddress, conversationProvider } from "@/lib/email/send"
 import { generateMessageId, replyToAddress } from "@/lib/email/message-id"
 import { syncInbox, imapConfigured } from "@/lib/email/imap-sync"
 import { isAdminInDb } from "@/lib/voice-agents/admin-check"
+import { fetchAll } from "@/lib/supabase/fetch-all"
+import { EMAIL_INBOX_SELECT, maskEmailEventsForAgent } from "./mask-events"
 
 // Reply to an email thread from the platform. Everything about *who* it goes
 // to and which message it answers is derived server-side from the parent
@@ -264,4 +266,21 @@ export async function deleteEmailEvents(eventIds: string[]): Promise<{ error: st
   revalidatePath("/emails")
   revalidatePath("/leads")
   return { error: null, deleted: data.length }
+}
+
+/** The agent's email inbox, with broker addresses masked on the server (used for live refresh). */
+export async function fetchAgentEmailInbox(): Promise<{ events: any[] }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { events: [] }
+  const data = await fetchAll<any>(() =>
+    (supabase.from("outreach_events") as any)
+      .select(EMAIL_INBOX_SELECT)
+      .eq("channel", "email")
+      .order("occurred_at", { ascending: true })
+      .order("id", { ascending: true }),
+  )
+  return { events: maskEmailEventsForAgent(data) }
 }

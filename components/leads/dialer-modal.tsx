@@ -45,6 +45,10 @@ interface DialerModalProps {
   contactName?: string | null
   agentName?: string | null
   callbackPhone?: string | null
+  /** Shown instead of the number (agents see it masked). The real `brokerPhone` is only dialled. */
+  displayPhone?: string | null
+  /** Agents only: "Calls this hour: 23/40". */
+  callsThisHour?: { count: number; limit: number } | null
   onClose: () => void
 }
 
@@ -119,6 +123,8 @@ export function DialerModal({
   contactName = null,
   agentName = null,
   callbackPhone = null,
+  displayPhone,
+  callsThisHour = null,
   onClose,
 }: DialerModalProps) {
   const [phase, setPhase] = useState<Phase>("connecting")
@@ -348,7 +354,7 @@ export function DialerModal({
   // ── Render ────────────────────────────────────────────────────────────────
 
   const cfg = PHASE_CONFIG[phase]
-  const initial = brokerInitial(brokerName, brokerPhone)
+  const initial = brokerInitial(brokerName, displayPhone ?? brokerPhone)
   const isPulsing = phase === "dialing"
   const isActive  = phase === "active"
   const isEnded   = phase === "ended" || phase === "saving"
@@ -434,7 +440,14 @@ export function DialerModal({
             <p className="font-semibold text-base leading-tight">
               {brokerName ?? "Unknown broker"}
             </p>
-            <p className="text-sm text-muted-foreground font-mono mt-0.5">{formatPhoneDisplay(brokerPhone)}</p>
+            <p className="text-sm text-muted-foreground font-mono mt-0.5">
+              {displayPhone !== undefined ? displayPhone : formatPhoneDisplay(brokerPhone)}
+            </p>
+            {callsThisHour && (
+              <p className="text-xs text-muted-foreground mt-1 tabular-nums">
+                Calls this hour: {callsThisHour.count}/{callsThisHour.limit}
+              </p>
+            )}
           </div>
 
           {/* ── Timer or status label ── */}

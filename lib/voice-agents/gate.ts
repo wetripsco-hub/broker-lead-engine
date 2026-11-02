@@ -1,4 +1,4 @@
-import { getCallStatus, resolveTimezone } from "@/lib/timezone/broker-time"
+import { checkCallingWindow } from "@/lib/timezone/calling-window"
 
 export interface AiCallSettings {
   enabled: boolean
@@ -44,8 +44,6 @@ const block = (code: string, message: string): GateResult => ({ ok: false, code,
 export function isTestModeExempt(settings: AiCallSettings, to: string | null): boolean {
   return settings.testMode && !!to && settings.testNumbers.includes(to)
 }
-const HOUR = 3600_000
-
 /**
  * Every reason an AI call must not go out, checked server-side before the
  * provider is touched. Order matters only for which message the user sees.
@@ -80,18 +78,13 @@ export function evaluateAiCallGate(i: GateInput): GateResult {
   else if (ovr?.requested && ovr.isAdmin && i.settings.allowAdminHoursOverride) hoursExemption = "admin_override"
 
   if (!hoursExemption) {
-    // Calling window: 8 AM–6 PM, weekdays, in the broker's local time.
-    const tz = resolveTimezone(i.lead.state, i.lead.phone)
-    if (!tz) return block("unknown_timezone", "Can't work out the broker's local time, so the calling window can't be checked.")
-    // For states split across zones the zone is a best guess, so the whole
-    // window must hold an hour either side too.
-    const probes = tz.approximate
-      ? [i.now, new Date(i.now.getTime() - HOUR), new Date(i.now.getTime() + HOUR)]
-      : [i.now]
-    for (const t of probes) {
-      const s = getCallStatus(tz.tz, t).state
-      if (s === "weekend") return block("weekend", "It's the weekend in the broker's local time. AI calls go out Monday–Friday, 8 AM–6 PM.")
-      if (s === "closed") return block("outside_hours", "It's outside 8 AM–6 PM in the broker's local time.")
+    // Calling window: 8 AM–6 PM, weekdays, in the broker's local time
+    // (shared with the agents' manual-call check).
+    const w = checkCallingWindow(i.lead.state, i.lead.phone, i.now)
+    if (!w.inside) {
+      if (w.reason === "unknown_timezone") return block("unknown_timezone", "Can't work out the broker's local time, so the calling window can't be checked.")
+      if (w.reason === "weekend") return block("weekend", "It's the weekend in the broker's local time. AI calls go out Monday–Friday, 8 AM–6 PM.")
+      return block("outside_hours", "It's outside 8 AM–6 PM in the broker's local time.")
     }
   }
 
