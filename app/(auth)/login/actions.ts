@@ -76,6 +76,13 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
 export async function logout() {
   const supabase = await createClient()
+  // Shows as offline on the admin's Agents page straight away.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (user) {
+    await (supabase.from("agents") as any).update({ last_signed_out_at: new Date().toISOString() }).eq("user_id", user.id)
+  }
   await supabase.auth.signOut()
   ;(await cookies()).delete(ONBOARDED_COOKIE)
   revalidatePath("/", "layout")

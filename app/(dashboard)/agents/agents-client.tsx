@@ -1,10 +1,13 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { UserPlus, KeyRound, X, Users, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
+import { useNow } from "@/lib/timezone/use-now"
+import { formatPkt, isOnline, timeAgo } from "@/lib/presence"
 import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent, setWelcomeTour } from "./actions"
 
 interface Agent {
@@ -15,6 +18,26 @@ interface Agent {
   created_at: string
   /** null = the welcome tour opens on their next sign-in. */
   onboarding_completed_at: string | null
+  last_seen_at: string | null
+  last_signed_out_at: string | null
+  last_sign_in_at: string | null
+}
+
+function PresenceLine({ agent, now }: { agent: Agent; now: Date | null }) {
+  if (!now) return null
+  const online = isOnline(agent.last_seen_at, agent.last_signed_out_at, now)
+  const seen = agent.last_seen_at ?? agent.last_sign_in_at
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1">
+        <span className={`size-1.5 rounded-full ${online ? "bg-green-500" : "bg-muted-foreground/40"}`} aria-hidden />
+        <span className={online ? "font-medium text-green-700 dark:text-green-400" : ""}>
+          {online ? "Online" : seen ? `Offline · last seen ${timeAgo(seen, now)}` : "Offline · never signed in"}
+        </span>
+      </span>
+      {agent.last_sign_in_at && <span title={agent.last_sign_in_at}>Last login {formatPkt(agent.last_sign_in_at)}</span>}
+    </p>
+  )
 }
 
 export function AgentsClient({
@@ -31,6 +54,16 @@ export function AgentsClient({
   const [isPending, startTransition] = useTransition()
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [tourId, setTourId] = useState<string | null>(null)
+  const router = useRouter()
+  const now = useNow(30_000)
+
+  // Online / offline changes without a reload.
+  useEffect(() => {
+    const id = setInterval(() => router.refresh(), 30_000)
+    return () => clearInterval(id)
+  }, [router])
+
+  const onlineCount = now ? agents.filter((a) => isOnline(a.last_seen_at, a.last_signed_out_at, now)).length : 0
 
   function handleTour(agent: Agent, show: boolean) {
     setTourId(agent.id)
@@ -57,7 +90,9 @@ export function AgentsClient({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
-          <p className="text-sm text-muted-foreground mt-1">{agents.length} total</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {agents.length} total{now && <> · <span className="text-green-700 dark:text-green-400">{onlineCount} online</span></>}
+          </p>
         </div>
         <Button size="sm" className="gap-2" onClick={() => setAddOpen(true)}>
           <UserPlus className="size-3.5" />
@@ -92,6 +127,7 @@ export function AgentsClient({
                 <div className="min-w-0">
                   <p className="font-medium truncate">{a.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{a.email ?? "—"}</p>
+                  <PresenceLine agent={a} now={now} />
                 </div>
                 <span className="text-muted-foreground tabular-nums">{leadCounts[a.id] ?? 0}</span>
                 <span

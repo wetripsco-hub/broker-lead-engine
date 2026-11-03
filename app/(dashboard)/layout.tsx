@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { PageTransition } from "@/components/layout/page-transition"
 import { Toaster } from "@/components/ui/sonner"
+import { PresenceHeartbeat } from "@/components/layout/presence-heartbeat"
 import type { UserRole } from "@/types/database"
 
 export default async function DashboardLayout({
@@ -81,6 +82,7 @@ export default async function DashboardLayout({
         </div>
       </main>
       <Toaster richColors position="top-right" />
+      <PresenceHeartbeat />
     </SidebarProvider>
   )
 }
