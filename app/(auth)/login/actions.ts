@@ -1,9 +1,11 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { ONBOARDED_COOKIE } from "@/lib/onboarding"
 import {
   lockedMessage,
   lockedUntil,
@@ -66,6 +68,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   if (before) await writeLockout(email, null)
+  // Re-check the welcome tour flag on every fresh sign-in.
+  ;(await cookies()).delete(ONBOARDED_COOKIE)
   revalidatePath("/", "layout")
   redirect("/dashboard")
 }
@@ -73,6 +77,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 export async function logout() {
   const supabase = await createClient()
   await supabase.auth.signOut()
+  ;(await cookies()).delete(ONBOARDED_COOKIE)
   revalidatePath("/", "layout")
   redirect("/login")
 }

@@ -206,3 +206,20 @@ export async function deleteAgent(agentId: string): Promise<{ error: string | nu
   revalidatePath("/agents")
   return { error: null, archived: true }
 }
+
+/**
+ * Admin hands an account over: ticked, the welcome tour opens on the agent's
+ * next sign-in (from the first step); finishing it unticks this again.
+ */
+export async function setWelcomeTour(agentId: string, show: boolean): Promise<{ error: string | null }> {
+  const check = await requireAdmin()
+  if (check.error) return { error: check.error }
+
+  const { error } = await (createAdminClient().from("agents") as any)
+    .update(show ? { onboarding_completed_at: null, onboarding_step: 0 } : { onboarding_completed_at: new Date().toISOString() })
+    .eq("id", agentId)
+  if (error) return { error: error.message }
+
+  revalidatePath("/agents")
+  return { error: null }
+}

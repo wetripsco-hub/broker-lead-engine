@@ -1,8 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 import type { Database } from "@/types/database"
-
-const ONBOARDED_COOKIE = "ble_onboarded"
+import { ONBOARDED_COOKIE } from "@/lib/onboarding"
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -83,7 +82,7 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url)
     }
     if (row?.onboarding_completed_at) {
-      supabaseResponse.cookies.set(ONBOARDED_COOKIE, user.id, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 })
+      supabaseResponse.cookies.set(ONBOARDED_COOKIE, user.id, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 12 })
     }
   }
 

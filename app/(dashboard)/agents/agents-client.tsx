@@ -5,7 +5,7 @@ import { UserPlus, KeyRound, X, Users, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent } from "./actions"
+import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent, setWelcomeTour } from "./actions"
 
 interface Agent {
   id: string
@@ -13,6 +13,8 @@ interface Agent {
   email: string | null
   active: boolean
   created_at: string
+  /** null = the welcome tour opens on their next sign-in. */
+  onboarding_completed_at: string | null
 }
 
 export function AgentsClient({
@@ -28,6 +30,17 @@ export function AgentsClient({
   const [deleteFor, setDeleteFor] = useState<Agent | null>(null)
   const [isPending, startTransition] = useTransition()
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [tourId, setTourId] = useState<string | null>(null)
+
+  function handleTour(agent: Agent, show: boolean) {
+    setTourId(agent.id)
+    startTransition(async () => {
+      const { error } = await setWelcomeTour(agent.id, show)
+      if (error) toast.error(error)
+      else toast.success(show ? `${agent.name} will see the welcome tour on next sign-in` : `Welcome tour turned off for ${agent.name}`)
+      setTourId(null)
+    })
+  }
 
   function handleToggle(agent: Agent) {
     setTogglingId(agent.id)
@@ -62,10 +75,11 @@ export function AgentsClient({
           </div>
         ) : (
           <div>
-            <div className="grid grid-cols-[1fr_110px_80px_90px_150px_64px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="grid grid-cols-[1fr_70px_70px_100px_80px_140px_64px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
               <span>Name / Email</span>
-              <span>Assigned Leads</span>
+              <span>Leads</span>
               <span>Status</span>
+              <span title="Tick to show the welcome tour the next time this agent signs in. It unticks itself once they finish it.">Welcome tour</span>
               <span />
               <span />
               <span />
@@ -73,7 +87,7 @@ export function AgentsClient({
             {agents.map((a) => (
               <div
                 key={a.id}
-                className="grid grid-cols-[1fr_110px_80px_90px_150px_64px] gap-4 px-4 py-3 border-b last:border-0 items-center text-sm"
+                className="grid grid-cols-[1fr_70px_70px_100px_80px_140px_64px] gap-4 px-4 py-3 border-b last:border-0 items-center text-sm"
               >
                 <div className="min-w-0">
                   <p className="font-medium truncate">{a.name}</p>
@@ -89,6 +103,17 @@ export function AgentsClient({
                 >
                   {a.active ? "Active" : "Disabled"}
                 </span>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer w-fit">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary cursor-pointer"
+                    checked={!a.onboarding_completed_at}
+                    disabled={isPending && tourId === a.id}
+                    onChange={(e) => handleTour(a, e.target.checked)}
+                    aria-label={`Show welcome tour to ${a.name} on next sign-in`}
+                  />
+                  {a.onboarding_completed_at ? "Off" : "Next login"}
+                </label>
                 <Button
                   variant="outline"
                   size="sm"

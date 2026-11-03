@@ -14,7 +14,7 @@ export default async function AgentsPage() {
 
   // Deleted agents with history are kept but hidden. Until the deleted_at
   // migration is applied that filter errors, so fall back to every agent.
-  const select = () => supabase.from("agents").select("id, name, email, active, created_at")
+  const select = () => supabase.from("agents").select("id, name, email, active, created_at, onboarding_completed_at")
   let { data: agentsRaw, error: agentsError } = await (select() as any)
     .is("deleted_at", null)
     .order("created_at", { ascending: true })
@@ -25,6 +25,7 @@ export default async function AgentsPage() {
     email: string | null
     active: boolean
     created_at: string
+    onboarding_completed_at: string | null
   }>
 
   const { data: leadCountsRaw } = await supabase
