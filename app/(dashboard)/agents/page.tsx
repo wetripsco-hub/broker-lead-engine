@@ -12,10 +12,13 @@ export default async function AgentsPage() {
   // alone doesn't stop a direct URL visit.
   if (user.user_metadata?.role !== "admin") redirect("/leads")
 
-  const { data: agentsRaw } = await supabase
-    .from("agents")
-    .select("id, name, email, active, created_at")
+  // Deleted agents with history are kept but hidden. Until the deleted_at
+  // migration is applied that filter errors, so fall back to every agent.
+  const select = () => supabase.from("agents").select("id, name, email, active, created_at")
+  let { data: agentsRaw, error: agentsError } = await (select() as any)
+    .is("deleted_at", null)
     .order("created_at", { ascending: true })
+  if (agentsError) ({ data: agentsRaw } = await select().order("created_at", { ascending: true }))
   const agents = (agentsRaw ?? []) as Array<{
     id: string
     name: string

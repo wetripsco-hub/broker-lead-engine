@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { UserPlus, KeyRound, X, Users } from "lucide-react"
+import { UserPlus, KeyRound, X, Users, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { createAgent, toggleAgentActive, resetAgentPassword } from "./actions"
+import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent } from "./actions"
 
 interface Agent {
   id: string
@@ -24,6 +24,8 @@ export function AgentsClient({
 }) {
   const [addOpen, setAddOpen] = useState(false)
   const [resetFor, setResetFor] = useState<Agent | null>(null)
+  const [editFor, setEditFor] = useState<Agent | null>(null)
+  const [deleteFor, setDeleteFor] = useState<Agent | null>(null)
   const [isPending, startTransition] = useTransition()
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
@@ -60,17 +62,18 @@ export function AgentsClient({
           </div>
         ) : (
           <div>
-            <div className="grid grid-cols-[1fr_120px_90px_100px_170px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="grid grid-cols-[1fr_110px_80px_90px_150px_64px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
               <span>Name / Email</span>
               <span>Assigned Leads</span>
               <span>Status</span>
+              <span />
               <span />
               <span />
             </div>
             {agents.map((a) => (
               <div
                 key={a.id}
-                className="grid grid-cols-[1fr_120px_90px_100px_170px] gap-4 px-4 py-3 border-b last:border-0 items-center text-sm"
+                className="grid grid-cols-[1fr_110px_80px_90px_150px_64px] gap-4 px-4 py-3 border-b last:border-0 items-center text-sm"
               >
                 <div className="min-w-0">
                   <p className="font-medium truncate">{a.name}</p>
@@ -104,6 +107,21 @@ export function AgentsClient({
                   <KeyRound className="size-3" />
                   Reset password
                 </Button>
+                <div className="flex items-center justify-end gap-0.5">
+                  <Button variant="ghost" size="icon-sm" aria-label={`Edit ${a.name}`} title="Edit name / email" onClick={() => setEditFor(a)}>
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Delete ${a.name}`}
+                    title="Delete agent"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => setDeleteFor(a)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -112,6 +130,10 @@ export function AgentsClient({
 
       {addOpen && <AddAgentModal onClose={() => setAddOpen(false)} />}
       {resetFor && <ResetPasswordModal agent={resetFor} onClose={() => setResetFor(null)} />}
+      {editFor && <EditAgentModal agent={editFor} onClose={() => setEditFor(null)} />}
+      {deleteFor && (
+        <DeleteAgentModal agent={deleteFor} leadCount={leadCounts[deleteFor.id] ?? 0} onClose={() => setDeleteFor(null)} />
+      )}
     </div>
   )
 }
@@ -212,6 +234,111 @@ function ResetPasswordModal({ agent, onClose }: { agent: Agent; onClose: () => v
             <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
             <Button size="sm" onClick={handleSubmit} disabled={password.length < 8 || isPending}>
               {isPending ? "Saving…" : "Reset password"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EditAgentModal({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+  const [name, setName] = useState(agent.name)
+  const [email, setEmail] = useState(agent.email ?? "")
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const emailChanged = email.trim().toLowerCase() !== (agent.email ?? "").toLowerCase()
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    startTransition(async () => {
+      const result = await updateAgent(agent.id, name, email)
+      if (result.error) setError(result.error)
+      else {
+        toast.success(`${name.trim()} updated`)
+        onClose()
+      }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card border rounded-xl shadow-xl w-full max-w-sm flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h2 className="font-semibold text-sm">Edit agent</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground" htmlFor="edit-agent-name">Name</label>
+            <Input id="edit-agent-name" value={name} onChange={(e) => setName(e.target.value)} required className="h-9 text-sm" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground" htmlFor="edit-agent-email">Email (login ID)</label>
+            <Input id="edit-agent-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="h-9 text-sm" />
+            {emailChanged && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                The agent will sign in with the new email from now on. Their password stays the same.
+              </p>
+            )}
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={isPending || !name.trim() || !email.trim()}>
+              {isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function DeleteAgentModal({ agent, leadCount, onClose }: { agent: Agent; leadCount: number; onClose: () => void }) {
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  function handleDelete() {
+    setError(null)
+    startTransition(async () => {
+      const result = await deleteAgent(agent.id)
+      if (result.error) setError(result.error)
+      else {
+        toast.success(`${agent.name} deleted`)
+        onClose()
+      }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card border rounded-xl shadow-xl w-full max-w-sm flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h2 className="font-semibold text-sm">Delete {agent.name}?</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-3 text-sm">
+          <ul className="list-disc pl-4 space-y-1 text-muted-foreground">
+            <li>{agent.email ?? "This agent"} can no longer sign in.</li>
+            <li>
+              {leadCount > 0
+                ? `Their ${leadCount} lead${leadCount === 1 ? "" : "s"} become unassigned — reassign them from Leads.`
+                : "They have no assigned leads."}
+            </li>
+            <li>Past calls, recordings, emails and texts are kept.</li>
+          </ul>
+          <p className="text-xs text-muted-foreground">This can&apos;t be undone. To pause an agent instead, use Disable.</p>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={isPending}>
+              {isPending ? "Deleting…" : "Delete agent"}
             </Button>
           </div>
         </div>
