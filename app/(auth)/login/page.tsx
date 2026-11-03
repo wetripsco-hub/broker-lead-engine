@@ -1,4 +1,5 @@
 import { LoginForm } from "./login-form"
+import { ContactSupport } from "./contact-support"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function LoginPage() {
@@ -22,6 +23,7 @@ export default function LoginPage() {
             <LoginForm />
           </CardContent>
         </Card>
+        <ContactSupport />
       </div>
     </div>
   )

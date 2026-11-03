@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   Users,
@@ -17,6 +17,10 @@ import {
   Building2,
   Clock,
   LifeBuoy,
+  KeyRound,
+  UserRound,
+  CircleHelp,
+  PlayCircle,
 } from "lucide-react"
 import {
   Sidebar,
@@ -32,11 +36,13 @@ import {
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { logout } from "@/app/(auth)/login/actions"
 import { DialerWidget } from "@/components/dialer/dialer-widget"
 import { UnreadSmsBadge } from "@/components/messages/unread-sms-badge"
 import { PendingRequestsBadge } from "@/components/requests/pending-requests-badge"
 import { TicketsBadge } from "@/components/tickets/tickets-badge"
+import { SupportRequestsBadge } from "@/components/requests/support-requests-badge"
 import type { UserRole } from "@/types/database"
 
 // `adminOnly` items are not rendered for agents (the pages also redirect them).
@@ -96,10 +102,13 @@ interface AppSidebarProps {
   pendingRequestsCount?: number
   /** Admin: tickets waiting for an answer. Agent: answers not opened yet. */
   ticketsBadgeCount?: number
+  /** Admin only: open "Contact Support" requests from the login screen. */
+  supportRequestsCount?: number
 }
 
-export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount, pendingRequestsCount = 0, ticketsBadgeCount = 0 }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount, pendingRequestsCount = 0, ticketsBadgeCount = 0, supportRequestsCount = 0 }: AppSidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const isAdmin = role === "admin"
   const initials = userName
     .split(" ")
@@ -155,8 +164,16 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                 active={pathname === "/tickets" || pathname.startsWith("/tickets/")}
                 badge={<TicketsBadge initialCount={ticketsBadgeCount} isAdmin={isAdmin} />}
               />
+              {!isAdmin && (
+                <NavLink
+                  href="/account"
+                  label="My Account"
+                  icon={UserRound}
+                  active={pathname === "/account"}
+                />
+              )}
               {/* Agent view is intentionally limited to Dashboard, Leads, Company,
-                  Messages, Emails and Support — everything below is admin-only. The server-side
+                  Messages, Emails, Support and My Account — everything below is admin-only. The server-side
                   page guards are what actually enforce this; hiding the
                   links is just so an agent never sees a dead end. */}
               {isAdmin && (
@@ -182,6 +199,13 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                     icon={Clock}
                     active={pathname === "/requests" || pathname.startsWith("/requests/")}
                     badge={<PendingRequestsBadge initialCount={pendingRequestsCount} />}
+                  />
+                  <NavLink
+                    href="/support-requests"
+                    label="Support Requests"
+                    icon={KeyRound}
+                    active={pathname === "/support-requests"}
+                    badge={<SupportRequestsBadge initialCount={supportRequestsCount} />}
                   />
                   <NavLink
                     href="/calls"
@@ -220,6 +244,32 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
             {role}
           </Badge>
         </div>
+
+        {!isAdmin && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-[transform,background-color,color] duration-150 ease-[var(--ease-out)] hover:text-foreground hover:bg-accent active:scale-[0.98]"
+                />
+              }
+            >
+              <CircleHelp className="size-4" />
+              Help
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" className="min-w-52">
+              <DropdownMenuItem onClick={() => router.push("/onboarding/tour?replay=1")}>
+                <PlayCircle className="size-4" />
+                Replay walkthrough
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/tickets?new=1")}>
+                <LifeBuoy className="size-4" />
+                Ask admin a question
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
         <form action={logout}>
           <button

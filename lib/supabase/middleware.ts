@@ -2,6 +2,8 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 import type { Database } from "@/types/database"
 
+const ONBOARDED_COOKIE = "ble_onboarded"
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -40,7 +42,10 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/settings") ||
     request.nextUrl.pathname.startsWith("/company") ||
     request.nextUrl.pathname.startsWith("/requests") ||
-    request.nextUrl.pathname.startsWith("/tickets")
+    request.nextUrl.pathname.startsWith("/tickets") ||
+    request.nextUrl.pathname.startsWith("/account") ||
+    request.nextUrl.pathname.startsWith("/support-requests") ||
+    request.nextUrl.pathname.startsWith("/onboarding")
 
   if (!user && isDashboardRoute) {
     const url = request.nextUrl.clone()
@@ -52,6 +57,34 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = "/dashboard"
     return NextResponse.redirect(url)
+  }
+
+  // First-login walkthrough: an agent who hasn't finished it is sent to the
+  // tour. Admins never are. Once finished, a cookie skips this look-up.
+  const path = request.nextUrl.pathname
+  const tourExempt =
+    isAuthRoute || path.startsWith("/onboarding") || path.startsWith("/api") || path.startsWith("/auth")
+  if (
+    user &&
+    !tourExempt &&
+    user.user_metadata?.role !== "admin" &&
+    request.cookies.get(ONBOARDED_COOKIE)?.value !== user.id
+  ) {
+    const { data } = await (supabase.from("agents") as any)
+      .select("onboarding_completed_at")
+      .eq("user_id", user.id)
+      .maybeSingle()
+    const row = data as { onboarding_completed_at: string | null } | null
+    // No row, or the column isn't there yet (query error): leave the agent alone.
+    if (row && !row.onboarding_completed_at) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/onboarding/tour"
+      url.search = ""
+      return NextResponse.redirect(url)
+    }
+    if (row?.onboarding_completed_at) {
+      supabaseResponse.cookies.set(ONBOARDED_COOKIE, user.id, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 })
+    }
   }
 
   return supabaseResponse

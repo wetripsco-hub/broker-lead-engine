@@ -27,6 +27,7 @@ export default async function DashboardLayout({
     { count: unreadEmailCount },
     { count: pendingRequestsCount },
     { count: ticketsBadgeCount },
+    { count: supportRequestsCount },
   ] = await Promise.all([
     supabase.from("agents").select("id, name").eq("user_id", user.id).maybeSingle(),
     supabase
@@ -49,6 +50,10 @@ export default async function DashboardLayout({
     role === "admin"
       ? (supabase.from("support_tickets") as any).select("id", { count: "exact", head: true }).eq("status", "open")
       : (supabase.from("support_tickets") as any).select("id", { count: "exact", head: true }).eq("agent_unread", true),
+    // Admin only: open login-screen "Contact Support" requests.
+    role === "admin"
+      ? (supabase.from("support_requests") as any).select("id", { count: "exact", head: true }).eq("status", "open")
+      : Promise.resolve({ count: 0 }),
   ])
 
   const agent = agentData as { id: string; name: string } | null
@@ -65,6 +70,7 @@ export default async function DashboardLayout({
         unreadEmailCount={unreadEmailCount ?? 0}
         pendingRequestsCount={(pendingRequestsCount as number | null) ?? 0}
         ticketsBadgeCount={(ticketsBadgeCount as number | null) ?? 0}
+        supportRequestsCount={(supportRequestsCount as number | null) ?? 0}
       />
       <main className="flex flex-1 flex-col min-h-screen">
         <header className="flex items-center h-12 px-4 border-b shrink-0">
