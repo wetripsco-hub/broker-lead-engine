@@ -6,8 +6,8 @@ import { headers } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { isAdminInDb } from "@/lib/voice-agents/admin-check"
-import { AGENT_TZ, safeTimezone } from "@/lib/timezone/broker-time"
-import { locationChanged, locationFromHeaders } from "@/lib/timezone/viewer-location"
+import { AGENT_TZ, isValidTimezone, safeTimezone } from "@/lib/timezone/broker-time"
+import { locationChanged, locationFromHeaders, type RequestLocation } from "@/lib/timezone/viewer-location"
 
 /** The saved zone of one agent row (validated), or PKT. Never throws. */
 export async function getAgentTimezone(agentId: string): Promise<string> {
@@ -33,6 +33,22 @@ export async function getViewerTimezone(): Promise<string> {
     return safeTimezone((data as { ip_timezone?: string | null } | null)?.ip_timezone)
   } catch {
     return AGENT_TZ
+  }
+}
+
+/**
+ * Where THIS request comes from, straight from Vercel's IP headers (nothing saved).
+ * `timezone` is null when there's no valid header (e.g. localhost); the browser
+ * zone is used then. For the admin's extra "Your current time" line — display only.
+ */
+export async function getRequestLocation(): Promise<RequestLocation> {
+  try {
+    const h = await headers()
+    const loc = locationFromHeaders((name) => h.get(name), null)
+    const hasHeader = isValidTimezone(h.get("x-vercel-ip-timezone"))
+    return { timezone: hasHeader ? loc.timezone : null, country: loc.country, city: loc.city }
+  } catch {
+    return { timezone: null, country: null, city: null }
   }
 }
 

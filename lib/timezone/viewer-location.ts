@@ -10,6 +10,19 @@ export interface IpLocation {
   city: string | null
 }
 
+/** Location of one request; `timezone` null = no IP header (use the browser's zone). */
+export interface RequestLocation {
+  timezone: string | null
+  country: string | null
+  city: string | null
+}
+
+/** "Dubai, United Arab Emirates", or null when neither is known. */
+export function placeName(city: string | null | undefined, country: string | null | undefined): string | null {
+  const place = [city, countryName(country)].filter(Boolean).join(", ")
+  return place || null
+}
+
 /** Fallback order: Vercel IP header → browser zone → Asia/Karachi. Each is validated. */
 export function pickTimezone(headerTz: string | null | undefined, browserTz: string | null | undefined): string {
   if (isValidTimezone(headerTz)) return headerTz
@@ -79,7 +92,7 @@ export function utcOffsetLabel(tz: string, at: Date): string {
 
 /** "Lagos, Nigeria · WAT (UTC+1)" — for the admin's Agents page. */
 export function describeLocation(loc: { city: string | null; country: string | null; timezone: string }, at: Date): string {
-  const place = [loc.city, countryName(loc.country)].filter(Boolean).join(", ")
+  const place = placeName(loc.city, loc.country)
   const zone = `${timezoneAbbr(loc.timezone, at)} (${utcOffsetLabel(loc.timezone, at)})`
   return place ? `${place} · ${zone}` : zone
 }

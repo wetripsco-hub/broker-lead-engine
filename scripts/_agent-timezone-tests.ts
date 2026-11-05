@@ -19,6 +19,7 @@ import {
   locationFromHeaders,
   normaliseCountry,
   pickTimezone,
+  placeName,
   utcOffsetLabel,
 } from "@/lib/timezone/viewer-location"
 
@@ -105,6 +106,17 @@ check(
 )
 eq("Karachi line", describeLocation({ city: "Karachi", country: "PK", timezone: "Asia/Karachi" }, winter), "Karachi, Pakistan · PKT (UTC+5)")
 eq("no city / country → zone only", describeLocation({ city: null, country: null, timezone: "Asia/Karachi" }, winter), "PKT (UTC+5)")
+
+console.log("\n── admin's extra 'Your current time' line ──")
+eq("Dubai place name", placeName("Dubai", "AE"), "Dubai, United Arab Emirates")
+eq("country only", placeName(null, "PK"), "Pakistan")
+eq("nothing known → null", placeName(null, null), null)
+check("Dubai admin sees GST/GMT+4 time", /^\d{2}:\d{2} [AP]M (GST|GMT\+4)$/.test(formatAgentClock(winter, "Asia/Dubai")), formatAgentClock(winter, "Asia/Dubai"))
+const cardSrc = read("components/leads/local-time-card.tsx")
+check("extra line is admin-only and keeps the Pakistan line", /!isAgent && adminTz/.test(cardSrc) && cardSrc.includes("Your current time:") && cardSrc.includes(`isAgent ? "Your time" : "Pakistan"`))
+check("lead page reads the admin's location only for the admin", /isAdmin \? await getRequestLocation\(\) : null/.test(read("app/(dashboard)/leads/[id]/page.tsx")))
+const reqSrc = read("lib/timezone/viewer-timezone.ts")
+check("request location is read, not saved", !/update\(/.test(reqSrc.slice(reqSrc.indexOf("export async function getRequestLocation"), reqSrc.indexOf("export async function recordAgentLocation"))))
 
 console.log("\n── calling rules unchanged (broker's zone, server clock) ──")
 const sevenPmEdt = new Date("2026-10-01T23:00:00Z") // Thu 7 PM EDT

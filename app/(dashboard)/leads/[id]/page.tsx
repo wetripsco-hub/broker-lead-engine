@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 import { emailFor, phoneFor, timezonePhone } from "@/lib/mask"
 import { getAgentCallState } from "@/lib/agent-call-rules"
-import { getAgentTimezone } from "@/lib/timezone/viewer-timezone"
+import { getAgentTimezone, getRequestLocation } from "@/lib/timezone/viewer-timezone"
 import { AGENT_TZ } from "@/lib/timezone/broker-time"
 import { AgentCallBanner } from "@/components/leads/agent-call-banner"
 import { StageSelector } from "@/components/leads/stage-selector"
@@ -257,6 +257,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     mask && myAgent ? await getAgentCallState(myAgent.id, lead.id, { state: b?.state ?? null, phone: b?.phone ?? null }) : null
   // The viewer's own clock: the agent's IP zone, PKT for the admin (display only).
   const viewerTz = agentCallState?.viewerTz ?? (mask && myAgent ? await getAgentTimezone(myAgent.id) : AGENT_TZ)
+  // Admin only: an extra "Your current time" line for wherever they open the page from.
+  // Their own times and reports stay PKT.
+  const adminLocation = isAdmin ? await getRequestLocation() : null
   // Shown on screen. For agents these are masked; the real number only goes
   // to the dialer to be dialled, never rendered.
   const shownPhone = phoneFor(mask, b?.phone)
@@ -536,6 +539,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             phone={mask ? timezonePhone(shownPhone) : (b?.phone ?? null)}
             viewerTz={viewerTz}
             isAgent={mask}
+            adminLocation={adminLocation}
           />
 
           {/* Assignment */}

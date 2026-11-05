@@ -1,9 +1,12 @@
 "use client"
 
-import { Clock } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Clock, MapPin } from "lucide-react"
+import { placeName, type RequestLocation } from "@/lib/timezone/viewer-location"
 import { useNow } from "@/lib/timezone/use-now"
 import {
   AGENT_TZ,
+  isValidTimezone,
   resolveTimezone,
   getCallStatus,
   formatLocalTime,
@@ -20,15 +23,29 @@ export function LocalTimeCard({
   phone,
   viewerTz = AGENT_TZ,
   isAgent = false,
+  adminLocation = null,
 }: {
   state: string | null
   phone: string | null
   viewerTz?: string
   isAgent?: boolean
+  /** Admin only: where they're opening the page from (extra line; reports stay PKT). */
+  adminLocation?: RequestLocation | null
 }) {
   const now = useNow(1000)
   const resolved = resolveTimezone(state, phone)
   const tz = isAgent ? viewerTz : AGENT_TZ
+  // No IP header (localhost) → the browser's own zone.
+  const [browserTz, setBrowserTz] = useState<string | null>(null)
+  useEffect(() => {
+    try {
+      setBrowserTz(Intl.DateTimeFormat().resolvedOptions().timeZone ?? null)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+  const adminTz = adminLocation ? (adminLocation.timezone ?? (isValidTimezone(browserTz) ? browserTz : null)) : null
+  const adminPlace = adminLocation ? placeName(adminLocation.city, adminLocation.country) : null
 
   const status = now && resolved ? getCallStatus(resolved.tz, now) : null
   const display = status ? describeCall(status, now!, tz) : null
@@ -101,6 +118,15 @@ export function LocalTimeCard({
             {isAgent ? "Your time" : "Pakistan"}: {now ? formatAgentClock(now, tz) : " "}
           </span>
         </div>
+        {!isAgent && adminTz && (
+          <div className="flex items-center gap-1.5">
+            <MapPin className="size-3 shrink-0" aria-hidden />
+            <span className="tabular-nums" suppressHydrationWarning>
+              Your current time: {now ? formatAgentClock(now, adminTz) : " "}
+              {adminPlace ? ` · ${adminPlace}` : ""}
+            </span>
+          </div>
+        )}
         <p className="text-[11px] text-muted-foreground/70">
           Calling window {CALL_WINDOW_LABEL}, their time
         </p>
