@@ -81,6 +81,7 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
   const [muted, setMuted] = useState(false)
   const [seconds, setSeconds] = useState(0)
   const [notes, setNotes] = useState("")
+  const [dtmfSent, setDtmfSent] = useState("")
   const [isPending, startTransition] = useTransition()
 
   // History state
@@ -143,7 +144,13 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
   function pressKey(digit: string) {
     if (phase === "active") {
       const call = callRef.current as { dtmf?: (d: string) => void } | null
-      call?.dtmf?.(digit)
+      if (!call?.dtmf) return
+      try {
+        call.dtmf(digit)
+        setDtmfSent((s) => (s + digit).slice(-24))
+      } catch (e) {
+        toast.error(`Keypad error: ${telnyxErrorMessage(e)}`)
+      }
       return
     }
     if (phase !== "idle") return
@@ -277,6 +284,7 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
     setNotes("")
     setSeconds(0)
     setMuted(false)
+    setDtmfSent("")
     clientRef.current = null
     callRef.current = null
     eventIdRef.current = null
@@ -423,6 +431,16 @@ export function DialerWidget({ agentId }: { agentId: string | null }) {
                       )}
                     </p>
                   </div>
+
+                  {phase === "active" && (
+                    <p
+                      className="h-6 truncate rounded-md bg-muted/40 px-2 text-center font-mono text-sm leading-6 tracking-widest tabular-nums"
+                      aria-live="polite"
+                      aria-label="Keys sent"
+                    >
+                      {dtmfSent || <span className="text-[11px] tracking-normal text-muted-foreground">Keypad — press a key to send a tone</span>}
+                    </p>
+                  )}
 
                   {phase === "active" && (
                     <div className="grid grid-cols-3 gap-2">

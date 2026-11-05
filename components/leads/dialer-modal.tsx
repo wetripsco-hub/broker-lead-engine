@@ -9,6 +9,7 @@ import {
   X,
   CheckCircle2,
   Clock,
+  Grid3x3,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -79,6 +80,14 @@ function brokerInitial(name: string | null, phone: string): string {
 
 const DISPOSITIONS: DispositionKey[] = DISPOSITION_MENU
 
+// In-call keypad (DTMF) — for phone menus like "press 0 for the operator".
+const DTMF_KEYS: { key: string; sub?: string }[] = [
+  { key: "1" }, { key: "2", sub: "ABC" }, { key: "3", sub: "DEF" },
+  { key: "4", sub: "GHI" }, { key: "5", sub: "JKL" }, { key: "6", sub: "MNO" },
+  { key: "7", sub: "PQRS" }, { key: "8", sub: "TUV" }, { key: "9", sub: "WXYZ" },
+  { key: "*" }, { key: "0", sub: "+" }, { key: "#" },
+]
+
 // ─── Phase header config ───────────────────────────────────────────────────────
 
 const PHASE_CONFIG: Record<
@@ -135,6 +144,8 @@ export function DialerModal({
   const [isPending, startTransition] = useTransition()
   const [answered, setAnswered] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
+  const [keypadOpen, setKeypadOpen] = useState(false)
+  const [dtmfSent, setDtmfSent] = useState("")
 
   const clientRef  = useRef<unknown>(null)
   const callRef     = useRef<unknown>(null)
@@ -328,6 +339,40 @@ export function DialerModal({
     }
   }, [])
 
+  const sendDigit = useCallback((digit: string) => {
+    if (phase !== "active") return
+    const call = callRef.current as { dtmf?: (d: string) => void } | null
+    if (!call?.dtmf) return
+    try {
+      call.dtmf(digit)
+      setDtmfSent((s) => (s + digit).slice(-24))
+    } catch (e) {
+      toast.error(`Keypad error: ${telnyxErrorMessage(e)}`)
+    }
+  }, [phase])
+
+  // While the keypad is open, the physical keyboard's 0-9 * # also send tones
+  // (ignored when typing in a text field, e.g. the copilot or notes).
+  useEffect(() => {
+    if (!keypadOpen || phase !== "active") return
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (/^[0-9*#]$/.test(e.key)) {
+        e.preventDefault()
+        sendDigit(e.key)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [keypadOpen, phase, sendDigit])
+
+  // Close the keypad once the call is over.
+  useEffect(() => {
+    if (phase === "ended" || phase === "saving") setKeypadOpen(false)
+  }, [phase])
+
   function handleSaveDisposition() {
     if (!eventIdRef.current) { onClose(); return }
     startTransition(async () => {
@@ -383,6 +428,16 @@ export function DialerModal({
               className={`flex size-11 items-center justify-center rounded-full bg-muted disabled:opacity-40 ${muted ? "ring-2 ring-destructive" : ""}`}
             >
               {muted ? <MicOff className="size-5 text-destructive" /> : <Mic className="size-5" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setKeypadOpen((o) => !o)}
+              disabled={phase !== "active"}
+              aria-label={keypadOpen ? "Hide keypad" : "Show keypad"}
+              aria-pressed={keypadOpen}
+              className={`flex size-11 items-center justify-center rounded-full bg-muted disabled:opacity-40 ${keypadOpen ? "ring-2 ring-primary" : ""}`}
+            >
+              <Grid3x3 className="size-5" />
             </button>
             <button
               type="button"
@@ -475,6 +530,33 @@ export function DialerModal({
           )}
         </div>
 
+        {/* ── In-call keypad (DTMF) ── */}
+        {isActive && keypadOpen && (
+          <div className="px-6 pb-5">
+            <div
+              className="mb-2 h-7 truncate rounded-md bg-muted/40 px-3 text-center font-mono text-base leading-7 tracking-widest tabular-nums"
+              aria-live="polite"
+              aria-label="Keys sent"
+            >
+              {dtmfSent || <span className="text-xs tracking-normal text-muted-foreground">Press a key to send a tone</span>}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {DTMF_KEYS.map(({ key, sub }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => sendDigit(key)}
+                  aria-label={`Send ${key}`}
+                  className="flex h-12 flex-col items-center justify-center rounded-lg bg-muted/60 transition-[transform,background-color] duration-100 ease-[var(--ease-out)] hover:bg-muted active:scale-95 active:bg-muted"
+                >
+                  <span className="text-lg font-semibold leading-none">{key}</span>
+                  {sub && <span className="mt-0.5 text-[9px] font-medium tracking-wider text-muted-foreground">{sub}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── Call controls (connecting / dialing / active) ── */}
         {!isEnded && (
           <div className="hidden items-center justify-center gap-6 px-6 pb-7 md:flex">
@@ -493,6 +575,21 @@ export function DialerModal({
                 }
               </button>
               <span className="text-xs text-muted-foreground">{muted ? "Unmute" : "Mute"}</span>
+            </div>
+
+            {/* Keypad */}
+            <div className="flex flex-col items-center gap-1.5">
+              <button
+                onClick={() => setKeypadOpen((o) => !o)}
+                disabled={phase !== "active"}
+                aria-pressed={keypadOpen}
+                className={`size-14 rounded-full flex items-center justify-center transition-colors
+                  ${phase === "active" ? "bg-muted hover:bg-muted/80 cursor-pointer" : "bg-muted/40 cursor-not-allowed"}
+                  ${keypadOpen ? "ring-2 ring-primary" : ""}`}
+              >
+                <Grid3x3 className={`size-5 ${phase === "active" ? "text-foreground" : "text-muted-foreground"}`} />
+              </button>
+              <span className="text-xs text-muted-foreground">{keypadOpen ? "Hide keypad" : "Keypad"}</span>
             </div>
 
             {/* End call */}
