@@ -144,7 +144,8 @@ export function DialerModal({
   const [isPending, startTransition] = useTransition()
   const [answered, setAnswered] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
-  const [keypadOpen, setKeypadOpen] = useState(false)
+  // Open by default: phone menus ("press 0 for the operator") are common on these calls.
+  const [keypadOpen, setKeypadOpen] = useState(true)
   const [dtmfSent, setDtmfSent] = useState("")
 
   const clientRef  = useRef<unknown>(null)
@@ -367,11 +368,6 @@ export function DialerModal({
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [keypadOpen, phase, sendDigit])
-
-  // Close the keypad once the call is over.
-  useEffect(() => {
-    if (phase === "ended" || phase === "saving") setKeypadOpen(false)
-  }, [phase])
 
   function handleSaveDisposition() {
     if (!eventIdRef.current) { onClose(); return }
