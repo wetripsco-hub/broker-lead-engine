@@ -226,17 +226,45 @@ export function formatLocalWeekday(tz: string, now: Date): string {
   return fmt("weekday", tz, { weekday: "long" }).format(now)
 }
 
-// "07:42 PM PKT"
-export function formatAgentClock(now: Date): string {
-  return `${fmt("agent-clock", AGENT_TZ, { hour: "2-digit", minute: "2-digit" }).format(now)} ${AGENT_TZ_ABBR}`
+/** True when `tz` is a time zone this runtime's Intl accepts. */
+export function isValidTimezone(tz: string | null | undefined): tz is string {
+  if (!tz || typeof tz !== "string" || tz.length > 64) return false
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz })
+    return true
+  } catch {
+    return false
+  }
 }
 
-// "5:00 PM PKT", prefixed with the weekday when it isn't the same PKT day.
-export function formatAgentTimeAt(target: Date, now: Date): string {
-  const time = `${fmt("agent-at", AGENT_TZ, { hour: "numeric", minute: "2-digit" }).format(target)} ${AGENT_TZ_ABBR}`
-  const day = (d: Date) => fmt("agent-day", AGENT_TZ, { year: "numeric", month: "2-digit", day: "2-digit" }).format(d)
+/** A valid zone, or AGENT_TZ. */
+export function safeTimezone(tz: string | null | undefined): string {
+  return isValidTimezone(tz) ? tz : AGENT_TZ
+}
+
+/**
+ * Short zone name at `at`: "PKT", "WAT", "EDT", or "GMT+3" when Intl has no
+ * abbreviation. Karachi is overridden (Intl prints "GMT+5").
+ */
+export function timezoneAbbr(tz: string, at: Date): string {
+  if (tz === AGENT_TZ) return AGENT_TZ_ABBR
+  const parts = fmt("abbr", tz, { timeZoneName: "short" }).formatToParts(at)
+  return parts.find((p) => p.type === "timeZoneName")?.value ?? tz
+}
+
+// "07:42 PM PKT" — in the viewer's zone (PKT unless one is given).
+export function formatAgentClock(now: Date, tz: string = AGENT_TZ): string {
+  const zone = safeTimezone(tz)
+  return `${fmt("agent-clock", zone, { hour: "2-digit", minute: "2-digit" }).format(now)} ${timezoneAbbr(zone, now)}`
+}
+
+// "5:00 PM PKT", prefixed with the weekday when it isn't the same day in that zone.
+export function formatAgentTimeAt(target: Date, now: Date, tz: string = AGENT_TZ): string {
+  const zone = safeTimezone(tz)
+  const time = `${fmt("agent-at", zone, { hour: "numeric", minute: "2-digit" }).format(target)} ${timezoneAbbr(zone, target)}`
+  const day = (d: Date) => fmt("agent-day", zone, { year: "numeric", month: "2-digit", day: "2-digit" }).format(d)
   if (day(target) === day(now)) return time
-  return `${fmt("agent-wd", AGENT_TZ, { weekday: "short" }).format(target)} ${time}`
+  return `${fmt("agent-wd", zone, { weekday: "short" }).format(target)} ${time}`
 }
 
 // 200 -> "3h 20m", 45 -> "45m", 3000 -> "2d 2h"

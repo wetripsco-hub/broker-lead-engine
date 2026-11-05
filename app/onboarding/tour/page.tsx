@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { HOURLY_CALL_LIMIT } from "@/lib/agent-hourly-limit"
 import { firstName, initialTourStep } from "@/lib/onboarding"
+import { getViewerTimezone } from "@/lib/timezone/viewer-timezone"
 import { TourClient } from "./tour-client"
 
 // Agent only. ?replay=1 (Help menu) reopens the tour without touching any flags.
@@ -29,6 +30,7 @@ export default async function TourPage({ searchParams }: { searchParams: Promise
       replay={replay}
       agentFirstName={firstName(agent?.name)}
       hourlyCallLimit={HOURLY_CALL_LIMIT}
+      agentTz={await getViewerTimezone()}
     />
   )
 }

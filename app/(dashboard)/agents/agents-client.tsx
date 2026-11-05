@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { useNow } from "@/lib/timezone/use-now"
 import { formatPkt, isOnline, timeAgo } from "@/lib/presence"
+import { isValidTimezone } from "@/lib/timezone/broker-time"
+import { describeLocation } from "@/lib/timezone/viewer-location"
 import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent, setWelcomeTour } from "./actions"
 
 interface Agent {
@@ -21,6 +23,11 @@ interface Agent {
   last_seen_at: string | null
   last_signed_out_at: string | null
   last_sign_in_at: string | null
+  /** Where they last connected from (IP), saved by the heartbeat / sign-in. */
+  ip_timezone: string | null
+  ip_country: string | null
+  ip_city: string | null
+  ip_location_at: string | null
 }
 
 function PresenceLine({ agent, now }: { agent: Agent; now: Date | null }) {
@@ -36,6 +43,13 @@ function PresenceLine({ agent, now }: { agent: Agent; now: Date | null }) {
         </span>
       </span>
       {agent.last_sign_in_at && <span title={agent.last_sign_in_at}>Last login {formatPkt(agent.last_sign_in_at)}</span>}
+      {isValidTimezone(agent.ip_timezone) && (
+        <span title={agent.ip_timezone}>
+          <span aria-hidden>📍 </span>
+          {describeLocation({ city: agent.ip_city, country: agent.ip_country, timezone: agent.ip_timezone }, now)}
+          {agent.ip_location_at && ` · updated ${timeAgo(agent.ip_location_at, now)}`}
+        </span>
+      )}
     </p>
   )
 }

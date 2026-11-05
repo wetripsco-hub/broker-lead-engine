@@ -5,13 +5,15 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { evaluateCooldown, isUnansweredStatus, cooldownMessage, type CooldownResult } from "@/lib/call-cooldown"
 import { minutesUntil } from "@/lib/agent-hourly-limit"
-import { formatAgentTimeAt } from "@/lib/timezone/broker-time"
+import { AGENT_TZ, formatAgentTimeAt } from "@/lib/timezone/broker-time"
 
 const LOOKBACK_MS = 24 * 3600_000
 
+/** `tz` only changes how the "Try again at" time is shown (the agent's own zone). */
 export async function checkCallCooldown(
   leadId: string,
   now: Date = new Date(),
+  tz: string = AGENT_TZ,
 ): Promise<CooldownResult & { message: string | null }> {
   const admin = createAdminClient() as any
   const { data: lead } = await admin.from("leads").select("broker_id").eq("id", leadId).maybeSingle()
@@ -40,7 +42,7 @@ export async function checkCallCooldown(
   return {
     ...result,
     message: result.blocked && result.until
-      ? cooldownMessage(formatAgentTimeAt(result.until, now), minutesUntil(result.until, now))
+      ? cooldownMessage(formatAgentTimeAt(result.until, now, tz), minutesUntil(result.until, now))
       : null,
   }
 }

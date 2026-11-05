@@ -32,6 +32,10 @@ export default async function AgentsPage() {
       last_seen_at: (a.last_seen_at ?? null) as string | null,
       last_signed_out_at: (a.last_signed_out_at ?? null) as string | null,
       last_sign_in_at: lastSignIn.get(a.user_id) ?? null,
+      ip_timezone: (a.ip_timezone ?? null) as string | null,
+      ip_country: (a.ip_country ?? null) as string | null,
+      ip_city: (a.ip_city ?? null) as string | null,
+      ip_location_at: (a.ip_location_at ?? null) as string | null,
     }))
 
   const { data: leadCountsRaw } = await supabase

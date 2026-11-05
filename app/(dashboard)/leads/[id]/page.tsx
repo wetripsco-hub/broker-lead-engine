@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 import { emailFor, phoneFor, timezonePhone } from "@/lib/mask"
 import { getAgentCallState } from "@/lib/agent-call-rules"
+import { getAgentTimezone } from "@/lib/timezone/viewer-timezone"
+import { AGENT_TZ } from "@/lib/timezone/broker-time"
 import { AgentCallBanner } from "@/components/leads/agent-call-banner"
 import { StageSelector } from "@/components/leads/stage-selector"
 import { StageBadge } from "@/components/leads/stage-badge"
@@ -253,6 +255,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // Agents only: what the Call button and the cooldown banner start with.
   const agentCallState =
     mask && myAgent ? await getAgentCallState(myAgent.id, lead.id, { state: b?.state ?? null, phone: b?.phone ?? null }) : null
+  // The viewer's own clock: the agent's IP zone, PKT for the admin (display only).
+  const viewerTz = agentCallState?.viewerTz ?? (mask && myAgent ? await getAgentTimezone(myAgent.id) : AGENT_TZ)
   // Shown on screen. For agents these are masked; the real number only goes
   // to the dialer to be dialled, never rendered.
   const shownPhone = phoneFor(mask, b?.phone)
@@ -527,7 +531,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
         {/* Right column */}
         <div className="space-y-4">
-          <LocalTimeCard state={b?.state ?? null} phone={mask ? timezonePhone(shownPhone) : (b?.phone ?? null)} />
+          <LocalTimeCard
+            state={b?.state ?? null}
+            phone={mask ? timezonePhone(shownPhone) : (b?.phone ?? null)}
+            viewerTz={viewerTz}
+            isAgent={mask}
+          />
 
           {/* Assignment */}
           <div className="rounded-lg border bg-card p-4">

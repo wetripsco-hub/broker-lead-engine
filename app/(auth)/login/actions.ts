@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { ONBOARDED_COOKIE } from "@/lib/onboarding"
+import { recordAgentLocation } from "@/lib/timezone/viewer-timezone"
 import {
   lockedMessage,
   lockedUntil,
@@ -56,7 +57,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (until) return { error: lockedMessage(until, now) }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { data: signedIn, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
     // Only a wrong email/password counts towards the lock, not e.g. a network error.
@@ -68,6 +69,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   if (before) await writeLockout(email, null)
+  // The agent's own time zone from their IP, so the first page already shows it.
+  if (signedIn?.user) await recordAgentLocation(signedIn.user.id, String(formData.get("tz") ?? "") || null)
   // Re-check the welcome tour flag on every fresh sign-in.
   ;(await cookies()).delete(ONBOARDED_COOKIE)
   revalidatePath("/", "layout")

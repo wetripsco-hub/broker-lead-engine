@@ -23,7 +23,7 @@ export function AgentCallBanner({ leadId, initialState }: { leadId: string; init
           <Clock className="size-4 shrink-0" />
           <span>
             Cooldown — call again after{" "}
-            <span className="font-medium tabular-nums">{formatAgentTimeAt(new Date(state.cooldown.until), now)}</span>
+            <span className="font-medium tabular-nums">{formatAgentTimeAt(new Date(state.cooldown.until), now, state.viewerTz)}</span>
           </span>
           <span className="text-xs opacity-80">This broker was tried twice without an answer · {cooldownLeft} left</span>
         </div>

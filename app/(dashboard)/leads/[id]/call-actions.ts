@@ -7,6 +7,7 @@ import { toE164 } from "@/lib/phone"
 import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 import { checkCallingWindow } from "@/lib/timezone/calling-window"
 import { checkCallCooldown } from "@/lib/call-cooldown-guard"
+import { getAgentTimezone } from "@/lib/timezone/viewer-timezone"
 import {
   activeGrant,
   checkHourlyLimit,
@@ -69,8 +70,10 @@ export async function logCallStarted(
       if (!grant) return { error: "Outside calling hours. Send an after-hours request to the admin.", blocked: true }
       grantId = grant.id
     }
-    // Either of these blocks the call without using up the grant.
-    const [hourly, cooldown] = await Promise.all([checkHourlyLimit(callerAgentId, now), checkCallCooldown(leadId, now)])
+    // Either of these blocks the call without using up the grant. The zone only
+    // changes how the "try again at" time reads, not the rules.
+    const tz = await getAgentTimezone(callerAgentId)
+    const [hourly, cooldown] = await Promise.all([checkHourlyLimit(callerAgentId, now, tz), checkCallCooldown(leadId, now, tz)])
     if (hourly.blocked) return { error: hourly.message ?? "Hourly call limit reached.", blocked: true }
     if (cooldown.blocked) return { error: cooldown.message ?? "This broker is in cooldown.", blocked: true }
   }

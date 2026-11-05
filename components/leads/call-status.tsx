@@ -1,4 +1,5 @@
 import {
+  AGENT_TZ,
   CALL_START_HOUR,
   CALL_END_HOUR,
   formatAgentTimeAt,
@@ -52,7 +53,8 @@ export function fmtHour(h: number): string {
 export const CALL_WINDOW_LABEL = `${fmtHour(CALL_START_HOUR)} – ${fmtHour(CALL_END_HOUR)}`
 
 // The words for each state, shared by the lead-page card and the list tooltip.
-export function describeCall(status: CallStatus, now: Date): { headline: string; detail: string } {
+// `tz` is the viewer's own zone for "Call at …" (PKT unless given).
+export function describeCall(status: CallStatus, now: Date, tz: string = AGENT_TZ): { headline: string; detail: string } {
   switch (status.state) {
     case "ok":
       return { headline: "OK to call", detail: `Window closes in ${formatDuration(status.minutesUntilClose ?? 0)}` }
@@ -62,13 +64,13 @@ export function describeCall(status: CallStatus, now: Date): { headline: string;
       return {
         headline: "Outside calling hours",
         detail: status.opensAt
-          ? `Opens in ${formatDuration(status.minutesUntilOpen ?? 0)} · Call at ${formatAgentTimeAt(status.opensAt, now)}`
+          ? `Opens in ${formatDuration(status.minutesUntilOpen ?? 0)} · Call at ${formatAgentTimeAt(status.opensAt, now, tz)}`
           : "",
       }
     case "weekend":
       return {
         headline: "Weekend - best to call Monday",
-        detail: status.opensAt ? `Call at ${formatAgentTimeAt(status.opensAt, now)}` : "",
+        detail: status.opensAt ? `Call at ${formatAgentTimeAt(status.opensAt, now, tz)}` : "",
       }
   }
 }

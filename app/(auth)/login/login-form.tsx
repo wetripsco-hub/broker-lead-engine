@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState } from "react"
+import { useActionState, useEffect, useState } from "react"
 import { login, type LoginState } from "./actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,9 +10,19 @@ const initialState: LoginState = { error: null }
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState)
+  // Browser time zone — fallback for the agent's zone when there's no IP header.
+  const [tz, setTz] = useState("")
+  useEffect(() => {
+    try {
+      setTz(Intl.DateTimeFormat().resolvedOptions().timeZone ?? "")
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   return (
     <form action={formAction} className="space-y-4">
+      <input type="hidden" name="tz" value={tz} />
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input id="email" name="email" type="email" placeholder="you@example.com" required autoComplete="email" />

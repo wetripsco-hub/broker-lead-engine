@@ -8,8 +8,15 @@ import { HEARTBEAT_SECONDS } from "@/lib/presence"
 // tab is visible, so a forgotten background tab doesn't look like work.
 export function PresenceHeartbeat() {
   useEffect(() => {
+    // Fallback for the agent's time zone when the server has no IP header (localhost).
+    let browserTz: string | null = null
+    try {
+      browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null
+    } catch {
+      /* ignore */
+    }
     const beat = () => {
-      if (document.visibilityState === "visible") heartbeat().catch(() => {})
+      if (document.visibilityState === "visible") heartbeat(browserTz).catch(() => {})
     }
     beat()
     const id = setInterval(beat, HEARTBEAT_SECONDS * 1000)

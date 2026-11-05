@@ -5,7 +5,8 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkCallingWindow } from "@/lib/timezone/calling-window"
-import { formatAgentTimeAt, formatLocalClock, formatLocalWeekday } from "@/lib/timezone/broker-time"
+import { AGENT_TZ, formatAgentTimeAt, formatLocalClock, formatLocalWeekday } from "@/lib/timezone/broker-time"
+import { getAgentTimezone } from "@/lib/timezone/viewer-timezone"
 import {
   evaluateHourlyLimit,
   hourlyLimitMessage,
@@ -30,6 +31,8 @@ export interface AfterHoursRequestRow {
 
 /** Everything the agent's Call button needs. All instants are ISO strings. */
 export interface AgentCallState {
+  /** The agent's own display zone (from their IP). Display only. */
+  viewerTz: string
   window: {
     inside: boolean
     reason: "unknown_timezone" | "weekend" | "outside_hours" | null
@@ -104,7 +107,8 @@ export async function consumeGrant(grantId: string, eventId: string, now: Date =
   return ((data ?? []) as unknown[]).length > 0
 }
 
-export async function checkHourlyLimit(agentId: string, now: Date = new Date()) {
+/** `tz` only changes how the "call again at" time is shown (the agent's own zone). */
+export async function checkHourlyLimit(agentId: string, now: Date = new Date(), tz: string = AGENT_TZ) {
   const { data } = await (createAdminClient().from("outreach_events") as any)
     .select("occurred_at")
     .eq("agent_id", agentId)
@@ -118,7 +122,7 @@ export async function checkHourlyLimit(agentId: string, now: Date = new Date()) 
   return {
     ...r,
     message: r.blocked && r.blockedUntil
-      ? hourlyLimitMessage(formatAgentTimeAt(r.blockedUntil, now), minutesUntil(r.blockedUntil, now))
+      ? hourlyLimitMessage(formatAgentTimeAt(r.blockedUntil, now, tz), minutesUntil(r.blockedUntil, now))
       : null,
   }
 }
@@ -130,12 +134,14 @@ export async function getAgentCallState(
   now: Date = new Date(),
 ): Promise<AgentCallState> {
   const w = checkCallingWindow(broker.state, broker.phone, now)
+  const viewerTz = await getAgentTimezone(agentId)
   const [req, hourly, cooldown] = await Promise.all([
     latestAfterHoursRequest(agentId, leadId, now),
-    checkHourlyLimit(agentId, now),
-    checkCallCooldown(leadId, now),
+    checkHourlyLimit(agentId, now, viewerTz),
+    checkCallCooldown(leadId, now, viewerTz),
   ])
   return {
+    viewerTz,
     window: {
       inside: w.inside,
       reason: w.inside ? null : w.reason,

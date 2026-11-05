@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, ArrowRight, Check, Clock, Lock, Mic, Phone, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { CALL_END_HOUR, CALL_START_HOUR } from "@/lib/timezone/broker-time"
+import { CALL_END_HOUR, CALL_START_HOUR, formatAgentTimeAt } from "@/lib/timezone/broker-time"
 import { MAX_UNANSWERED_TRIES, COOLDOWN_MINUTES } from "@/lib/call-cooldown"
 import { DISPOSITION_LABEL, DISPOSITION_MENU } from "@/lib/call-dispositions"
 import { TOUR_STEP_COUNT } from "@/lib/onboarding"
@@ -16,7 +16,12 @@ interface Props {
   replay: boolean
   agentFirstName: string
   hourlyCallLimit: number
+  /** The agent's own zone (from their IP), for the example clock. */
+  agentTz: string
 }
+
+// The mock's example moment: 10:42 AM Central (winter) = 16:42 UTC.
+const EXAMPLE_INSTANT = new Date("2026-01-15T16:42:00Z")
 
 const hour12 = (h: number) => `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`
 
@@ -118,12 +123,14 @@ function LeadPageMock() {
   )
 }
 
-function CallMock({ limit }: { limit: number }) {
+function CallMock({ limit, agentTz }: { limit: number; agentTz: string }) {
   return (
     <MockFrame title="Lead — calling">
       <div className="flex flex-wrap gap-2">
         <span className="rounded-md border px-2 py-1">Broker time 10:42 AM CST</span>
-        <span className="rounded-md border px-2 py-1 text-muted-foreground">You 9:42 PM PKT</span>
+        <span className="rounded-md border px-2 py-1 text-muted-foreground">
+          You {formatAgentTimeAt(EXAMPLE_INSTANT, EXAMPLE_INSTANT, agentTz)}
+        </span>
       </div>
       <div className="mt-3 flex items-center gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-primary-foreground"><Phone className="size-3" /> Call</span>
@@ -251,7 +258,7 @@ function MicTest() {
 
 // ── Tour ────────────────────────────────────────────────────────────────────
 
-export function TourClient({ initialStep, replay, agentFirstName, hourlyCallLimit }: Props) {
+export function TourClient({ initialStep, replay, agentFirstName, hourlyCallLimit, agentTz }: Props) {
   const router = useRouter()
   const [step, setStep] = useState(initialStep)
   const [finishing, startFinish] = useTransition()
@@ -300,11 +307,11 @@ export function TourClient({ initialStep, replay, agentFirstName, hourlyCallLimi
       title: "Making a call",
       lines: [
         "Click Call and allow microphone access when the browser asks. You need a headset.",
-        `Calls are allowed ${hour12(CALL_START_HOUR)}–${hour12(CALL_END_HOUR)} in the broker's local time, Monday to Friday. The lead page shows broker time next to PKT.`,
+        `Calls are allowed ${hour12(CALL_START_HOUR)}–${hour12(CALL_END_HOUR)} in the broker's local time, Monday to Friday. The lead page shows broker time next to your local time.`,
         `After ${MAX_UNANSWERED_TRIES} unanswered tries a broker gets a ${COOLDOWN_MINUTES / 60}-hour cooldown. You can make up to ${hourlyCallLimit} calls per hour.`,
         "Outside allowed hours, use “Request after-hours call” with a note. Admin approves each request.",
       ],
-      mock: <CallMock limit={hourlyCallLimit} />,
+      mock: <CallMock limit={hourlyCallLimit} agentTz={agentTz} />,
       extra: <MicTest />,
     },
     {

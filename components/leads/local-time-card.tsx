@@ -3,6 +3,7 @@
 import { Clock } from "lucide-react"
 import { useNow } from "@/lib/timezone/use-now"
 import {
+  AGENT_TZ,
   resolveTimezone,
   getCallStatus,
   formatLocalTime,
@@ -12,13 +13,25 @@ import {
 import { CALL_STATE_STYLES, CALL_WINDOW_LABEL, CallDot, describeCall } from "./call-status"
 
 // "Is it OK to call this broker right now?" — their local time (live), the
-// calling-window verdict, and the agent's own clock in Pakistan.
-export function LocalTimeCard({ state, phone }: { state: string | null; phone: string | null }) {
+// calling-window verdict, and the viewer's own clock: the agent's zone (from
+// their IP) as "Your time", or Pakistan for the admin.
+export function LocalTimeCard({
+  state,
+  phone,
+  viewerTz = AGENT_TZ,
+  isAgent = false,
+}: {
+  state: string | null
+  phone: string | null
+  viewerTz?: string
+  isAgent?: boolean
+}) {
   const now = useNow(1000)
   const resolved = resolveTimezone(state, phone)
+  const tz = isAgent ? viewerTz : AGENT_TZ
 
   const status = now && resolved ? getCallStatus(resolved.tz, now) : null
-  const display = status ? describeCall(status, now!) : null
+  const display = status ? describeCall(status, now!, tz) : null
   const styleKey = resolved ? (status?.state ?? "unknown") : "unknown"
 
   return (
@@ -85,7 +98,7 @@ export function LocalTimeCard({ state, phone }: { state: string | null; phone: s
         <div className="flex items-center gap-1.5">
           <Clock className="size-3 shrink-0" aria-hidden />
           <span className="tabular-nums" suppressHydrationWarning>
-            Pakistan: {now ? formatAgentClock(now) : " "}
+            {isAgent ? "Your time" : "Pakistan"}: {now ? formatAgentClock(now, tz) : " "}
           </span>
         </div>
         <p className="text-[11px] text-muted-foreground/70">
