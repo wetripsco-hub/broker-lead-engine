@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import { Users, TrendingUp, Mail, Phone, MessageSquare, ArrowUpRight, ArrowDownLeft, Clock, Bot } from "lucide-react"
 import { getFollowUps } from "@/lib/follow-up/query"
+import { MyEarnings } from "@/components/earnings/my-earnings"
 import type { UserRole, OutreachChannel } from "@/types/database"
 
 const CHANNEL_ICON: Record<OutreachChannel, React.ElementType> = {
@@ -176,6 +177,9 @@ export default async function DashboardPage() {
           {role === "admin" ? "Overview across all agents" : "Your leads at a glance"}
         </p>
       </div>
+
+      {/* Agents only: their own earnings and level (the admin home stays as it is). */}
+      {role !== "admin" && user && <MyEarnings userId={user.id} />}
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

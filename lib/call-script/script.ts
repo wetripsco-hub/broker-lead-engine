@@ -292,6 +292,110 @@ export const CALL_SCRIPT: ScriptSection[] = [
       },
     ],
   },
+  {
+    id: "demo",
+    title: "Demo / Detailed (15-minute call)",
+    hint: "Use when the broker is interested, booked a demo, or asks a lot of questions. Screen-share loadlinkers.co if you can.",
+    items: [
+      {
+        id: "demo-open",
+        title: "1. Open and set the agenda (1 min)",
+        lines: [
+          { kind: "say", text: "Hey [Name], it's [First Name] with Loadlinkers. Just so you know, this call may be recorded for quality. Thanks for making the time. Here's what I'd suggest: two minutes on how you run loads today, then I'll show you the three things brokers use most, and you tell me if it fits. Sound fair?" },
+        ],
+      },
+      {
+        id: "demo-discover",
+        title: "2. Ask before you show (3 min)",
+        lines: [
+          { kind: "say", text: "How many loads are you running a week right now?" },
+          { kind: "say", text: "Where do your rate cons, carrier checks and invoices live today: spreadsheets, email, something else?" },
+          { kind: "say", text: "What takes the most time in a normal week?" },
+          { kind: "say", text: "Is it just you, or do you have agents or a dispatcher working with you?" },
+          { kind: "note", text: "Write the answers in the CRM notes. Show only the parts that match their pain. Team size decides the plan (Starter 1 user, Growth 3, Scale 10)." },
+        ],
+      },
+      {
+        id: "demo-show",
+        title: "3. Show the three things (6 min)",
+        lines: [
+          { kind: "say", text: "First: you upload a signed rate confirmation and it fills in the carrier, rate and stops as a new load. No retyping." },
+          { kind: "say", text: "Second: before you assign a carrier, it checks them against FMCSA and flags expired insurance, inactive authority or an unsatisfactory safety rating." },
+          { kind: "say", text: "Third: on every load you see shipper rate, carrier pay and your margin side by side, and invoices come from the delivered load. Your customer can also get a tracking link, no app or login needed." },
+          { kind: "say", text: "Which of those would save you the most time?" },
+          { kind: "note", text: "Only talk about features on loadlinkers.co. If you're not sure something exists, say: \"Let me confirm that and get back to you.\"" },
+        ],
+      },
+      {
+        id: "demo-price",
+        title: "4. Price and plan (2 min)",
+        lines: [
+          { kind: "say", text: "Plans are monthly: Starter is $69 for one user, Growth is $189 for three users with invoicing and lane and margin history, and Scale is $399 for ten users with QuickBooks Online and factoring. Extra seats are $25 a month, and paying yearly saves 20%." },
+          { kind: "say", text: "From what you told me, [plan] fits best. And there's a 7-day free trial, no credit card." },
+        ],
+      },
+      {
+        id: "demo-close",
+        title: "5. Close and next step (2 min)",
+        lines: [
+          { kind: "say", text: "Here's what I'd suggest: start the trial today, send me your current load sheet, and we'll import it for you for free, so you're working with your real lanes and carriers from day one. Would you be opposed to that?" },
+          { kind: "them", text: "Okay, let's try it." },
+          { kind: "say", text: "Great. I'll text you the trial link now. When's a good time on day 2 of the trial for a 10-minute check-in, so I can make sure the import looks right?" },
+          { kind: "note", text: "Save \"Trial link sent\" (only text after they agreed) and put the check-in time in the notes." },
+        ],
+      },
+      {
+        id: "demo-obj-price",
+        title: "\"It's too expensive.\"",
+        lines: [
+          { kind: "say", text: "Understood. Compared to what you're doing today, how many hours a week go into rate cons, carrier checks and invoices? … Starter is $69 a month for one user, and the trial is free, so you can see if it saves you more than that before paying anything." },
+        ],
+      },
+      {
+        id: "demo-obj-think",
+        title: "\"I need to think about it.\"",
+        lines: [
+          { kind: "say", text: "Totally fair. What's the main thing you'd want to think through: price, switching your data, or whether it fits how you work? … The trial doesn't need a card, so you can think about it while you try it with a real load." },
+        ],
+      },
+      {
+        id: "demo-obj-partner",
+        title: "\"I need to talk to my partner.\"",
+        lines: [
+          { kind: "say", text: "Makes sense. Would it help if we set up 15 minutes with both of you, so they can ask their own questions? What day works for you both?" },
+        ],
+      },
+      {
+        id: "demo-obj-switch",
+        title: "\"Switching sounds like a lot of work.\"",
+        lines: [
+          { kind: "say", text: "That's why we do the import for you. Send us your spreadsheet and we move your loads in, free. You don't start from zero." },
+        ],
+      },
+      {
+        id: "demo-obj-dat",
+        title: "\"Can it post to DAT or Truckstop?\"",
+        lines: [
+          { kind: "say", text: "Yes, DAT and Truckstop setup is available on request on the Growth and Scale plans, using your own accounts." },
+        ],
+      },
+      {
+        id: "demo-obj-qb",
+        title: "\"Does it work with QuickBooks?\"",
+        lines: [
+          { kind: "say", text: "QuickBooks Online is included on the Scale plan." },
+          { kind: "note", text: "If they need QuickBooks but only want Growth, don't promise anything: say you'll confirm with the team." },
+        ],
+      },
+      {
+        id: "demo-obj-data",
+        title: "\"Is my data safe?\"",
+        lines: [
+          { kind: "say", text: "Each company's data is kept separate, every change is logged, and you control who on your team can see what with roles like admin, agent, accountant and read-only." },
+        ],
+      },
+    ],
+  },
 ]
 
 export const CALLER_NOTES: string[] = [
@@ -302,7 +406,7 @@ export const CALLER_NOTES: string[] = [
 ]
 
 /** The guided view walks these sections, in this order, as the call progresses. */
-export const GUIDED_ORDER = ["opener", "yes", "no", "marketplace", "voicemail", "short"] as const
+export const GUIDED_ORDER = ["opener", "yes", "no", "marketplace", "voicemail", "short", "demo"] as const
 
 /** Shown under the outcome menu: what to do next for each outcome (section 9 of the doc). */
 export const OUTCOME_NEXT_ACTION: Record<string, string> = {

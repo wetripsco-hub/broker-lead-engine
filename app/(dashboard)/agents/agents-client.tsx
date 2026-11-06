@@ -10,7 +10,23 @@ import { useNow } from "@/lib/timezone/use-now"
 import { formatPkt, isOnline, timeAgo } from "@/lib/presence"
 import { isValidTimezone } from "@/lib/timezone/broker-time"
 import { describeLocation } from "@/lib/timezone/viewer-location"
-import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent, setWelcomeTour } from "./actions"
+import { formatDay, formatRate, formatUsd } from "@/lib/commission"
+import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent, setWelcomeTour, setAgentComp } from "./actions"
+
+/** Admin view of one agent's earnings (runbook section 4.3). */
+export interface AgentEarningsBrief {
+  levelName: string
+  levelEmoji: string
+  rate: number
+  customRate: boolean
+  activeCustomers: number
+  thisMonthCents: number
+  nextPayoutDate: string | null
+  nextPayoutCents: number
+  totalSoFarCents: number
+  compType: "commission" | "salary_plus_commission"
+  customRateValue: number | null
+}
 
 interface Agent {
   id: string
@@ -54,13 +70,37 @@ function PresenceLine({ agent, now }: { agent: Agent; now: Date | null }) {
   )
 }
 
+function EarningsLine({ e, onEdit }: { e: AgentEarningsBrief | undefined; onEdit: () => void }) {
+  if (!e) return null
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1 font-medium text-foreground">
+        <span aria-hidden>{e.levelEmoji}</span>
+        {e.levelName} · {formatRate(e.rate)}
+        {e.customRate && <span className="font-normal text-muted-foreground">(custom)</span>}
+      </span>
+      {e.compType === "salary_plus_commission" && <span className="text-primary">salary + commission</span>}
+      <span>{e.activeCustomers} active customer{e.activeCustomers === 1 ? "" : "s"}</span>
+      <span>this month {formatUsd(e.thisMonthCents)}</span>
+      <span>next payout {e.nextPayoutDate ? `${formatUsd(e.nextPayoutCents)} on ${formatDay(e.nextPayoutDate)}` : "—"}</span>
+      <span>total so far {formatUsd(e.totalSoFarCents)}</span>
+      <button type="button" onClick={onEdit} className="underline underline-offset-2 hover:text-foreground">
+        Pay terms
+      </button>
+    </p>
+  )
+}
+
 export function AgentsClient({
   agents,
   leadCounts,
+  earnings = {},
 }: {
   agents: Agent[]
   leadCounts: Record<string, number>
+  earnings?: Record<string, AgentEarningsBrief>
 }) {
+  const [compFor, setCompFor] = useState<Agent | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [resetFor, setResetFor] = useState<Agent | null>(null)
   const [editFor, setEditFor] = useState<Agent | null>(null)
@@ -142,6 +182,7 @@ export function AgentsClient({
                   <p className="font-medium truncate">{a.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{a.email ?? "—"}</p>
                   <PresenceLine agent={a} now={now} />
+                  <EarningsLine e={earnings[a.id]} onEdit={() => setCompFor(a)} />
                 </div>
                 <span className="text-muted-foreground tabular-nums">{leadCounts[a.id] ?? 0}</span>
                 <span
@@ -203,6 +244,9 @@ export function AgentsClient({
         )}
       </div>
 
+      {compFor && earnings[compFor.id] && (
+        <PayTermsModal agent={compFor} earnings={earnings[compFor.id]} onClose={() => setCompFor(null)} />
+      )}
       {addOpen && <AddAgentModal onClose={() => setAddOpen(false)} />}
       {resetFor && <ResetPasswordModal agent={resetFor} onClose={() => setResetFor(null)} />}
       {editFor && <EditAgentModal agent={editFor} onClose={() => setEditFor(null)} />}
@@ -417,6 +461,75 @@ function DeleteAgentModal({ agent, leadCount, onClose }: { agent: Agent; leadCou
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/** Platinum option: salary + commission, and/or a custom commission % that replaces the level %. */
+function PayTermsModal({ agent, earnings, onClose }: { agent: Agent; earnings: AgentEarningsBrief; onClose: () => void }) {
+  const [compType, setCompType] = useState(earnings.compType)
+  const [useCustom, setUseCustom] = useState(earnings.customRateValue !== null)
+  const [pct, setPct] = useState(earnings.customRateValue !== null ? String(Math.round(earnings.customRateValue * 10000) / 100) : "40")
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    startTransition(async () => {
+      const result = await setAgentComp(agent.id, compType, useCustom ? Number(pct) : null)
+      if (result.error) setError(result.error)
+      else {
+        toast.success(`Pay terms saved for ${agent.name}`)
+        onClose()
+      }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card border rounded-xl shadow-xl w-full max-w-sm flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h2 className="font-semibold text-sm">Pay terms — {agent.name}</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="Close">
+            <X className="size-4" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3 text-sm">
+          <p className="text-xs text-muted-foreground">
+            Now: {earnings.levelEmoji} {earnings.levelName}, {earnings.activeCustomers} active customers, {formatRate(earnings.rate)}.
+          </p>
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2">
+              <input type="radio" className="accent-primary" checked={compType === "commission"} onChange={() => setCompType("commission")} />
+              Commission only
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" className="accent-primary" checked={compType === "salary_plus_commission"} onChange={() => setCompType("salary_plus_commission")} />
+              <span>
+                Salary + commission <span className="text-xs text-muted-foreground">(Platinum option; salary agreed outside the app)</span>
+              </span>
+            </label>
+          </div>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" className="size-4 accent-primary" checked={useCustom} onChange={(e) => setUseCustom(e.target.checked)} />
+            Custom commission %
+          </label>
+          {useCustom && (
+            <div className="space-y-1.5">
+              <Input inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value)} className="h-9 text-sm tabular-nums" aria-label="Custom commission percent" />
+              <p className="text-[11px] text-muted-foreground">Replaces the level % for new payments. Old entries keep their rate.</p>
+            </div>
+          )}
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={isPending}>
+              {isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </form>
       </div>
     </div>
   )

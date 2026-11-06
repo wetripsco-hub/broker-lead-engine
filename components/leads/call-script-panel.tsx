@@ -26,6 +26,7 @@ const SECTION_LABEL: Record<string, string> = {
   marketplace: "Marketplace",
   voicemail: "Voicemail",
   short: "Quick version",
+  demo: "Demo",
 }
 
 function Filled({ text, vars }: { text: string; vars: ScriptVars }) {

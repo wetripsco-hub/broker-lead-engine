@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 
 type AdminCheck = { error: string } | { error?: undefined }
 
@@ -73,7 +74,48 @@ export async function toggleAgentActive(agentId: string, active: boolean): Promi
   )
   if (banError) return { error: banError.message }
 
-  const { error } = await (admin.from("agents") as any).update({ active }).eq("id", agentId)
+  // left_at: payments received after this date earn no commission (re-enabling clears it).
+  let { error } = await (admin.from("agents") as any)
+    .update({ active, left_at: active ? null : new Date().toISOString() })
+    .eq("id", agentId)
+  // Earnings migration not applied yet (no left_at column): still enable/disable.
+  if (error && /left_at/.test(error.message)) {
+    ;({ error } = await (admin.from("agents") as any).update({ active }).eq("id", agentId))
+  }
+  if (error) return { error: error.message }
+
+  revalidatePath("/agents")
+  return { error: null }
+}
+
+/**
+ * Pay terms (Platinum option): "salary_plus_commission" and/or a custom commission %
+ * that replaces the level %. customRatePct null = use the level rate. Admin only.
+ */
+export async function setAgentComp(
+  agentId: string,
+  compType: "commission" | "salary_plus_commission",
+  customRatePct: number | null,
+): Promise<{ error: string | null }> {
+  const check = await requireAdmin()
+  if (check.error) return { error: check.error }
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const admin = createAdminClient()
+  if (!user || !(await isAdminInDb(admin, user.id))) return { error: "Admin access required" }
+
+  if (compType !== "commission" && compType !== "salary_plus_commission") return { error: "Unknown pay type" }
+  let customRate: number | null = null
+  if (customRatePct !== null && customRatePct !== undefined) {
+    if (!Number.isFinite(customRatePct) || customRatePct < 0 || customRatePct > 100) return { error: "Custom % must be between 0 and 100" }
+    customRate = Math.round(customRatePct * 100) / 10000
+  }
+
+  const { error } = await (admin.from("agents") as any)
+    .update({ comp_type: compType, custom_rate: customRate })
+    .eq("id", agentId)
   if (error) return { error: error.message }
 
   revalidatePath("/agents")
@@ -165,11 +207,13 @@ export async function deleteAgent(agentId: string): Promise<{ error: string | nu
     if (authUser?.user?.user_metadata?.role === "admin") return { error: "Admin accounts can't be deleted here" }
   }
 
-  const { count } = await (admin.from("outreach_events") as any)
-    .select("id", { count: "exact", head: true })
-    .eq("agent_id", agentId)
+  const [{ count }, { count: customerCount }] = await Promise.all([
+    (admin.from("outreach_events") as any).select("id", { count: "exact", head: true }).eq("agent_id", agentId),
+    // Customers and commission entries are history too (they point at the agent row).
+    (admin.from("customers") as any).select("id", { count: "exact", head: true }).eq("agent_id", agentId),
+  ])
 
-  if ((count ?? 0) === 0) {
+  if ((count ?? 0) === 0 && (customerCount ?? 0) === 0) {
     // Deleting the auth user cascades to the agents row (and their requests/
     // tickets); leads.assigned_agent_id is ON DELETE SET NULL.
     if (userId) {
@@ -186,9 +230,13 @@ export async function deleteAgent(agentId: string): Promise<{ error: string | nu
   // cleanly if the deleted_at migration isn't applied, before anything else
   // changes), then unassign the leads, then block the login for good and move
   // it to a placeholder email so the real address is free to reuse.
-  const { error: archiveError } = await (admin.from("agents") as any)
-    .update({ active: false, deleted_at: new Date().toISOString(), email: null })
+  const archived = { active: false, deleted_at: new Date().toISOString(), email: null }
+  let { error: archiveError } = await (admin.from("agents") as any)
+    .update({ ...archived, left_at: archived.deleted_at })
     .eq("id", agentId)
+  if (archiveError && /left_at/.test(archiveError.message)) {
+    ;({ error: archiveError } = await (admin.from("agents") as any).update(archived).eq("id", agentId))
+  }
   if (archiveError) return { error: archiveError.message }
 
   const { error: unassignError } = await (admin.from("leads") as any).update({ assigned_agent_id: null }).eq("assigned_agent_id", agentId)

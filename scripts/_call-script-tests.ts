@@ -57,8 +57,9 @@ check("agent names: empty -> missing", agentNames("").firstName === null && agen
   check("script: guided order points at real sections", GUIDED_ORDER.every((id) => ids.includes(id)))
   const allText = CALL_SCRIPT.flatMap((s) => s.items.flatMap((i) => i.lines.map((l) => l.text))).join("\n")
   const tokens = [...allText.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1])
-  const known = new Set(["Name", "First Name", "Full Name", "day", "time", "number", "Phone"])
-  check("script: every [placeholder] in the text is one the app can fill", tokens.every((t) => known.has(t)), [...new Set(tokens.filter((t) => !known.has(t)))].join(","))
+  // [plan] (Demo section) is picked by the caller during the call, so it stays as written.
+  const known = new Set(["Name", "First Name", "Full Name", "day", "time", "number", "Phone", "plan"])
+  check("script: every [placeholder] in the text is one the app can fill (or the caller picks: [plan])", tokens.every((t) => known.has(t)), [...new Set(tokens.filter((t) => !known.has(t)))].join(","))
   const quick = CALL_SCRIPT.find((s) => s.id === "short")!
   check("script: the quick version has its 8 parts (opener, yes, text yes, TMS, Ascend, email, still no, Marketplace)", !!quick && quick.items.length === 8)
   const quickText = quick.items.flatMap((i) => i.lines.map((l) => l.text)).join(" ")

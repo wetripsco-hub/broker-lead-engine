@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { AgentsClient } from "./agents-client"
+import { todayIn } from "@/lib/commission"
+import { buildAgentEarnings, type CustomerRow, type EntryRow, type PaymentRow } from "@/lib/earnings"
+import { AgentsClient, type AgentEarningsBrief } from "./agents-client"
 
 export default async function AgentsPage() {
   const supabase = await createClient()
@@ -48,9 +50,42 @@ export default async function AgentsPage() {
     leadCounts[l.assigned_agent_id] = (leadCounts[l.assigned_agent_id] ?? 0) + 1
   }
 
+  // Earnings per agent (level, active customers, this month, next payout, total so far).
+  // Tables missing (migration not run) just mean no earnings line.
+  const [{ data: customersRaw }, { data: paymentsRaw }, { data: entriesRaw }] = await Promise.all([
+    (supabase.from("customers") as any).select("*"),
+    (supabase.from("customer_payments") as any).select("id, customer_id, received_at, amount_usd, covers"),
+    (supabase.from("commission_entries") as any).select("*"),
+  ])
+  const today = todayIn()
+  const earnings: Record<string, AgentEarningsBrief> = {}
+  for (const a of (agentsRaw ?? []) as any[]) {
+    if (a.deleted_at) continue
+    const e = buildAgentEarnings(
+      { id: a.id, comp_type: a.comp_type ?? "commission", custom_rate: a.custom_rate ?? null },
+      (customersRaw ?? []) as CustomerRow[],
+      (paymentsRaw ?? []) as PaymentRow[],
+      (entriesRaw ?? []) as EntryRow[],
+      today,
+    )
+    earnings[a.id] = {
+      levelName: e.level.name,
+      levelEmoji: e.level.emoji,
+      rate: e.rate,
+      customRate: e.customRate,
+      activeCustomers: e.activeCustomers,
+      thisMonthCents: e.summary.thisMonthEarnedCents,
+      nextPayoutDate: e.summary.nextPayoutDate,
+      nextPayoutCents: e.summary.nextPayoutCents,
+      totalSoFarCents: e.summary.totalSoFarCents,
+      compType: a.comp_type === "salary_plus_commission" ? "salary_plus_commission" : "commission",
+      customRateValue: a.custom_rate === null || a.custom_rate === undefined ? null : Number(a.custom_rate),
+    }
+  }
+
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto">
-      <AgentsClient agents={agents} leadCounts={leadCounts} />
+      <AgentsClient agents={agents} leadCounts={leadCounts} earnings={earnings} />
     </div>
   )
 }

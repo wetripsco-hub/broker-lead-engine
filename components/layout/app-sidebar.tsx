@@ -21,6 +21,9 @@ import {
   UserRound,
   CircleHelp,
   PlayCircle,
+  ScrollText,
+  BadgeDollarSign,
+  Wallet,
 } from "lucide-react"
 import {
   Sidebar,
@@ -51,6 +54,7 @@ const navItems = [
   { href: "/leads",     label: "Leads",         icon: Users },
   { href: "/settings/knowledge", label: "Knowledge", icon: BookOpen, adminOnly: true },
   { href: "/company",   label: "Company",       icon: Building2 },
+  { href: "/script",    label: "Call script",   icon: ScrollText },
 ]
 
 const secondaryNavItems = [
@@ -172,7 +176,7 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                   active={pathname === "/account"}
                 />
               )}
-              {/* Agent view is intentionally limited to Dashboard, Leads, Company,
+              {/* Agent view is intentionally limited to Dashboard, Leads, Company, Call script,
                   Messages, Emails, Support and My Account — everything below is admin-only. The server-side
                   page guards are what actually enforce this; hiding the
                   links is just so an agent never sees a dead end. */}
@@ -192,6 +196,18 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                     label="Agents"
                     icon={UserCog}
                     active={pathname === "/agents" || pathname.startsWith("/agents/")}
+                  />
+                  <NavLink
+                    href="/customers"
+                    label="Customers"
+                    icon={BadgeDollarSign}
+                    active={pathname === "/customers"}
+                  />
+                  <NavLink
+                    href="/payouts"
+                    label="Payouts"
+                    icon={Wallet}
+                    active={pathname === "/payouts"}
                   />
                   <NavLink
                     href="/requests"
