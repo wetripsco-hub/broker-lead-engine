@@ -28,6 +28,8 @@ export async function EarningsChip({ agentId }: { agentId: string }) {
   const title = [
     `${e.level.name} level, ${formatRate(e.rate)} commission, ${e.activeCustomers} active customers`,
     `Balance (earned, not paid yet): ${formatUsd(s.pendingCents)}`,
+    `This month: ${formatUsd(s.thisMonthEarnedCents)} (from money received this month)`,
+    `Monthly recurring: ${formatUsd(e.monthlyRecurringCents)}/month from ${e.monthlyRecurringCustomers} active monthly customers`,
     s.nextPayoutDate ? `Next payout: ${formatUsd(s.nextPayoutCents)} on ${formatDay(s.nextPayoutDate)}` : "No payout pending yet",
     `Paid so far: ${formatUsd(s.paidTotalCents)}`,
   ].join("\n")
@@ -36,7 +38,7 @@ export async function EarningsChip({ agentId }: { agentId: string }) {
     <Link
       href="/dashboard"
       title={title}
-      aria-label={`My earnings: ${e.level.name} level, balance ${formatUsd(s.pendingCents)}`}
+      aria-label={`My earnings: ${e.level.name} level, balance ${formatUsd(s.pendingCents)}, this month ${formatUsd(s.thisMonthEarnedCents)}, monthly recurring ${formatUsd(e.monthlyRecurringCents)}`}
       className="ml-auto inline-flex items-center gap-2 rounded-full border bg-card px-2.5 py-1 text-xs shadow-sm transition-colors duration-150 hover:bg-muted"
     >
       <span className="inline-flex items-center gap-1 font-medium">
@@ -50,6 +52,18 @@ export async function EarningsChip({ agentId }: { agentId: string }) {
       <span className="inline-flex items-center gap-1">
         <span className="hidden sm:inline text-muted-foreground">Balance</span>
         <span className="font-semibold tabular-nums">{formatUsd(s.pendingCents)}</span>
+      </span>
+      {/* Small screens: level + balance only; the rest is in the hover title. */}
+      <span className="hidden md:block h-3.5 w-px bg-border" aria-hidden />
+      <span className="hidden md:inline-flex items-center gap-1">
+        <span className="text-muted-foreground">This month</span>
+        <span className="font-semibold tabular-nums">{formatUsd(s.thisMonthEarnedCents)}</span>
+      </span>
+      <span className="hidden md:block h-3.5 w-px bg-border" aria-hidden />
+      <span className="hidden md:inline-flex items-center gap-1">
+        <span className="text-muted-foreground">Monthly recurring</span>
+        <span className="font-semibold tabular-nums">{formatUsd(e.monthlyRecurringCents)}</span>
+        <span className="text-muted-foreground">/mo</span>
       </span>
     </Link>
   )

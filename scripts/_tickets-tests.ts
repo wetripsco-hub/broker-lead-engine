@@ -46,6 +46,8 @@ eq("ask support: subject passes validation", validateNewTicket({ topic: "client"
   eq("ask support: in the agent dialer", /askSupport &&[\s\S]*<AskSupportButton/.test(r("components/leads/dialer-modal.tsx")) && /^\s*askSupport$/m.test(r("components/leads/call-button.tsx")), true)
   const layout = r("app/(dashboard)/layout.tsx")
   eq("header: level + balance chip only for agents", /role !== "admin" && agent && \([\s\S]*<EarningsChip/.test(layout), true)
+  const chip = r("components/layout/earnings-chip.tsx")
+  eq("header chip: balance, this month, monthly recurring", ["s.pendingCents", "s.thisMonthEarnedCents", "e.monthlyRecurringCents"].every((k) => chip.includes(k)), true)
   eq("header chip reads own rows only (agent_id filter)", (r("components/layout/earnings-chip.tsx").match(/eq\("agent_id", agentId\)/g) ?? []).length, 2)
 }
 
