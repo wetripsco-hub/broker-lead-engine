@@ -98,14 +98,12 @@ function EarningsLine({ e, onEdit }: { e: AgentEarningsBrief | undefined; onEdit
   )
 }
 
-function CallsCell({ c }: { c?: AgentCallCounts }) {
-  const v = c ?? { total: 0, today: 0, answered: 0 }
+function Stat({ label, value, sub, title }: { label: string; value: number; sub?: string; title?: string }) {
   return (
-    <div className="tabular-nums leading-tight" title={`${v.total} calls in total · ${v.today} today · ${v.answered} answered`}>
-      <p className="text-foreground font-medium">{v.total}</p>
-      <p className="text-[11px] text-muted-foreground whitespace-nowrap">
-        {v.today} today · {v.answered} ans.
-      </p>
+    <div className="rounded-md border px-2.5 py-1.5" title={title}>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-base font-semibold tabular-nums leading-tight">{value}</p>
+      {sub && <p className="text-[11px] text-muted-foreground tabular-nums">{sub}</p>}
     </div>
   )
 }
@@ -184,86 +182,84 @@ export function AgentsClient({
             <p className="text-sm text-muted-foreground">No agents yet. Click "Add Agent" to create one.</p>
           </div>
         ) : (
-          <div>
-            <div className="grid grid-cols-[1fr_70px_80px_70px_100px_80px_140px_64px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              <span>Name / Email</span>
-              <span>Leads</span>
-              <span title="Calls this agent made. Small line: today (Pakistan time) and answered.">Calls</span>
-              <span>Status</span>
-              <span title="Tick to show the welcome tour the next time this agent signs in. It unticks itself once they finish it.">Welcome tour</span>
-              <span />
-              <span />
-              <span />
-            </div>
-            {agents.map((a) => (
-              <div
-                key={a.id}
-                className="grid grid-cols-[1fr_70px_80px_70px_100px_80px_140px_64px] gap-4 px-4 py-3 border-b last:border-0 items-center text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{a.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{a.email ?? "—"}</p>
+          <ul className="divide-y">
+            {agents.map((a) => {
+              const c = callCounts[a.id] ?? { total: 0, today: 0, answered: 0 }
+              const busy = isPending && togglingId === a.id
+              return (
+                <li key={a.id} className="px-4 py-4 sm:px-5">
+                  {/* Name, status and actions */}
+                  <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+                    <div className="min-w-0 flex-1 basis-48">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">{a.name}</p>
+                        <span
+                          className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
+                            a.active
+                              ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {a.active ? "Active" : "Disabled"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate" title={a.email ?? undefined}>{a.email ?? "—"}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="outline" size="sm" className="h-7 text-xs" disabled={busy} onClick={() => handleToggle(a)}>
+                        {busy ? "…" : a.active ? "Disable" : "Enable"}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5" onClick={() => setResetFor(a)} title="Reset password">
+                        <KeyRound className="size-3" />
+                        <span className="hidden sm:inline">Reset password</span>
+                      </Button>
+                      <Button variant="ghost" size="icon-sm" aria-label={`Edit ${a.name}`} title="Edit name / email" onClick={() => setEditFor(a)}>
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Delete ${a.name}`}
+                        title="Delete agent"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteFor(a)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Numbers */}
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <Stat label="Leads" value={leadCounts[a.id] ?? 0} />
+                    <Stat label="Calls" value={c.total} sub={`${c.answered} answered`} title="Outbound calls this agent made" />
+                    <Stat label="Calls today" value={c.today} title="Calls today (Pakistan time)" />
+                    <label
+                      className="rounded-md border px-2.5 py-1.5 flex flex-col justify-center gap-1 cursor-pointer"
+                      title="Tick to show the welcome tour the next time this agent signs in. It unticks itself once they finish it."
+                    >
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Welcome tour</span>
+                      <span className="flex items-center gap-1.5 text-xs">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary cursor-pointer"
+                          checked={!a.onboarding_completed_at}
+                          disabled={isPending && tourId === a.id}
+                          onChange={(e) => handleTour(a, e.target.checked)}
+                          aria-label={`Show welcome tour to ${a.name} on next sign-in`}
+                        />
+                        {a.onboarding_completed_at ? "Off" : "Next login"}
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Presence and earnings */}
                   <PresenceLine agent={a} now={now} />
                   <EarningsLine e={earnings[a.id]} onEdit={() => setCompFor(a)} />
-                </div>
-                <span className="text-muted-foreground tabular-nums">{leadCounts[a.id] ?? 0}</span>
-                <CallsCell c={callCounts[a.id]} />
-                <span
-                  className={`text-xs px-1.5 py-0.5 rounded-full font-medium w-fit ${
-                    a.active
-                      ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {a.active ? "Active" : "Disabled"}
-                </span>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer w-fit">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-primary cursor-pointer"
-                    checked={!a.onboarding_completed_at}
-                    disabled={isPending && tourId === a.id}
-                    onChange={(e) => handleTour(a, e.target.checked)}
-                    aria-label={`Show welcome tour to ${a.name} on next sign-in`}
-                  />
-                  {a.onboarding_completed_at ? "Off" : "Next login"}
-                </label>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
-                  disabled={isPending && togglingId === a.id}
-                  onClick={() => handleToggle(a)}
-                >
-                  {isPending && togglingId === a.id ? "…" : a.active ? "Disable" : "Enable"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs gap-1.5"
-                  onClick={() => setResetFor(a)}
-                >
-                  <KeyRound className="size-3" />
-                  Reset password
-                </Button>
-                <div className="flex items-center justify-end gap-0.5">
-                  <Button variant="ghost" size="icon-sm" aria-label={`Edit ${a.name}`} title="Edit name / email" onClick={() => setEditFor(a)}>
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Delete ${a.name}`}
-                    title="Delete agent"
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => setDeleteFor(a)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
+                </li>
+              )
+            })}
+          </ul>
         )}
       </div>
 
