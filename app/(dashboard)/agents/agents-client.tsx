@@ -14,6 +14,13 @@ import { formatDay, formatRate, formatUsd } from "@/lib/commission"
 import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent, setWelcomeTour, setAgentComp } from "./actions"
 
 /** Admin view of one agent's earnings (runbook section 4.3). */
+/** Outbound calls the agent made: all time, today (Pakistan time), answered. */
+export interface AgentCallCounts {
+  total: number
+  today: number
+  answered: number
+}
+
 export interface AgentEarningsBrief {
   levelName: string
   levelEmoji: string
@@ -91,13 +98,27 @@ function EarningsLine({ e, onEdit }: { e: AgentEarningsBrief | undefined; onEdit
   )
 }
 
+function CallsCell({ c }: { c?: AgentCallCounts }) {
+  const v = c ?? { total: 0, today: 0, answered: 0 }
+  return (
+    <div className="tabular-nums leading-tight" title={`${v.total} calls in total · ${v.today} today · ${v.answered} answered`}>
+      <p className="text-foreground font-medium">{v.total}</p>
+      <p className="text-[11px] text-muted-foreground whitespace-nowrap">
+        {v.today} today · {v.answered} ans.
+      </p>
+    </div>
+  )
+}
+
 export function AgentsClient({
   agents,
   leadCounts,
+  callCounts = {},
   earnings = {},
 }: {
   agents: Agent[]
   leadCounts: Record<string, number>
+  callCounts?: Record<string, AgentCallCounts>
   earnings?: Record<string, AgentEarningsBrief>
 }) {
   const [compFor, setCompFor] = useState<Agent | null>(null)
@@ -164,9 +185,10 @@ export function AgentsClient({
           </div>
         ) : (
           <div>
-            <div className="grid grid-cols-[1fr_70px_70px_100px_80px_140px_64px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="grid grid-cols-[1fr_70px_80px_70px_100px_80px_140px_64px] gap-4 px-4 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
               <span>Name / Email</span>
               <span>Leads</span>
+              <span title="Calls this agent made. Small line: today (Pakistan time) and answered.">Calls</span>
               <span>Status</span>
               <span title="Tick to show the welcome tour the next time this agent signs in. It unticks itself once they finish it.">Welcome tour</span>
               <span />
@@ -176,7 +198,7 @@ export function AgentsClient({
             {agents.map((a) => (
               <div
                 key={a.id}
-                className="grid grid-cols-[1fr_70px_70px_100px_80px_140px_64px] gap-4 px-4 py-3 border-b last:border-0 items-center text-sm"
+                className="grid grid-cols-[1fr_70px_80px_70px_100px_80px_140px_64px] gap-4 px-4 py-3 border-b last:border-0 items-center text-sm"
               >
                 <div className="min-w-0">
                   <p className="font-medium truncate">{a.name}</p>
@@ -185,6 +207,7 @@ export function AgentsClient({
                   <EarningsLine e={earnings[a.id]} onEdit={() => setCompFor(a)} />
                 </div>
                 <span className="text-muted-foreground tabular-nums">{leadCounts[a.id] ?? 0}</span>
+                <CallsCell c={callCounts[a.id]} />
                 <span
                   className={`text-xs px-1.5 py-0.5 rounded-full font-medium w-fit ${
                     a.active

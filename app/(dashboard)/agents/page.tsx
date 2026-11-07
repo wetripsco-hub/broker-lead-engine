@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { todayIn } from "@/lib/commission"
 import { buildAgentEarnings, type CustomerRow, type EntryRow, type PaymentRow } from "@/lib/earnings"
-import { AgentsClient, type AgentEarningsBrief } from "./agents-client"
+import { AgentsClient, type AgentEarningsBrief, type AgentCallCounts } from "./agents-client"
 
 export default async function AgentsPage() {
   const supabase = await createClient()
@@ -50,6 +50,26 @@ export default async function AgentsPage() {
     leadCounts[l.assigned_agent_id] = (leadCounts[l.assigned_agent_id] ?? 0) + 1
   }
 
+  // Calls made by each agent (outbound calls logged in outreach_events): total, today (Pakistan time), answered.
+  const todayStart = `${todayIn()}T00:00:00+05:00`
+  const callCounts: Record<string, AgentCallCounts> = {}
+  await Promise.all(
+    agents.map(async (a) => {
+      const base = () =>
+        (supabase.from("outreach_events") as any)
+          .select("id", { count: "exact", head: true })
+          .eq("agent_id", a.id)
+          .eq("channel", "call")
+          .eq("direction", "outbound")
+      const [total, today, answered] = await Promise.all([
+        base(),
+        base().gte("occurred_at", todayStart),
+        base().eq("status", "answered"),
+      ])
+      callCounts[a.id] = { total: total.count ?? 0, today: today.count ?? 0, answered: answered.count ?? 0 }
+    }),
+  )
+
   // Earnings per agent (level, active customers, this month, next payout, total so far).
   // Tables missing (migration not run) just mean no earnings line.
   const [{ data: customersRaw }, { data: paymentsRaw }, { data: entriesRaw }] = await Promise.all([
@@ -85,7 +105,7 @@ export default async function AgentsPage() {
 
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto">
-      <AgentsClient agents={agents} leadCounts={leadCounts} earnings={earnings} />
+      <AgentsClient agents={agents} leadCounts={leadCounts} callCounts={callCounts} earnings={earnings} />
     </div>
   )
 }
