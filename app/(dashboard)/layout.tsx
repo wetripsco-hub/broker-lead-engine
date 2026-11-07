@@ -5,6 +5,8 @@ import { AppSidebar } from "@/components/layout/app-sidebar"
 import { PageTransition } from "@/components/layout/page-transition"
 import { Toaster } from "@/components/ui/sonner"
 import { PresenceHeartbeat } from "@/components/layout/presence-heartbeat"
+import { EarningsChip } from "@/components/layout/earnings-chip"
+import { Suspense } from "react"
 import type { UserRole } from "@/types/database"
 
 export default async function DashboardLayout({
@@ -76,6 +78,12 @@ export default async function DashboardLayout({
       <main className="flex flex-1 flex-col min-h-screen">
         <header className="flex items-center h-12 px-4 border-b shrink-0">
           <SidebarTrigger className="-ml-2 size-10 md:-ml-1 md:size-7" />
+          {/* Agents: level + balance on every page (admins have no earnings). */}
+          {role !== "admin" && agent && (
+            <Suspense fallback={null}>
+              <EarningsChip agentId={agent.id} />
+            </Suspense>
+          )}
         </header>
         <div className="flex-1 overflow-y-auto">
           <PageTransition>{children}</PageTransition>

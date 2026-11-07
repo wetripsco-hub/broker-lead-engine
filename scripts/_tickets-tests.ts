@@ -1,5 +1,6 @@
 // Offline checks for lib/tickets.ts.   npx tsx scripts/_tickets-tests.ts
-import { validateNewTicket, validateReply, statusAfterReply, SUBJECT_MAX, BODY_MAX } from "../lib/tickets"
+import { readFileSync } from "node:fs"
+import { validateNewTicket, validateReply, statusAfterReply, supportSubject, SUBJECT_MAX, BODY_MAX } from "../lib/tickets"
 
 let failed = 0
 function eq(name: string, got: unknown, want: unknown) {
@@ -30,6 +31,23 @@ eq("reply too long", validateReply("x".repeat(BODY_MAX + 1)).ok, false)
 
 eq("admin reply -> answered", statusAfterReply(true), "answered")
 eq("agent reply -> back to open", statusAfterReply(false), "open")
+
+// "Ask support" from a lead page / the dialer.
+eq("ask support: subject has company + question", supportSubject("Acme Freight", "  Do you   support factoring? "), "Client question (Acme Freight): Do you support factoring?")
+eq("ask support: no company", supportSubject(null, "Price?"), "Client question: Price?")
+eq("ask support: long question cut to the limit", supportSubject("Acme", "x".repeat(400)).length, SUBJECT_MAX)
+eq("ask support: subject passes validation", validateNewTicket({ topic: "client", subject: supportSubject("Acme", "y".repeat(400)), body: "b", leadId: "L1" }).ok, true)
+{
+  const r = (f: string) => readFileSync(f, "utf8")
+  const btn = r("components/leads/ask-support-button.tsx")
+  eq("ask support: sends a client ticket via createTicket", /createTicket\(\{ topic: "client"[^}]*leadId/.test(btn), true)
+  const lead = r("app/(dashboard)/leads/[id]/page.tsx")
+  eq("ask support: on the lead page for agents", /!isAdmin && \([\s\S]{0,40}<AskSupportButton/.test(lead), true)
+  eq("ask support: in the agent dialer", /askSupport &&[\s\S]*<AskSupportButton/.test(r("components/leads/dialer-modal.tsx")) && /^\s*askSupport$/m.test(r("components/leads/call-button.tsx")), true)
+  const layout = r("app/(dashboard)/layout.tsx")
+  eq("header: level + balance chip only for agents", /role !== "admin" && agent && \([\s\S]*<EarningsChip/.test(layout), true)
+  eq("header chip reads own rows only (agent_id filter)", (r("components/layout/earnings-chip.tsx").match(/eq\("agent_id", agentId\)/g) ?? []).length, 2)
+}
 
 console.log(failed ? `\n${failed} FAILED` : "\nall passed")
 if (failed) process.exit(1)

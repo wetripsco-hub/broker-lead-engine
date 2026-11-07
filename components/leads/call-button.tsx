@@ -246,6 +246,7 @@ function AgentCallButton({
       agentName={agentName}
       callbackPhone={callbackPhone}
       callsThisHour={state ? { count: state.hourly.count, limit: state.hourly.limit } : null}
+      askSupport
       onClose={() => {
         setOpen(false)
         refresh()

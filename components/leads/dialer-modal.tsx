@@ -23,6 +23,7 @@ import type { CallWrapUp } from "@/lib/copilot/types"
 import { DISPOSITION_LABEL, DISPOSITION_MENU, isSmsPermissionOutcome } from "@/lib/call-dispositions"
 import { OUTCOME_NEXT_ACTION } from "@/lib/call-script/script"
 import { CallScriptPanel } from "@/components/leads/call-script-panel"
+import { AskSupportButton } from "@/components/leads/ask-support-button"
 import { formatPhoneDisplay, toE164 } from "@/lib/phone"
 import type { DispositionKey } from "@/lib/call-dispositions"
 
@@ -50,6 +51,8 @@ interface DialerModalProps {
   displayPhone?: string | null
   /** Agents only: "Calls this hour: 23/40". */
   callsThisHour?: { count: number; limit: number } | null
+  /** Agents only: "Ask support" — send the client's question to the admin mid-call. */
+  askSupport?: boolean
   onClose: () => void
 }
 
@@ -134,6 +137,7 @@ export function DialerModal({
   callbackPhone = null,
   displayPhone,
   callsThisHour = null,
+  askSupport = false,
   onClose,
 }: DialerModalProps) {
   const [phase, setPhase] = useState<Phase>("connecting")
@@ -705,6 +709,12 @@ export function DialerModal({
         getSources={getSources}
         onTranscript={handleTranscript}
       />
+      {askSupport && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
+          <span>Client asked something you don&apos;t know?</span>
+          <AskSupportButton leadId={leadId} companyName={brokerName} size="xs" />
+        </div>
+      )}
       <CallScriptPanel variant="dialer" contactName={contactName} agentName={agentName} callbackPhone={callbackPhone} />
       </div>
     </div>

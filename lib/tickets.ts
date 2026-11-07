@@ -54,3 +54,10 @@ export function validateReply(body: string): { ok: true; body: string } | { ok: 
 export function statusAfterReply(fromAdmin: boolean): TicketStatus {
   return fromAdmin ? "answered" : "open"
 }
+
+/** Subject from the company and the start of the question, cut to the limit. */
+export function supportSubject(company: string | null, question: string): string {
+  const q = question.trim().replace(/\s+/g, " ")
+  const base = `Client question${company ? ` (${company})` : ""}: ${q}`
+  return base.length > SUBJECT_MAX ? `${base.slice(0, SUBJECT_MAX - 1)}…` : base
+}
