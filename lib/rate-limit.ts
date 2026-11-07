@@ -16,6 +16,7 @@ export const RULES = {
   supportRequest: { bucket: "api-support", max: 10, windowSeconds: 10 * 60 },
   calls: { bucket: "api-calls", max: 20, windowSeconds: 60 },
   cron: { bucket: "api-cron", max: 30, windowSeconds: 60 },
+  media: { bucket: "api-media", max: 600, windowSeconds: 60 },
   api: { bucket: "api", max: 120, windowSeconds: 60 },
 } satisfies Record<string, RateRule>
 
@@ -29,7 +30,9 @@ export function apiRuleFor(pathname: string): RateRule | null {
   if (pathname.startsWith("/api/webhooks/") || pathname === "/api/telnyx/webhook" || pathname.startsWith("/api/track/")) return null
   if (pathname === "/api/support-request") return RULES.supportRequest
   if (pathname === "/api/telnyx/token" || pathname.startsWith("/api/ai-calls/start")) return RULES.calls
-  if (pathname === "/api/ingest" || pathname === "/api/email/sync") return RULES.cron
+  if (pathname === "/api/ingest" || pathname === "/api/email/sync" || pathname === "/api/recruiter/cron") return RULES.cron
+  // Video seeking makes many small Range requests (admin only, session-checked in the route).
+  if (pathname.startsWith("/api/recruiter/attachment/")) return RULES.media
   return RULES.api
 }
 

@@ -40,7 +40,8 @@ const csp = [
     ...vercelLive,
     ...(isDev ? ["ws://localhost:*", "http://localhost:*"] : []),
   ].join(" "),
-  `frame-src 'self' blob: ${turnstile} ${vercelLive.join(" ")}`,
+  // Recruiter tab: candidate videos play in the YouTube / Loom / Vimeo players.
+  `frame-src 'self' blob: ${turnstile} https://www.youtube.com https://www.youtube-nocookie.com https://www.loom.com https://player.vimeo.com ${vercelLive.join(" ")}`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

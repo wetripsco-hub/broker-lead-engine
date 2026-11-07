@@ -24,6 +24,7 @@ import {
   ScrollText,
   BadgeDollarSign,
   Wallet,
+  UserPlus,
 } from "lucide-react"
 import {
   Sidebar,
@@ -196,6 +197,12 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                     label="Agents"
                     icon={UserCog}
                     active={pathname === "/agents" || pathname.startsWith("/agents/")}
+                  />
+                  <NavLink
+                    href="/recruiter"
+                    label="Recruiter"
+                    icon={UserPlus}
+                    active={pathname === "/recruiter"}
                   />
                   <NavLink
                     href="/customers"
