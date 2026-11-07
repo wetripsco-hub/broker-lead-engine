@@ -13,7 +13,7 @@ export default async function TourPage({ searchParams }: { searchParams: Promise
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
-  if (user.user_metadata?.role === "admin") redirect("/dashboard")
+  if (user.app_metadata?.role === "admin") redirect("/dashboard")
 
   const { data } = await (supabase.from("agents") as any)
     .select("name, onboarding_step, onboarding_completed_at")

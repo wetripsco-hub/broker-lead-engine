@@ -55,7 +55,7 @@ async function main() {
   log.length = 0
   r = await deleteLead("L1", "DELETE", mk({ isAdmin: async () => false }))
   check("delete: agent -> refused, nothing read, audited or deleted", !r.ok && /Only admins/.test(r.error) && log.length === 0)
-  const fakeAuth = (role: string) => ({ auth: { admin: { getUserById: async () => ({ data: { user: { user_metadata: { role } } }, error: null }) } } })
+  const fakeAuth = (role: string) => ({ auth: { admin: { getUserById: async () => ({ data: { user: { app_metadata: { role } } }, error: null }) } } })
   r = await deleteLead("L1", "DELETE", mk({ isAdmin: (id) => isAdminInDb(fakeAuth("agent"), id) }))
   check("delete: role comes from the database lookup (token claiming admin is not enough)", !r.ok)
 

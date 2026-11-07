@@ -13,7 +13,7 @@ export async function triggerManualIngest(): Promise<{ message: string }> {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const role = user?.user_metadata?.role
+  const role = user?.app_metadata?.role
   if (role !== "admin") {
     return { message: "Error: admin access required." }
   }
@@ -38,7 +38,7 @@ export async function deleteIngestionLog(id: string): Promise<{ error?: string }
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (user?.user_metadata?.role !== "admin") {
+  if (user?.app_metadata?.role !== "admin") {
     return { error: "Admin access required" }
   }
 

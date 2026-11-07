@@ -13,7 +13,7 @@ export default async function AgentsPage() {
   if (!user) redirect("/login")
   // Server-side gate — the sidebar hides this link for agents, but that
   // alone doesn't stop a direct URL visit.
-  if (user.user_metadata?.role !== "admin") redirect("/leads")
+  if (user.app_metadata?.role !== "admin") redirect("/leads")
 
   // select("*") so a column whose migration isn't applied yet just comes back
   // missing instead of failing the whole page. Deleted agents (kept for their

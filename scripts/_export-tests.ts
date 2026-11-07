@@ -135,7 +135,7 @@ async function main() {
   r = await run({ mode: "all" }, { isAdmin: async () => false, getUser: async () => ({ id: "u-agent", email: "agent@example.test" }) })
   check("access: agent -> 403 and no data read", !r.ok && r.status === 403 && loads === 0 && audits.length === 0)
   // the role comes from the database: a user whose token says admin but whose DB record says agent is refused
-  const fakeAuth = (role: string) => ({ auth: { admin: { getUserById: async () => ({ data: { user: { user_metadata: { role } } }, error: null }) } } })
+  const fakeAuth = (role: string) => ({ auth: { admin: { getUserById: async () => ({ data: { user: { app_metadata: { role } } }, error: null }) } } })
   r = await run({ mode: "all" }, { isAdmin: (id) => isAdminInDb(fakeAuth("agent"), id) })
   check("access: role is taken from the database lookup", !r.ok && r.status === 403)
   r = await run({ mode: "all" }, { isAdmin: (id) => isAdminInDb(fakeAuth("admin"), id) })

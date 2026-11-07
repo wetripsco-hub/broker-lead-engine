@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { SUPPORT_SENT_MESSAGE, isRateLimited, validateSupportRequest } from "@/lib/support-request"
+import { TURNSTILE_FAILED, verifyTurnstile } from "@/lib/turnstile"
 
 // Login screen "Contact Support". No session here, so everything goes through
 // the service role. The answer never says whether the login ID exists.
@@ -12,7 +13,7 @@ function hashIp(ip: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { loginId?: unknown; message?: unknown }
+  let body: { loginId?: unknown; message?: unknown; captcha?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -23,6 +24,11 @@ export async function POST(req: NextRequest) {
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown"
   const ipHash = hashIp(ip)
+
+  // Bot check before anything is saved (no-op until Turnstile keys are set).
+  if (!(await verifyTurnstile(typeof body.captcha === "string" ? body.captcha : null, ip))) {
+    return NextResponse.json({ error: TURNSTILE_FAILED }, { status: 400 })
+  }
 
   try {
     const admin = createAdminClient()

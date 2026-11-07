@@ -15,7 +15,7 @@ export async function saveAiCallingSettings(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user?.user_metadata?.role !== "admin") return { error: "admin only" }
+  if (user?.app_metadata?.role !== "admin") return { error: "admin only" }
 
   const cap = Math.floor(Number(input.dailyCap))
   if (!Number.isFinite(cap) || cap < 0 || cap > 1000) return { error: "Daily cap must be between 0 and 1000" }

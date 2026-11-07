@@ -21,7 +21,7 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/login")
 
-  const role = (user.user_metadata?.role as UserRole) ?? "agent"
+  const role = (user.app_metadata?.role as UserRole) ?? "agent"
 
   // The look-ups are independent, so they are asked together.
   const [

@@ -61,7 +61,7 @@ export async function deleteTemplate(id: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user?.user_metadata?.role !== "admin") return { error: "admin only" }
+  if (user?.app_metadata?.role !== "admin") return { error: "admin only" }
 
   const { error } = await (supabase.from("email_templates") as any)
     .delete()

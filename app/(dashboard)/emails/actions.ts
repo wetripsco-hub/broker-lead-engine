@@ -135,7 +135,7 @@ export async function addSenderAsLead(
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user || user.user_metadata?.role !== "admin") return { error: "Admin access required" }
+  if (!user || user.app_metadata?.role !== "admin") return { error: "Admin access required" }
 
   const addr = email.trim().toLowerCase()
   if (!addr) return { error: "No sender address" }
@@ -201,7 +201,7 @@ export async function syncEmailNow(): Promise<{
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not authenticated" }
 
-  const isAdmin = user.user_metadata?.role === "admin"
+  const isAdmin = user.app_metadata?.role === "admin"
 
   if (!isAdmin) {
     const { data: agentRow } = await (supabase.from("agents") as any)

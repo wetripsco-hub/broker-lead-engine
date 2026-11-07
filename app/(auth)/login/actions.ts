@@ -7,6 +7,9 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { ONBOARDED_COOKIE } from "@/lib/onboarding"
 import { recordAgentLocation } from "@/lib/timezone/viewer-timezone"
+import { RULES, TOO_MANY, actionOverLimit, clientIp } from "@/lib/rate-limit"
+import { TURNSTILE_FAILED, TURNSTILE_FIELD, verifyTurnstile } from "@/lib/turnstile"
+import { headers } from "next/headers"
 import {
   lockedMessage,
   lockedUntil,
@@ -49,6 +52,12 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const password = String(formData.get("password") ?? "")
   const email = normaliseLoginEmail(rawEmail)
   if (!email || !password) return { error: "Enter your email and password." }
+  // Per-IP limit on top of the per-email lockout (stops one IP trying many emails).
+  if (await actionOverLimit(RULES.login)) return { error: TOO_MANY }
+  // Bot check before the password is even looked at (no-op until Turnstile keys are set).
+  if (!(await verifyTurnstile(String(formData.get(TURNSTILE_FIELD) ?? ""), clientIp(await headers())))) {
+    return { error: TURNSTILE_FAILED }
+  }
 
   // Locked: don't even try the password.
   const now = new Date()

@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendSms } from "@/lib/telnyx/sms"
 import { toE164, phoneDigits } from "@/lib/phone"
 import { checkSmsAllowed } from "@/lib/sms-guard"
+import { RULES, TOO_MANY, actionOverLimit } from "@/lib/rate-limit"
 import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 import { SMS_INBOX_SELECT, maskSmsEventsForAgent } from "./mask-events"
 
@@ -42,6 +43,7 @@ export async function sendInboxSms(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not authenticated" }
+  if (await actionOverLimit(RULES.sms)) return { error: TOO_MANY }
 
   // Agents only see masked numbers, so for them the number always comes from
   // their lead in the database (RLS: a lead they can't see is not found).

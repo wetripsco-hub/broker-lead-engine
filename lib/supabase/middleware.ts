@@ -66,7 +66,7 @@ export async function updateSession(request: NextRequest) {
   if (
     user &&
     !tourExempt &&
-    user.user_metadata?.role !== "admin" &&
+    user.app_metadata?.role !== "admin" &&
     request.cookies.get(ONBOARDED_COOKIE)?.value !== user.id
   ) {
     const { data } = await (supabase.from("agents") as any)

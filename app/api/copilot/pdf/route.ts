@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user?.user_metadata?.role !== "admin") {
+  if (user?.app_metadata?.role !== "admin") {
     return NextResponse.json({ error: "Admin only" }, { status: 403 })
   }
 

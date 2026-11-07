@@ -12,7 +12,7 @@ export default async function AccountPage() {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
-  if (user.user_metadata?.role === "admin") redirect("/dashboard")
+  if (user.app_metadata?.role === "admin") redirect("/dashboard")
 
   return (
     <div className="p-3 sm:p-6 max-w-lg mx-auto space-y-4">

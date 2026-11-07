@@ -32,7 +32,7 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const role = (user?.user_metadata?.role as UserRole) ?? "agent"
+  const role = (user?.app_metadata?.role as UserRole) ?? "agent"
 
   const [
     { count: totalLeads },

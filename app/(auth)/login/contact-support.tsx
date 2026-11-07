@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { TURNSTILE_SITE_KEY, TurnstileWidget } from "@/components/turnstile-widget"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -15,12 +16,15 @@ export function ContactSupport() {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState<string | null>(null)
+  const [captcha, setCaptcha] = useState("")
+  const [attempt, setAttempt] = useState(0)
 
   function close() {
     setOpen(false)
     setError(null)
     setSent(null)
     setMessage(DEFAULT_SUPPORT_MESSAGE)
+    setCaptcha("")
   }
 
   async function submit(e: React.FormEvent) {
@@ -31,7 +35,7 @@ export function ContactSupport() {
       const res = await fetch("/api/support-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ loginId, message }),
+        body: JSON.stringify({ loginId, message, captcha }),
       })
       const json = await res.json().catch(() => ({}))
       if (res.ok) setSent(json.message ?? "Your request has been sent to the admin.")
@@ -40,6 +44,7 @@ export function ContactSupport() {
       setError("Could not send your request. Please try again.")
     } finally {
       setPending(false)
+      setAttempt((n) => n + 1) // the token is single-use
     }
   }
 
@@ -93,10 +98,11 @@ export function ContactSupport() {
                   />
                   <p className="text-[11px] text-muted-foreground text-right tabular-nums">{message.length}/{MESSAGE_MAX}</p>
                 </div>
+                <TurnstileWidget onToken={setCaptcha} resetKey={attempt} />
                 {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
                 <div className="flex justify-end gap-2 pt-1">
                   <Button type="button" variant="ghost" size="sm" onClick={close}>Cancel</Button>
-                  <Button type="submit" size="sm" disabled={pending}>{pending ? "Sending…" : "Send"}</Button>
+                  <Button type="submit" size="sm" disabled={pending || (!!TURNSTILE_SITE_KEY && !captcha)}>{pending ? "Sending…" : "Send"}</Button>
                 </div>
               </form>
             )}

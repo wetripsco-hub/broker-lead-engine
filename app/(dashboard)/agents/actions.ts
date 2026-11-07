@@ -12,7 +12,7 @@ async function requireAdmin(): Promise<AdminCheck> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user || user.user_metadata?.role !== "admin") return { error: "Admin access required" }
+  if (!user || user.app_metadata?.role !== "admin") return { error: "Admin access required" }
   return {}
 }
 
@@ -33,7 +33,8 @@ export async function createAgent(formData: FormData): Promise<{ error: string |
     email,
     password,
     email_confirm: true,
-    user_metadata: { role: "agent" },
+    // The role lives in app_metadata: only the service role can write it (user_metadata is user-editable).
+    app_metadata: { role: "agent" },
   })
   if (createError) return { error: createError.message }
 
@@ -147,7 +148,7 @@ async function adminUserId(): Promise<string | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  return user && user.user_metadata?.role === "admin" ? user.id : null
+  return user && user.app_metadata?.role === "admin" ? user.id : null
 }
 
 /** Name and login email. The email is the agent's login ID, so it changes in Auth too. */
@@ -204,7 +205,7 @@ export async function deleteAgent(agentId: string): Promise<{ error: string | nu
   if (userId === me) return { error: "You can't delete your own account" }
   if (userId) {
     const { data: authUser } = await admin.auth.admin.getUserById(userId)
-    if (authUser?.user?.user_metadata?.role === "admin") return { error: "Admin accounts can't be deleted here" }
+    if (authUser?.user?.app_metadata?.role === "admin") return { error: "Admin accounts can't be deleted here" }
   }
 
   const [{ count }, { count: customerCount }] = await Promise.all([

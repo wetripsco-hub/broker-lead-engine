@@ -8,7 +8,7 @@ async function requireAdmin() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user?.user_metadata?.role !== "admin") return null
+  if (user?.app_metadata?.role !== "admin") return null
   const { data: agent } = await (supabase.from("agents") as any)
     .select("id")
     .eq("user_id", user.id)

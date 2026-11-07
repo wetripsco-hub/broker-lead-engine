@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    if (user?.user_metadata?.role === "admin") authorised = true
+    if (user?.app_metadata?.role === "admin") authorised = true
   }
 
   if (!authorised) {

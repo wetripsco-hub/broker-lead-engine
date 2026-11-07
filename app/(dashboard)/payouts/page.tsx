@@ -10,7 +10,7 @@ export default async function PayoutsPage() {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
-  if (user.user_metadata?.role !== "admin") redirect("/dashboard")
+  if (user.app_metadata?.role !== "admin") redirect("/dashboard")
 
   const [{ data: entriesRaw }, { data: customersRaw }, { data: paymentsRaw }, { data: agentsRaw }] = await Promise.all([
     (supabase.from("commission_entries") as any).select("*").order("payout_date", { ascending: true }),

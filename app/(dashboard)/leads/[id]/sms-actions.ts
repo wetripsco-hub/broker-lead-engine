@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { sendSms } from "@/lib/telnyx/sms"
 import { toE164 } from "@/lib/phone"
 import { checkSmsAllowed } from "@/lib/sms-guard"
+import { RULES, TOO_MANY, actionOverLimit } from "@/lib/rate-limit"
 
 export async function sendLeadSms(
   leadId: string,
@@ -23,6 +24,7 @@ export async function sendLeadSms(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not authenticated" }
+  if (await actionOverLimit(RULES.sms)) return { error: TOO_MANY }
 
   // The number comes from the lead itself, not from the browser, so this cannot be used to text
   // an arbitrary number. (Row-level security: a lead the user cannot see is not found.)

@@ -10,7 +10,7 @@ export default async function CustomersPage() {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
-  if (user.user_metadata?.role !== "admin") redirect("/dashboard")
+  if (user.app_metadata?.role !== "admin") redirect("/dashboard")
 
   const [{ data: customersRaw }, { data: paymentsRaw }, { data: agentsRaw }] = await Promise.all([
     (supabase.from("customers") as any).select("*").order("created_at", { ascending: false }),

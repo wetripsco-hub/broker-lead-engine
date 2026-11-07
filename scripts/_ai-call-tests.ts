@@ -366,7 +366,7 @@ async function main() {
   await vapiTests()
   // Role lookup: the database record decides, whatever the session token claims.
   const fakeAdmin = (role: string | undefined, fail = false) => ({
-    auth: { admin: { getUserById: async () => (fail ? { data: null, error: new Error("x") } : { data: { user: { user_metadata: role ? { role } : {} } }, error: null }) } },
+    auth: { admin: { getUserById: async () => (fail ? { data: null, error: new Error("x") } : { data: { user: { app_metadata: role ? { role } : {} } }, error: null }) } },
   })
   check("admin check: DB says admin -> true", (await isAdminInDb(fakeAdmin("admin"), "u1")) === true)
   check("admin check: DB says agent -> false", (await isAdminInDb(fakeAdmin("agent"), "u1")) === false)

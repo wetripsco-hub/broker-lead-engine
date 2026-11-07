@@ -31,7 +31,7 @@ export async function assignLead(leadId: string, agentId: string | null) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user?.user_metadata?.role !== "admin") return { error: "admin only" }
+  if (user?.app_metadata?.role !== "admin") return { error: "admin only" }
 
   const { error } = await (supabase.from("leads") as any).update({ assigned_agent_id: agentId }).eq("id", leadId) as { error: { message: string } | null }
 
@@ -47,7 +47,7 @@ export async function bulkAssignLeads(leadIds: string[], agentId: string | null)
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user?.user_metadata?.role !== "admin") return { error: "admin only" }
+  if (user?.app_metadata?.role !== "admin") return { error: "admin only" }
   if (leadIds.length === 0) return { error: "No leads selected" }
 
   const { error } = await (supabase.from("leads") as any)
@@ -71,7 +71,7 @@ export async function markAiCallConsent(leadId: string, source: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user?.user_metadata?.role !== "admin") return { error: "admin only" }
+  if (user?.app_metadata?.role !== "admin") return { error: "admin only" }
 
   const { error } = await (supabase.from("leads") as any)
     .update({

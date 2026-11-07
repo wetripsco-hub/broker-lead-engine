@@ -12,7 +12,7 @@ export default async function AiCallingSettingsPage() {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
-  if (user.user_metadata?.role !== "admin") redirect("/leads")
+  if (user.app_metadata?.role !== "admin") redirect("/leads")
 
   const settings = await loadAiCallSettings(supabase)
 

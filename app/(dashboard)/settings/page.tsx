@@ -10,7 +10,7 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const role = (user.user_metadata?.role as UserRole) ?? "agent"
+  const role = (user.app_metadata?.role as UserRole) ?? "agent"
   const isAdmin = role === "admin"
   if (!isAdmin) redirect("/leads")
 
