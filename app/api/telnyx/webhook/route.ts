@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { toE164 } from "@/lib/phone"
 import { startCallRecording } from "@/lib/telnyx/client"
 import { handleCallEvent, type CallEventDeps, type CallRow } from "@/lib/telnyx/call-events"
-import { isValidTelnyxSignature } from "@/lib/telnyx/webhook-signature"
+import { telnyxSignatureProblem } from "@/lib/telnyx/webhook-signature"
 
 // Copying a call recording into storage can take a while on a long call.
 export const maxDuration = 60
@@ -68,16 +68,11 @@ export async function POST(req: NextRequest) {
   // TELNYX_PUBLIC_KEY comes from Telnyx Portal → Keys & Credentials → Public Key. A wrong key would
   // reject every call and SMS event, so failures are only logged until TELNYX_WEBHOOK_ENFORCE=true.
   const publicKey = process.env.TELNYX_PUBLIC_KEY
-  if (
-    publicKey &&
-    !isValidTelnyxSignature(
-      rawBody,
-      req.headers.get("telnyx-signature-ed25519"),
-      req.headers.get("telnyx-timestamp"),
-      publicKey,
-    )
-  ) {
-    console.error("telnyx webhook: signature check failed")
+  const signatureProblem = publicKey
+    ? telnyxSignatureProblem(rawBody, req.headers.get("telnyx-signature-ed25519"), req.headers.get("telnyx-timestamp"), publicKey)
+    : null
+  if (signatureProblem) {
+    console.error(`telnyx webhook: signature check failed: ${signatureProblem}`)
     if (process.env.TELNYX_WEBHOOK_ENFORCE === "true") {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
     }

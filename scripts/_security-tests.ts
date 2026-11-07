@@ -72,6 +72,23 @@ async function main() {
   check("turnstile: support request verifies before saving", sr.indexOf("verifyTurnstile(") > 0 && sr.indexOf("verifyTurnstile(") < sr.indexOf(".insert("))
   check("turnstile: widget on both forms", read("app/(auth)/login/login-form.tsx").includes("<TurnstileWidget") && read("app/(auth)/login/contact-support.tsx").includes("<TurnstileWidget"))
 
+  // ── Telnyx signature: a reason is logged ──────────────────────────────────
+  {
+    const { generateKeyPairSync, sign } = await import("node:crypto")
+    const { telnyxSignatureProblem } = await import("../lib/telnyx/webhook-signature")
+    const { publicKey, privateKey } = generateKeyPairSync("ed25519")
+    const raw = (publicKey.export({ format: "der", type: "spki" }) as Buffer).subarray(12).toString("base64")
+    const ts = String(Math.floor(Date.now() / 1000))
+    const body = '{"data":{}}'
+    const sig = sign(null, Buffer.from(`${ts}|${body}`), privateKey).toString("base64")
+    check("telnyx sig: valid -> no problem", telnyxSignatureProblem(body, sig, ts, raw) === null)
+    check("telnyx sig: key with spaces around still valid", telnyxSignatureProblem(body, sig, ts, ` ${raw}\n`) === null)
+    check("telnyx sig: wrong-length key is named", /expected 32/.test(telnyxSignatureProblem(body, sig, ts, "abc") ?? ""))
+    const other = (generateKeyPairSync("ed25519").publicKey.export({ format: "der", type: "spki" }) as Buffer).subarray(12).toString("base64")
+    check("telnyx sig: other key -> does not match", /does not match/.test(telnyxSignatureProblem(body, sig, ts, other) ?? ""))
+    check("telnyx sig: missing headers named", /missing/.test(telnyxSignatureProblem(body, null, ts, raw) ?? ""))
+  }
+
   // ── Secrets never NEXT_PUBLIC ──────────────────────────────────────────────
   const pub = new Set(code.flatMap((f) => read(f).match(/NEXT_PUBLIC_[A-Z_]+/g) ?? []))
   const allowedPublic = ["NEXT_PUBLIC_SITE_URL", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_TELNYX_FROM_NUMBER", "NEXT_PUBLIC_TURNSTILE_SITE_KEY"]
