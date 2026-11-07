@@ -32,7 +32,7 @@ export const LEVELS: Level[] = [
 export const PLAN_PRICES = [
   { id: "starter", name: "Starter", usd: 69 },
   { id: "growth", name: "Growth", usd: 189 },
-  { id: "scale", name: "Scale", usd: 399 },
+  { id: "scale", name: "Scale", usd: 799 },
 ] as const
 
 export const PLANS = ["starter", "growth", "scale", "custom"] as const

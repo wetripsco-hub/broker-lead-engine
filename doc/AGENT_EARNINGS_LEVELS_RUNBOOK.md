@@ -155,7 +155,7 @@ Agents only (the admin home stays as it is). Server-rendered from their own rows
   progress bar: "Silver: 3 more active customers". Small note: "Your level follows your active customers."
 - **Money cards (USD):** **Next payout** (date + amount) · **This month** · **Paid so far** · **Total so far**, plus
   **Monthly recurring: $X / month from N active customers** and **Scheduled** (yearly second halves, with dates).
-- **Recurring calculator** (clearly labelled "Calculator"): agent picks plan (Starter $69 / Growth $189 / Scale $399) and
+- **Recurring calculator** (clearly labelled "Calculator"): agent picks plan (Starter $69 / Growth $189 / Scale $799) and
   number of customers → "N × $price × your rate = $X every month while they stay". Uses the agent's current rate.
 - **Level roadmap:** the four levels with active-customer thresholds and %, Platinum showing "Option: salary + commission".
 - **My earnings list:** date received, company, kind (monthly / yearly 1st half / yearly 2nd half), rate, amount,
@@ -238,7 +238,7 @@ so the dialer panel and this page always show the same words:
       id: "demo-price",
       title: "4. Price and plan (2 min)",
       lines: [
-        { kind: "say", text: "Plans are monthly: Starter is $69 for one user, Growth is $189 for three users with invoicing and lane and margin history, and Scale is $399 for ten users with QuickBooks Online and factoring. Extra seats are $25 a month, and paying yearly saves 20%." },
+        { kind: "say", text: "Plans are monthly: Starter is $69 for one user, Growth is $189 for three users with invoicing and lane and margin history, and Scale is $799 for ten users with QuickBooks Online and factoring. Extra seats are $25 a month, and paying yearly saves 20%." },
         { kind: "say", text: "From what you told me, [plan] fits best. And there's a 7-day free trial, no credit card." },
       ],
     },

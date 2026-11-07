@@ -330,7 +330,7 @@ export const CALL_SCRIPT: ScriptSection[] = [
         id: "demo-price",
         title: "4. Price and plan (2 min)",
         lines: [
-          { kind: "say", text: "Plans are monthly: Starter is $69 for one user, Growth is $189 for three users with invoicing and lane and margin history, and Scale is $399 for ten users with QuickBooks Online and factoring. Extra seats are $25 a month, and paying yearly saves 20%." },
+          { kind: "say", text: "Plans are monthly: Starter is $69 for one user, Growth is $189 for three users with invoicing and lane and margin history, and Scale is $799 for ten users with QuickBooks Online and factoring. Extra seats are $25 a month, and paying yearly saves 20%." },
           { kind: "say", text: "From what you told me, [plan] fits best. And there's a 7-day free trial, no credit card." },
         ],
       },
