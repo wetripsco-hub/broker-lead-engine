@@ -25,6 +25,7 @@ import {
   BadgeDollarSign,
   Wallet,
   UserPlus,
+  Clapperboard,
 } from "lucide-react"
 import {
   Sidebar,
@@ -282,6 +283,10 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
               Help
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" className="min-w-52">
+              <DropdownMenuItem onClick={() => window.open("/training", "_blank", "noopener")}>
+                <Clapperboard className="size-4" />
+                Training video
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push("/onboarding/tour?replay=1")}>
                 <PlayCircle className="size-4" />
                 Replay walkthrough

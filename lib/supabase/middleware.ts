@@ -62,7 +62,8 @@ export async function updateSession(request: NextRequest) {
   // tour. Admins never are. Once finished, a cookie skips this look-up.
   const path = request.nextUrl.pathname
   const tourExempt =
-    isAuthRoute || path.startsWith("/onboarding") || path.startsWith("/api") || path.startsWith("/auth")
+    isAuthRoute || path.startsWith("/onboarding") || path.startsWith("/api") || path.startsWith("/auth") ||
+    path === "/training" || path.startsWith("/training/")
   if (
     user &&
     !tourExempt &&
