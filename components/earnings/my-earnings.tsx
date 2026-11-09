@@ -81,7 +81,7 @@ export async function MyEarnings({ userId }: { userId: string }) {
             <p className="text-xs mt-1.5">
               {e.next ? (
                 <>
-                  <span className="font-medium">{e.next.level.name}:</span> {e.next.needed} more active customer{e.next.needed === 1 ? "" : "s"}
+                  <span className="font-medium">{e.next.level.name}:</span> {e.next.needed} more active paying customer{e.next.needed === 1 ? "" : "s"}
                 </>
               ) : (
                 "Top level reached"
@@ -90,7 +90,7 @@ export async function MyEarnings({ userId }: { userId: string }) {
           </div>
           {e.level.salaryOption && <p className="text-xs font-medium text-primary">{SALARY_REVIEW_AGENT_TEXT}</p>}
           {e.salaryPlusCommission && <p className="text-xs font-medium text-primary">Salary + commission (agreed with admin)</p>}
-          <p className="text-[11px] text-muted-foreground">Your level follows your active customers.</p>
+          <p className="text-[11px] text-muted-foreground">Your level follows your active paying customers (first payment received, subscription active).</p>
         </div>
 
         <div className="space-y-4">
