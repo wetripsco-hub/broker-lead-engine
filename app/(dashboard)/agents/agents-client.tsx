@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { UserPlus, KeyRound, X, Users, Pencil, Trash2 } from "lucide-react"
+import { UserPlus, KeyRound, X, Users, Pencil, Trash2, Award, SlidersHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
@@ -11,6 +11,8 @@ import { formatPkt, isOnline, timeAgo } from "@/lib/presence"
 import { isValidTimezone } from "@/lib/timezone/broker-time"
 import { describeLocation } from "@/lib/timezone/viewer-location"
 import { formatDay, formatRate, formatUsd } from "@/lib/commission"
+import type { AgentTerms, PayingCounts } from "@/lib/agent-terms"
+import { TermsEditorModal } from "./terms-editor"
 import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent, setWelcomeTour, setAgentComp } from "./actions"
 
 /** Admin view of one agent's earnings (runbook section 4.3). */
@@ -22,6 +24,13 @@ export interface AgentCallCounts {
 }
 
 export interface AgentEarningsBrief {
+  /** This agent's own terms (admin only: includes the salary rule and notes). */
+  terms: AgentTerms
+  hasStoredTerms: boolean
+  planCounts: PayingCounts
+  /** Meets the salary review rule (active + Scale + Growth). Admin only. */
+  salaryEligible: boolean
+  salaryGaps: string[]
   levelName: string
   levelEmoji: string
   rate: number
@@ -77,7 +86,7 @@ function PresenceLine({ agent, now }: { agent: Agent; now: Date | null }) {
   )
 }
 
-function EarningsLine({ e, onEdit }: { e: AgentEarningsBrief | undefined; onEdit: () => void }) {
+function EarningsLine({ e, onEdit, onTerms }: { e: AgentEarningsBrief | undefined; onEdit: () => void; onTerms: () => void }) {
   if (!e) return null
   return (
     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
@@ -87,12 +96,17 @@ function EarningsLine({ e, onEdit }: { e: AgentEarningsBrief | undefined; onEdit
         {e.customRate && <span className="font-normal text-muted-foreground">(custom)</span>}
       </span>
       {e.compType === "salary_plus_commission" && <span className="text-primary">salary + commission</span>}
-      <span>{e.activeCustomers} active customer{e.activeCustomers === 1 ? "" : "s"}</span>
+      <span title={`Active paying: ${e.planCounts.starter} Starter · ${e.planCounts.growth} Growth · ${e.planCounts.scale} Scale${e.planCounts.custom ? ` · ${e.planCounts.custom} custom` : ""}`}>
+        {e.activeCustomers} active paying ({e.planCounts.scale} Scale · {e.planCounts.growth} Growth)
+      </span>
       <span>this month {formatUsd(e.thisMonthCents)}</span>
       <span>next payout {e.nextPayoutDate ? `${formatUsd(e.nextPayoutCents)} on ${formatDay(e.nextPayoutDate)}` : "—"}</span>
       <span>total so far {formatUsd(e.totalSoFarCents)}</span>
       <button type="button" onClick={onEdit} className="underline underline-offset-2 hover:text-foreground">
         Pay terms
+      </button>
+      <button type="button" onClick={onTerms} className="underline underline-offset-2 hover:text-foreground">
+        Agent terms{e.terms.offer_label ? ` (${e.terms.offer_label})` : ""}
       </button>
     </p>
   )
@@ -113,13 +127,18 @@ export function AgentsClient({
   leadCounts,
   callCounts = {},
   earnings = {},
+  defaultTerms,
 }: {
   agents: Agent[]
   leadCounts: Record<string, number>
   callCounts?: Record<string, AgentCallCounts>
   earnings?: Record<string, AgentEarningsBrief>
+  defaultTerms?: AgentTerms
 }) {
   const [compFor, setCompFor] = useState<Agent | null>(null)
+  const [termsFor, setTermsFor] = useState<Agent | null>(null)
+  const [defaultOpen, setDefaultOpen] = useState(false)
+  const salaryEligible = agents.filter((a) => earnings[a.id]?.salaryEligible)
   const [addOpen, setAddOpen] = useState(false)
   const [resetFor, setResetFor] = useState<Agent | null>(null)
   const [editFor, setEditFor] = useState<Agent | null>(null)
@@ -167,11 +186,48 @@ export function AgentsClient({
             {agents.length} total{now && <> · <span className="text-green-700 dark:text-green-400">{onlineCount} online</span></>}
           </p>
         </div>
-        <Button size="sm" className="gap-2" onClick={() => setAddOpen(true)}>
-          <UserPlus className="size-3.5" />
-          Add Agent
-        </Button>
+        <div className="flex items-center gap-2">
+          {defaultTerms && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setDefaultOpen(true)} title="Terms new agents copy when they are created">
+              <SlidersHorizontal className="size-3.5" />
+              <span className="hidden sm:inline">Default terms</span>
+            </Button>
+          )}
+          <Button size="sm" className="gap-2" onClick={() => setAddOpen(true)}>
+            <UserPlus className="size-3.5" />
+            Add Agent
+          </Button>
+        </div>
       </div>
+
+      {/* Admin only: agents who meet their salary review rule */}
+      <section aria-labelledby="salary-review" className="rounded-lg border bg-card shadow-sm px-4 py-3">
+        <h2 id="salary-review" className="text-sm font-medium flex items-center gap-1.5">
+          <Award className="size-4 text-amber-600 dark:text-amber-400" aria-hidden />
+          Salary review eligible
+          <span className="text-xs font-normal text-muted-foreground">({salaryEligible.length})</span>
+        </h2>
+        {salaryEligible.length === 0 ? (
+          <p className="text-xs text-muted-foreground mt-1">Nobody yet. An agent appears here once they meet their salary review rule (active paying customers plus the Scale / Growth mix).</p>
+        ) : (
+          <ul className="mt-2 divide-y">
+            {salaryEligible.map((a) => {
+              const e = earnings[a.id]
+              return (
+                <li key={a.id} className="py-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
+                  <span className="font-medium">{a.name}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {e.activeCustomers} active paying · {e.planCounts.scale} Scale · {e.planCounts.growth} Growth · {e.planCounts.starter} Starter
+                  </span>
+                  <button type="button" className="ml-auto text-xs underline underline-offset-2 text-muted-foreground hover:text-foreground" onClick={() => setTermsFor(a)}>
+                    View terms
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
 
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         {agents.length === 0 ? (
@@ -202,6 +258,12 @@ export function AgentsClient({
                         >
                           {a.active ? "Active" : "Disabled"}
                         </span>
+                        {earnings[a.id]?.salaryEligible && (
+                          <span className="shrink-0 inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                            <Award className="size-3" aria-hidden />
+                            Salary review eligible
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate" title={a.email ?? undefined}>{a.email ?? "—"}</p>
                     </div>
@@ -255,7 +317,7 @@ export function AgentsClient({
 
                   {/* Presence and earnings */}
                   <PresenceLine agent={a} now={now} />
-                  <EarningsLine e={earnings[a.id]} onEdit={() => setCompFor(a)} />
+                  <EarningsLine e={earnings[a.id]} onEdit={() => setCompFor(a)} onTerms={() => setTermsFor(a)} />
                 </li>
               )
             })}
@@ -266,6 +328,10 @@ export function AgentsClient({
       {compFor && earnings[compFor.id] && (
         <PayTermsModal agent={compFor} earnings={earnings[compFor.id]} onClose={() => setCompFor(null)} />
       )}
+      {termsFor && earnings[termsFor.id] && (
+        <TermsEditorModal agent={termsFor} terms={earnings[termsFor.id].terms} defaultTerms={defaultTerms} onClose={() => setTermsFor(null)} />
+      )}
+      {defaultOpen && defaultTerms && <TermsEditorModal terms={defaultTerms} onClose={() => setDefaultOpen(false)} />}
       {addOpen && <AddAgentModal onClose={() => setAddOpen(false)} />}
       {resetFor && <ResetPasswordModal agent={resetFor} onClose={() => setResetFor(null)} />}
       {editFor && <EditAgentModal agent={editFor} onClose={() => setEditFor(null)} />}

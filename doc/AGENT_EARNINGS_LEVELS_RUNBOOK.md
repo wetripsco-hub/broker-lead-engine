@@ -305,3 +305,24 @@ so the dialer panel and this page always show the same words:
   ],
 },
 ```
+
+---
+
+## Addendum (9 Nov 2026) — Per-agent terms and salary review
+
+Migration `20261109000001_agent_terms.sql`, logic in `lib/agent-terms.ts`, tests `scripts/_agent-terms-tests.ts`.
+
+- **Agent terms** (`agent_terms`, one row per agent, admin only): levels (name, %, active-customer threshold, "salary
+  message" flag), salary review rule, offer label, effective date, notes. Edited from **Agents → Agent terms**.
+- **Default template** (`commission_templates`, `is_default`): "Launch offer" Bronze 30% / Silver 35% at 10 / Gold 40% at
+  25 / Platinum 40% at 50. Edited from **Agents → Default terms**. A trigger on `agents` insert copies it into the new
+  agent's `agent_terms`. Editing the default never changes existing agents.
+- **Active paying customer** = `customers.status = 'active'` AND at least one `customer_payments` row. Trials (no payment)
+  don't count. Levels, rates and the salary rule all use this count. The plan (starter/growth/scale/custom) is on `customers.plan`.
+- **Salary review** (admin only): active paying ≥ `min_active` AND Scale ≥ `min_scale` AND Growth ≥ `min_growth`
+  (default 50/10/10). Meets it → "Salary review eligible" badge + the list at the top of Agents. 50+ without the mix
+  stays on the flat level % (40%).
+- **Agent view**: My Account → **My terms** (own levels, current level, active paying count, progress). Levels at a
+  "salary message" level show "Eligible for a salary offer review, based on account mix". The agent reads only
+  `my_agent_terms()` (levels, offer label, effective date) and never the rule or notes.
+- The existing `custom_rate` / salary + commission pay terms still override the level %.

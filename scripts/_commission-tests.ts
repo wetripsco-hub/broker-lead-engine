@@ -177,14 +177,17 @@ check("calculator: 0 customers = $0", calculatorCents(399, 0, 0.4) === 0)
   check("agent view: monthly recurring $56.70 from 1 customer", e.monthlyRecurringCents === 5670 && e.monthlyRecurringCustomers === 1)
 
   // Ten active → Silver; old entry keeps its 30%.
+  // Ten active PAYING customers (each has a payment; trials wouldn't count).
   const ten: CustomerRow[] = Array.from({ length: 10 }, (_, i) => ({ ...customers[0], id: `c${i + 1}` }))
-  const e10 = buildAgentEarnings(agent, ten, payments, entries, "2026-11-25")
+  const tenPayments: PaymentRow[] = [...payments, ...ten.slice(1).map((c, i) => ({ id: `p${i + 2}`, customer_id: c.id, received_at: "2026-11-21", amount_usd: "189.00", covers: "month" }))]
+  check("agent view: 10 active but 9 never paid → still Bronze", buildAgentEarnings(agent, ten, payments, entries, "2026-11-25").level.id === "bronze")
+  const e10 = buildAgentEarnings(agent, ten, tenPayments, entries, "2026-11-25")
   check("agent view: 10 active → Silver 35%", e10.level.id === "silver" && e10.rate === 0.35)
   check("agent view: old entries keep their rate", e10.lines[0].rate === 0.3 && e10.lines[0].amountCents === 5670)
   const nine = ten.map((c, i) => (i === 0 ? { ...c, status: "cancelled" } : c))
-  check("agent view: cancel one → back to Bronze", buildAgentEarnings(agent, nine, payments, entries, "2026-11-25").level.id === "bronze")
+  check("agent view: cancel one → back to Bronze", buildAgentEarnings(agent, nine, tenPayments, entries, "2026-11-25").level.id === "bronze")
 
-  const custom = buildAgentEarnings({ id: "a1", comp_type: "salary_plus_commission", custom_rate: "0.2000" }, ten, payments, entries, "2026-11-25")
+  const custom = buildAgentEarnings({ id: "a1", comp_type: "salary_plus_commission", custom_rate: "0.2000" }, ten, tenPayments, entries, "2026-11-25")
   check("agent view: custom rate replaces the level rate", custom.rate === 0.2 && custom.customRate && custom.salaryPlusCommission)
 }
 

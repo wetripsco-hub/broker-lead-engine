@@ -6,7 +6,8 @@
 // - Payout day is the 15th of the month after the money was received.
 // - All money math is in integer cents; rates are converted to basis points.
 
-export type LevelId = "bronze" | "silver" | "gold" | "platinum"
+/** bronze / silver / gold / platinum for the Launch offer; per-agent terms may name their own levels. */
+export type LevelId = string
 export type CompType = "commission" | "salary_plus_commission"
 export type EntryKind = "monthly" | "yearly_first_half" | "yearly_second_half" | "adjustment"
 export type EntryStatus = "pending" | "scheduled" | "paid" | "void"
@@ -45,17 +46,18 @@ export const OVERDUE_DAYS = 35
 
 // ── Levels ───────────────────────────────────────────────────────────────────
 
-export function levelFor(activeCustomers: number): Level {
+export function levelFor(activeCustomers: number, levels: Level[] = LEVELS): Level {
   const n = Math.max(0, Math.floor(activeCustomers || 0))
-  let out = LEVELS[0]
-  for (const l of LEVELS) if (n >= l.min) out = l
+  const ls = levels.length ? levels : LEVELS
+  let out = ls[0]
+  for (const l of ls) if (n >= l.min) out = l
   return out
 }
 
 /** The next level and how many more active customers it needs, or null at the top. */
-export function nextLevel(activeCustomers: number): { level: Level; needed: number } | null {
+export function nextLevel(activeCustomers: number, levels: Level[] = LEVELS): { level: Level; needed: number } | null {
   const n = Math.max(0, Math.floor(activeCustomers || 0))
-  const next = LEVELS.find((l) => l.min > n)
+  const next = (levels.length ? levels : LEVELS).find((l) => l.min > n)
   return next ? { level: next, needed: next.min - n } : null
 }
 
@@ -72,13 +74,13 @@ function customRateOf(agent: AgentComp | null | undefined): number | null {
 }
 
 /** The agent's custom rate if the admin set one, otherwise the level rate. */
-export function rateFor(agent: AgentComp | null | undefined, activeCustomers: number): number {
-  return customRateOf(agent) ?? levelFor(activeCustomers).rate
+export function rateFor(agent: AgentComp | null | undefined, activeCustomers: number, levels: Level[] = LEVELS): number {
+  return customRateOf(agent) ?? levelFor(activeCustomers, levels).rate
 }
 
 /** What goes in commission_entries.level: the level id, or "custom" when a custom rate applies. */
-export function levelLabelFor(agent: AgentComp | null | undefined, activeCustomers: number): LevelId | "custom" {
-  return customRateOf(agent) !== null ? "custom" : levelFor(activeCustomers).id
+export function levelLabelFor(agent: AgentComp | null | undefined, activeCustomers: number, levels: Level[] = LEVELS): LevelId | "custom" {
+  return customRateOf(agent) !== null ? "custom" : levelFor(activeCustomers, levels).id
 }
 
 // ── Money (integer cents) ────────────────────────────────────────────────────

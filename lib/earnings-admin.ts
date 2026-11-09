@@ -12,6 +12,8 @@ import {
   type Covers,
   type EntryDraft,
 } from "@/lib/commission"
+import { toCommissionLevels } from "@/lib/agent-terms"
+import { loadAgentTerms } from "@/lib/agent-terms-server"
 
 export type AdminDb = ReturnType<typeof createAdminClient>
 
@@ -44,6 +46,8 @@ export async function commissionDrafts(
     agentId: string
     customerStatus: string
     addingCustomer: boolean
+    /** Existing customer being paid for; if this is their first payment they start counting now. */
+    customerId?: string
     receivedAt: string
     amountCents: number
     covers: Covers
@@ -55,14 +59,25 @@ export async function commissionDrafts(
   const skipped = noCommissionReason(agent, { status: args.customerStatus }, args.receivedAt)
   if (skipped) return { entries: [], skipped }
 
-  const { count } = await (admin.from("customers") as any)
-    .select("id", { count: "exact", head: true })
+  // Active PAYING customers (active + at least one payment); trials don't count.
+  const { data: activeRows } = await (admin.from("customers") as any)
+    .select("id, customer_payments(id)")
     .eq("agent_id", args.agentId)
     .eq("status", "active")
-  const active = (count ?? 0) + (args.addingCustomer ? 1 : 0)
+  const payingIds = new Set(
+    ((activeRows ?? []) as Array<{ id: string; customer_payments: unknown[] | null }>)
+      .filter((c) => (c.customer_payments?.length ?? 0) > 0)
+      .map((c) => c.id),
+  )
+  // A new customer arrives with its first payment, so it counts too; same for an
+  // existing active customer whose first payment this is (e.g. a trial converting).
+  const firstPayment =
+    args.addingCustomer || (args.customerId !== undefined && args.customerStatus === "active" && !payingIds.has(args.customerId))
+  const active = payingIds.size + (firstPayment ? 1 : 0)
 
-  const rate = rateFor(agent, active)
-  const level = levelLabelFor(agent, active)
+  const levels = toCommissionLevels((await loadAgentTerms(admin, args.agentId)).levels)
+  const rate = rateFor(agent, active, levels)
+  const level = levelLabelFor(agent, active, levels)
   return {
     entries: entriesForPayment({ received_at: args.receivedAt, amount_cents: args.amountCents, covers: args.covers }, rate, level),
     skipped: null,

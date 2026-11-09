@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { isAdminInDb } from "@/lib/voice-agents/admin-check"
+import { validateTerms } from "@/lib/agent-terms"
 
 type AdminCheck = { error: string } | { error?: undefined }
 
@@ -269,6 +270,94 @@ export async function setWelcomeTour(agentId: string, show: boolean): Promise<{ 
     .eq("id", agentId)
   if (error) return { error: error.message }
 
+  revalidatePath("/agents")
+  return { error: null }
+}
+
+// ── Agent terms (levels, salary review rule, offer label) ───────────────────
+
+export interface TermsInput {
+  levels: Array<{ name: string; ratePct: number; min: number; salary_review: boolean }>
+  salary_rule: { min_active: number; min_scale: number; min_growth: number }
+  offer_label: string
+  effective_date: string
+  notes: string
+}
+
+async function verifiedAdmin() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const admin = createAdminClient()
+  if (!user || user.app_metadata?.role !== "admin" || !(await isAdminInDb(admin, user.id))) return null
+  return admin
+}
+
+function cleanTerms(input: TermsInput) {
+  return validateTerms({
+    levels: (input.levels ?? []).map((l) => ({
+      name: l.name,
+      rate: Number.isFinite(Number(l.ratePct)) ? Math.round(Number(l.ratePct) * 100) / 10000 : NaN,
+      min: Number(l.min),
+      salary_review: l.salary_review === true,
+    })),
+    salary_rule: input.salary_rule ?? {},
+    offer_label: input.offer_label,
+    effective_date: input.effective_date,
+    notes: input.notes,
+  })
+}
+
+/** One agent's terms. Applies to payments recorded from now on; old entries keep their rate. */
+export async function saveAgentTerms(agentId: string, input: TermsInput): Promise<{ error: string | null }> {
+  const admin = await verifiedAdmin()
+  if (!admin) return { error: "Admin access required" }
+  const v = cleanTerms(input)
+  if (!v.ok) return { error: v.errors.join(". ") }
+
+  const { data: agent } = await (admin.from("agents") as any).select("id").eq("id", agentId).maybeSingle()
+  if (!agent) return { error: "Agent not found" }
+
+  const t = v.terms
+  const { error } = await (admin.from("agent_terms") as any).upsert(
+    {
+      agent_id: agentId,
+      levels: t.levels,
+      salary_rule: t.salary_rule,
+      offer_label: t.offer_label,
+      effective_date: t.effective_date ?? new Date().toISOString().slice(0, 10),
+      notes: t.notes,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "agent_id" },
+  )
+  if (error) return { error: error.message }
+  revalidatePath("/agents")
+  revalidatePath("/account")
+  revalidatePath("/dashboard")
+  return { error: null }
+}
+
+/** The default template new agents copy. Never changes existing agents' terms. */
+export async function saveDefaultTerms(input: TermsInput): Promise<{ error: string | null }> {
+  const admin = await verifiedAdmin()
+  if (!admin) return { error: "Admin access required" }
+  const v = cleanTerms(input)
+  if (!v.ok) return { error: v.errors.join(". ") }
+  const t = v.terms
+  const row = {
+    levels: t.levels,
+    salary_rule: t.salary_rule,
+    offer_label: t.offer_label,
+    notes: t.notes,
+    updated_at: new Date().toISOString(),
+  }
+  const { data: existing } = await (admin.from("commission_templates") as any).select("id").eq("is_default", true).maybeSingle()
+  const { error } = existing
+    ? await (admin.from("commission_templates") as any).update(row).eq("id", existing.id)
+    : await (admin.from("commission_templates") as any).insert({ ...row, name: "Launch offer", is_default: true })
+  if (error) return { error: error.message }
   revalidatePath("/agents")
   return { error: null }
 }

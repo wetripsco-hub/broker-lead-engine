@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { todayIn } from "@/lib/commission"
 import { buildAgentEarnings, type CustomerRow, type EntryRow, type PaymentRow } from "@/lib/earnings"
+import { LAUNCH_OFFER, salaryReviewEligible, salaryReviewGaps, toCommissionLevels } from "@/lib/agent-terms"
+import { loadAllTerms, loadDefaultTemplate } from "@/lib/agent-terms-server"
 import { AgentsClient, type AgentEarningsBrief, type AgentCallCounts } from "./agents-client"
 
 export default async function AgentsPage() {
@@ -72,23 +74,32 @@ export default async function AgentsPage() {
 
   // Earnings per agent (level, active customers, this month, next payout, total so far).
   // Tables missing (migration not run) just mean no earnings line.
-  const [{ data: customersRaw }, { data: paymentsRaw }, { data: entriesRaw }] = await Promise.all([
+  const [{ data: customersRaw }, { data: paymentsRaw }, { data: entriesRaw }, termsByAgent, defaultTerms] = await Promise.all([
     (supabase.from("customers") as any).select("*"),
     (supabase.from("customer_payments") as any).select("id, customer_id, received_at, amount_usd, covers"),
     (supabase.from("commission_entries") as any).select("*"),
+    loadAllTerms(supabase as any).catch(() => new Map()),
+    loadDefaultTemplate(supabase as any).catch(() => ({ ...LAUNCH_OFFER, id: null, name: "Launch offer" })),
   ])
   const today = todayIn()
   const earnings: Record<string, AgentEarningsBrief> = {}
   for (const a of (agentsRaw ?? []) as any[]) {
     if (a.deleted_at) continue
+    const terms = termsByAgent.get(a.id) ?? { ...LAUNCH_OFFER, effective_date: null }
     const e = buildAgentEarnings(
       { id: a.id, comp_type: a.comp_type ?? "commission", custom_rate: a.custom_rate ?? null },
       (customersRaw ?? []) as CustomerRow[],
       (paymentsRaw ?? []) as PaymentRow[],
       (entriesRaw ?? []) as EntryRow[],
       today,
+      toCommissionLevels(terms.levels),
     )
     earnings[a.id] = {
+      terms,
+      hasStoredTerms: termsByAgent.has(a.id),
+      planCounts: e.planCounts,
+      salaryEligible: salaryReviewEligible(terms.salary_rule, e.planCounts),
+      salaryGaps: salaryReviewGaps(terms.salary_rule, e.planCounts),
       levelName: e.level.name,
       levelEmoji: e.level.emoji,
       rate: e.rate,
@@ -105,7 +116,13 @@ export default async function AgentsPage() {
 
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto">
-      <AgentsClient agents={agents} leadCounts={leadCounts} callCounts={callCounts} earnings={earnings} />
+      <AgentsClient
+        agents={agents}
+        leadCounts={leadCounts}
+        callCounts={callCounts}
+        earnings={earnings}
+        defaultTerms={{ levels: defaultTerms.levels, salary_rule: defaultTerms.salary_rule, offer_label: defaultTerms.offer_label, effective_date: null, notes: defaultTerms.notes }}
+      />
     </div>
   )
 }

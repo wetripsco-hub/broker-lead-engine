@@ -5,7 +5,9 @@
 import Link from "next/link"
 import { BookOpenText, ChevronRight } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
-import { formatDay, formatRate, formatUsd, KIND_LABEL, LEVELS, todayIn } from "@/lib/commission"
+import { formatDay, formatRate, formatUsd, KIND_LABEL, todayIn } from "@/lib/commission"
+import { SALARY_REVIEW_AGENT_TEXT, toCommissionLevels } from "@/lib/agent-terms"
+import { loadMyTerms } from "@/lib/agent-terms-server"
 import { buildAgentEarnings, type CustomerRow, type EntryRow, type PaymentRow } from "@/lib/earnings"
 import { EarningsCalculator } from "./earnings-calculator"
 import { StatusPill } from "./status-pill"
@@ -15,11 +17,13 @@ export async function MyEarnings({ userId }: { userId: string }) {
   const { data: agentRaw } = await (supabase.from("agents") as any).select("*").eq("user_id", userId).maybeSingle()
   if (!agentRaw) return null
 
-  const [{ data: customersRaw }, { data: paymentsRaw }, { data: entriesRaw }] = await Promise.all([
+  const [{ data: customersRaw }, { data: paymentsRaw }, { data: entriesRaw }, myTerms] = await Promise.all([
     (supabase.from("customers") as any).select("*").eq("agent_id", agentRaw.id),
     (supabase.from("customer_payments") as any).select("id, customer_id, received_at, amount_usd, covers"),
     (supabase.from("commission_entries") as any).select("*").eq("agent_id", agentRaw.id),
+    loadMyTerms(supabase as any),
   ])
+  const LEVELS = toCommissionLevels(myTerms.levels)
 
   const today = todayIn()
   const e = buildAgentEarnings(
@@ -28,6 +32,7 @@ export async function MyEarnings({ userId }: { userId: string }) {
     (paymentsRaw ?? []) as PaymentRow[],
     (entriesRaw ?? []) as EntryRow[],
     today,
+    LEVELS,
   )
   const s = e.summary
 
@@ -61,7 +66,7 @@ export async function MyEarnings({ userId }: { userId: string }) {
             <div className="min-w-0">
               <p className="text-lg font-semibold tracking-tight leading-tight">{e.level.name}</p>
               <p className="text-sm text-muted-foreground">
-                {e.activeCustomers} active customer{e.activeCustomers === 1 ? "" : "s"}
+                {e.activeCustomers} active paying customer{e.activeCustomers === 1 ? "" : "s"}
               </p>
             </div>
             <div className="ml-auto text-right">
@@ -83,6 +88,7 @@ export async function MyEarnings({ userId }: { userId: string }) {
               )}
             </p>
           </div>
+          {e.level.salaryOption && <p className="text-xs font-medium text-primary">{SALARY_REVIEW_AGENT_TEXT}</p>}
           {e.salaryPlusCommission && <p className="text-xs font-medium text-primary">Salary + commission (agreed with admin)</p>}
           <p className="text-[11px] text-muted-foreground">Your level follows your active customers.</p>
         </div>
@@ -153,11 +159,11 @@ export async function MyEarnings({ userId }: { userId: string }) {
                   </span>
                   <span className="font-medium w-20">{l.name}</span>
                   <span className="text-muted-foreground tabular-nums">
-                    {nextMin ? `${l.min}–${nextMin - 1}` : `${l.min}+`} active
+                    {nextMin !== undefined ? `${l.min}–${nextMin - 1}` : `${l.min}+`} active
                   </span>
                   <span className="ml-auto text-right tabular-nums font-medium">
                     {formatRate(l.rate)}
-                    {l.salaryOption && <span className="block text-[11px] font-normal text-muted-foreground">Option: salary + commission</span>}
+                    {l.salaryOption && <span className="block text-[11px] font-normal text-muted-foreground">Salary offer review, based on account mix</span>}
                   </span>
                 </li>
               )

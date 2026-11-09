@@ -5,15 +5,18 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { formatDay, formatRate, formatUsd, todayIn } from "@/lib/commission"
+import { toCommissionLevels } from "@/lib/agent-terms"
+import { loadMyTerms } from "@/lib/agent-terms-server"
 import { buildAgentEarnings, type CustomerRow, type EntryRow, type PaymentRow } from "@/lib/earnings"
 
 export async function EarningsChip({ agentId }: { agentId: string }) {
   const supabase = await createClient()
-  const [{ data: agentRaw }, { data: customersRaw }, { data: paymentsRaw }, { data: entriesRaw }] = await Promise.all([
+  const [{ data: agentRaw }, { data: customersRaw }, { data: paymentsRaw }, { data: entriesRaw }, myTerms] = await Promise.all([
     (supabase.from("agents") as any).select("id, comp_type, custom_rate").eq("id", agentId).maybeSingle(),
     (supabase.from("customers") as any).select("*").eq("agent_id", agentId),
     (supabase.from("customer_payments") as any).select("id, customer_id, received_at, amount_usd, covers"),
     (supabase.from("commission_entries") as any).select("*").eq("agent_id", agentId),
+    loadMyTerms(supabase as any),
   ])
   if (!agentRaw) return null
 
@@ -23,10 +26,11 @@ export async function EarningsChip({ agentId }: { agentId: string }) {
     (paymentsRaw ?? []) as PaymentRow[],
     (entriesRaw ?? []) as EntryRow[],
     todayIn(),
+    toCommissionLevels(myTerms.levels),
   )
   const s = e.summary
   const title = [
-    `${e.level.name} level, ${formatRate(e.rate)} commission, ${e.activeCustomers} active customers`,
+    `${e.level.name} level, ${formatRate(e.rate)} commission, ${e.activeCustomers} active paying customers`,
     `Balance (earned, not paid yet): ${formatUsd(s.pendingCents)}`,
     `This month: ${formatUsd(s.thisMonthEarnedCents)} (from money received this month)`,
     `Monthly recurring: ${formatUsd(e.monthlyRecurringCents)}/month from ${e.monthlyRecurringCustomers} active monthly customers`,

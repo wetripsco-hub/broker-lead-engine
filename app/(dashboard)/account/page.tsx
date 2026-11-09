@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ChangePasswordForm } from "./change-password-form"
+import { MyTerms } from "@/components/earnings/my-terms"
 
 // Agent only: see the login ID and change your own password.
 export default async function AccountPage() {
@@ -17,6 +18,7 @@ export default async function AccountPage() {
   return (
     <div className="p-3 sm:p-6 max-w-lg mx-auto space-y-4">
       <h1 className="text-lg font-semibold tracking-tight">My Account</h1>
+      <MyTerms userId={user.id} />
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Login ID</CardTitle>

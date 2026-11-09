@@ -142,6 +142,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Result> 
     agentId: customer.agent_id,
     customerStatus: customer.status,
     addingCustomer: false,
+    customerId: customer.id,
     receivedAt: input.receivedAt,
     amountCents,
     covers: input.covers,

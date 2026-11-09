@@ -2,6 +2,7 @@
 // home page, the admin Agents page and the tests all compute it the same way.
 
 import {
+  LEVELS,
   effectiveStatus,
   levelFor,
   levelLabelFor,
@@ -16,6 +17,7 @@ import {
   type EntryStatus,
   type Level,
 } from "@/lib/commission"
+import { countActivePaying, type PayingCounts } from "@/lib/agent-terms"
 
 export interface CustomerRow {
   id: string
@@ -68,7 +70,12 @@ export interface EarningsLine {
 }
 
 export interface AgentEarnings {
+  /** Active PAYING customers (active + at least one payment). Trials don't count. */
   activeCustomers: number
+  /** Active paying customers per plan (for the salary review mix). */
+  planCounts: PayingCounts
+  /** The levels this agent is on (their own terms). */
+  levels: Level[]
   level: Level
   next: { level: Level; needed: number } | null
   rate: number
@@ -88,13 +95,16 @@ export function buildAgentEarnings(
   payments: PaymentRow[],
   entries: EntryRow[],
   today: string,
+  levels: Level[] = LEVELS,
 ): AgentEarnings {
   const mine = customers.filter((c) => c.agent_id === agent.id)
   const byId = new Map(mine.map((c) => [c.id, c]))
   const active = mine.filter((c) => c.status === "active")
   const paymentById = new Map(payments.map((p) => [p.id, p]))
+  const planCounts = countActivePaying(mine, payments)
+  const paying = planCounts.total
 
-  const rate = rateFor(agent, active.length)
+  const rate = rateFor(agent, paying, levels)
   const lines: EarningsLine[] = entries
     .filter((e) => e.agent_id === agent.id)
     .map((e) => {
@@ -130,12 +140,14 @@ export function buildAgentEarnings(
   }
 
   return {
-    activeCustomers: active.length,
-    level: levelFor(active.length),
-    next: nextLevel(active.length),
+    activeCustomers: paying,
+    planCounts,
+    levels,
+    level: levelFor(paying, levels),
+    next: nextLevel(paying, levels),
     rate,
-    rateLabel: levelLabelFor(agent, active.length),
-    customRate: levelLabelFor(agent, active.length) === "custom",
+    rateLabel: levelLabelFor(agent, paying, levels),
+    customRate: levelLabelFor(agent, paying, levels) === "custom",
     salaryPlusCommission: agent.comp_type === "salary_plus_commission",
     summary,
     monthlyRecurringCents: monthlyRecurringCents(latestMonthly, rate),
