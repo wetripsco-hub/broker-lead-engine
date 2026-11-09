@@ -63,7 +63,7 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname
   const tourExempt =
     isAuthRoute || path.startsWith("/onboarding") || path.startsWith("/api") || path.startsWith("/auth") ||
-    path === "/training" || path.startsWith("/training/") || path.startsWith("/sales/")
+    path === "/training" || path.startsWith("/training/") || path.startsWith("/sales/") || path === "/agreement"
   if (
     user &&
     !tourExempt &&

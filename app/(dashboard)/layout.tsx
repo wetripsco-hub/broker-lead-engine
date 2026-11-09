@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { PresenceHeartbeat } from "@/components/layout/presence-heartbeat"
 import { EarningsChip } from "@/components/layout/earnings-chip"
 import { Suspense } from "react"
+import { newAgreementsCount } from "@/lib/agreement/admin"
 import type { UserRole } from "@/types/database"
 
 export default async function DashboardLayout({
@@ -59,6 +60,9 @@ export default async function DashboardLayout({
       : Promise.resolve({ count: 0 }),
   ])
 
+  // Admin only: agent agreements signed since the admin last opened the Agreements tab.
+  const agreementsCount = role === "admin" ? await newAgreementsCount(user.id) : 0
+
   const agent = agentData as { id: string; name: string } | null
   const userName = agent?.name ?? user.email ?? "User"
 
@@ -74,6 +78,7 @@ export default async function DashboardLayout({
         pendingRequestsCount={(pendingRequestsCount as number | null) ?? 0}
         ticketsBadgeCount={(ticketsBadgeCount as number | null) ?? 0}
         supportRequestsCount={(supportRequestsCount as number | null) ?? 0}
+        agreementsCount={agreementsCount}
       />
       <main className="flex flex-1 flex-col min-h-screen">
         <header className="flex items-center h-12 px-4 border-b shrink-0">

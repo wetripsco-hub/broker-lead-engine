@@ -2,17 +2,19 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { RefreshCw, Inbox, Users, FileText, AlertTriangle } from "lucide-react"
+import { RefreshCw, Inbox, Users, FileText, FileSignature, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { syncRecruitReplies } from "./actions"
+import { AgreementsPanel } from "./agreements-panel"
 import { InboxPanel } from "./inbox-panel"
 import { RecruitsPanel } from "./recruits-panel"
 import { TemplatesPanel } from "./templates-panel"
+import type { AgreementRow } from "@/lib/agreement/format"
 import type { Recruit, RecruitTemplate } from "./types"
 
-type Tab = "inbox" | "recruits" | "templates"
+type Tab = "inbox" | "recruits" | "templates" | "agreements"
 
 export interface RecruiterProps {
   recruits: Recruit[]
@@ -24,6 +26,8 @@ export interface RecruiterProps {
   lastSyncedAt: string | null
   syncError: string | null
   activeBatchId: string | null
+  agreements: AgreementRow[]
+  newAgreements: number
 }
 
 export function RecruiterClient(props: RecruiterProps) {
@@ -32,6 +36,9 @@ export function RecruiterClient(props: RecruiterProps) {
   const [syncing, startSync] = useTransition()
   const router = useRouter()
   const unread = recruits.filter((r) => r.unread).length
+  // Badge: signatures since the admin last opened the tab. Opening the tab clears it.
+  const [agreementsSeen, setAgreementsSeen] = useState(false)
+  const newAgreements = agreementsSeen ? 0 : props.newAgreements
 
   function refresh() {
     startSync(async () => {
@@ -101,11 +108,15 @@ export function RecruiterClient(props: RecruiterProps) {
             { id: "inbox", label: "Inbox", icon: Inbox, badge: unread },
             { id: "recruits", label: "Recruits", icon: Users, badge: 0 },
             { id: "templates", label: "Templates", icon: FileText, badge: 0 },
+            { id: "agreements", label: "Agreements", icon: FileSignature, badge: newAgreements },
           ] as const
         ).map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              setTab(t.id)
+              if (t.id === "agreements") setAgreementsSeen(true)
+            }}
             className={cn(
               "relative flex items-center gap-1.5 px-3 py-2 text-sm transition-colors duration-150",
               tab === t.id ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground",
@@ -124,6 +135,7 @@ export function RecruiterClient(props: RecruiterProps) {
       {tab === "inbox" && <InboxPanel recruits={recruits} templates={templates} smtpReady={smtpReady} />}
       {tab === "recruits" && <RecruitsPanel {...props} onGoToTemplates={() => setTab("templates")} />}
       {tab === "templates" && <TemplatesPanel templates={templates} />}
+      {tab === "agreements" && <AgreementsPanel agreements={props.agreements} />}
     </div>
   )
 }

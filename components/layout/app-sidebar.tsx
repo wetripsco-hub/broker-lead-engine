@@ -110,9 +110,11 @@ interface AppSidebarProps {
   ticketsBadgeCount?: number
   /** Admin only: open "Contact Support" requests from the login screen. */
   supportRequestsCount?: number
+  /** Admin only: agent agreements signed since the Agreements tab was last opened. */
+  agreementsCount?: number
 }
 
-export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount, pendingRequestsCount = 0, ticketsBadgeCount = 0, supportRequestsCount = 0 }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount, pendingRequestsCount = 0, ticketsBadgeCount = 0, supportRequestsCount = 0, agreementsCount = 0 }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const isAdmin = role === "admin"
@@ -204,6 +206,13 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                     label="Recruiter"
                     icon={UserPlus}
                     active={pathname === "/recruiter"}
+                    badge={
+                      agreementsCount > 0 ? (
+                        <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold flex items-center justify-center shrink-0">
+                          {agreementsCount > 99 ? "99+" : agreementsCount}
+                        </span>
+                      ) : undefined
+                    }
                   />
                   <NavLink
                     href="/customers"

@@ -52,6 +52,17 @@ export async function createAgent(formData: FormData): Promise<{ error: string |
     return { error: upsertError.message }
   }
 
+  // Created from a signed agreement (Recruiter > Agreements): link the two. A failure here must not undo the account.
+  const agreementId = (formData.get("agreementId") as string | null)?.trim()
+  if (agreementId && /^[0-9a-f-]{36}$/i.test(agreementId)) {
+    const { error: linkError } = await (admin.from("agent_agreements") as any)
+      .update({ status: "account_created", agent_user_id: created.user.id })
+      .eq("id", agreementId)
+      .eq("status", "signed")
+    if (linkError) console.error("[createAgent] could not link agreement", linkError.message)
+    revalidatePath("/recruiter")
+  }
+
   revalidatePath("/agents")
   return { error: null }
 }

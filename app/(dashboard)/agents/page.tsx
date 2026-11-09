@@ -4,10 +4,11 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { todayIn } from "@/lib/commission"
 import { buildAgentEarnings, type CustomerRow, type EntryRow, type PaymentRow } from "@/lib/earnings"
 import { LAUNCH_OFFER, salaryReviewEligible, salaryReviewGaps, toCommissionLevels } from "@/lib/agent-terms"
+import { loadAgreement } from "@/lib/agreement/admin"
 import { loadAllTerms, loadDefaultTemplate } from "@/lib/agent-terms-server"
 import { AgentsClient, type AgentEarningsBrief, type AgentCallCounts } from "./agents-client"
 
-export default async function AgentsPage() {
+export default async function AgentsPage({ searchParams }: { searchParams: Promise<{ fromAgreement?: string }> }) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -114,9 +115,18 @@ export default async function AgentsPage() {
     }
   }
 
+  // Coming from Recruiter > Agreements: open the add-agent form with the signer name and email filled in.
+  const { fromAgreement } = await searchParams
+  let prefill: { agreementId: string; name: string; email: string } | null = null
+  if (fromAgreement) {
+    const row = await loadAgreement(fromAgreement).catch(() => null)
+    if (row && row.status === "signed") prefill = { agreementId: row.id, name: row.full_name, email: row.email }
+  }
+
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       <AgentsClient
+        prefill={prefill}
         agents={agents}
         leadCounts={leadCounts}
         callCounts={callCounts}

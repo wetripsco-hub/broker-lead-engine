@@ -128,7 +128,9 @@ export function AgentsClient({
   callCounts = {},
   earnings = {},
   defaultTerms,
+  prefill = null,
 }: {
+  prefill?: { agreementId: string; name: string; email: string } | null
   agents: Agent[]
   leadCounts: Record<string, number>
   callCounts?: Record<string, AgentCallCounts>
@@ -139,7 +141,7 @@ export function AgentsClient({
   const [termsFor, setTermsFor] = useState<Agent | null>(null)
   const [defaultOpen, setDefaultOpen] = useState(false)
   const salaryEligible = agents.filter((a) => earnings[a.id]?.salaryEligible)
-  const [addOpen, setAddOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(!!prefill)
   const [resetFor, setResetFor] = useState<Agent | null>(null)
   const [editFor, setEditFor] = useState<Agent | null>(null)
   const [deleteFor, setDeleteFor] = useState<Agent | null>(null)
@@ -332,7 +334,15 @@ export function AgentsClient({
         <TermsEditorModal agent={termsFor} terms={earnings[termsFor.id].terms} defaultTerms={defaultTerms} onClose={() => setTermsFor(null)} />
       )}
       {defaultOpen && defaultTerms && <TermsEditorModal terms={defaultTerms} onClose={() => setDefaultOpen(false)} />}
-      {addOpen && <AddAgentModal onClose={() => setAddOpen(false)} />}
+      {addOpen && (
+        <AddAgentModal
+          prefill={prefill}
+          onClose={() => {
+            setAddOpen(false)
+            if (prefill) router.replace("/agents")
+          }}
+        />
+      )}
       {resetFor && <ResetPasswordModal agent={resetFor} onClose={() => setResetFor(null)} />}
       {editFor && <EditAgentModal agent={editFor} onClose={() => setEditFor(null)} />}
       {deleteFor && (
@@ -342,7 +352,7 @@ export function AgentsClient({
   )
 }
 
-function AddAgentModal({ onClose }: { onClose: () => void }) {
+function AddAgentModal({ onClose, prefill }: { onClose: () => void; prefill?: { agreementId: string; name: string; email: string } | null }) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -368,13 +378,14 @@ function AddAgentModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <form action={handleSubmit} className="px-5 py-4 space-y-3">
+          {prefill && <input type="hidden" name="agreementId" value={prefill.agreementId} />}
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground" htmlFor="agent-name">Name</label>
-            <Input id="agent-name" name="name" required className="h-9 text-sm" />
+            <Input id="agent-name" name="name" required defaultValue={prefill?.name} className="h-9 text-sm" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground" htmlFor="agent-email">Email</label>
-            <Input id="agent-email" name="email" type="email" required className="h-9 text-sm" />
+            <Input id="agent-email" name="email" type="email" required defaultValue={prefill?.email} className="h-9 text-sm" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground" htmlFor="agent-password">Password</label>
