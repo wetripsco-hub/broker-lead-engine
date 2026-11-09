@@ -73,7 +73,18 @@ const nextConfig: NextConfig = {
   // bundler doesn't try to statically resolve that optional dependency.
   serverExternalPackages: ["unzipper"],
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      // The public training hub shows its own PDFs inline, so only those files may be
+      // framed, and only by our own pages. Later rules override the same header keys.
+      {
+        source: "/training/:file(.*\\.pdf)",
+        headers: [
+          { key: "Content-Security-Policy", value: csp.replace("frame-ancestors 'none'", "frame-ancestors 'self'") },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        ],
+      },
+    ];
   },
 };
 

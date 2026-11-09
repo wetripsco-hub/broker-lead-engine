@@ -285,7 +285,7 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
             <DropdownMenuContent side="top" className="min-w-52">
               <DropdownMenuItem onClick={() => window.open("/training", "_blank", "noopener")}>
                 <Clapperboard className="size-4" />
-                Training video
+                Training hub
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push("/onboarding/tour?replay=1")}>
                 <PlayCircle className="size-4" />

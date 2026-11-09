@@ -9,6 +9,8 @@ export interface SmsTemplate {
 }
 
 export const LOADLINKERS_URL = "https://loadlinkers.co"
+// Sent after the broker agrees on a call (trial / Marketplace texts).
+export const BROKER_SIGNUP_URL = "https://loadlinkers.co/freight-brokers"
 
 // One SMS segment holds 160 characters of plain text (GSM-7). A single curly quote, emoji or
 // other special character switches the whole message to 70 characters per segment, so these
@@ -29,9 +31,9 @@ export function buildSmsTemplates(opts: { contactName: string | null; agentName:
       id: "trial-link",
       label: "Trial link (after they OK)",
       text: fit([
-        `Hi ${first}, ${from}. Check us out anytime at ${LOADLINKERS_URL} (self checkout, 7-day trial). Reply STOP to opt out.`,
-        `Hi ${first}, ${from}. Self checkout, 7-day trial: ${LOADLINKERS_URL} Reply STOP to opt out.`,
-        `Hi ${first}, Load Linkers here. 7-day trial: ${LOADLINKERS_URL} Reply STOP to opt out.`,
+        `Hi ${first}, ${from}. Check us out anytime at ${BROKER_SIGNUP_URL} (self checkout, 7-day trial). Reply STOP to opt out.`,
+        `Hi ${first}, ${from}. Self checkout, 7-day trial: ${BROKER_SIGNUP_URL} Reply STOP to opt out.`,
+        `Hi ${first}, Load Linkers here. 7-day trial: ${BROKER_SIGNUP_URL} Reply STOP to opt out.`,
       ]),
     },
     {

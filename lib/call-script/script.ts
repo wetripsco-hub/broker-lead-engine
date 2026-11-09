@@ -261,7 +261,7 @@ export const CALL_SCRIPT: ScriptSection[] = [
         title: "TMS trial",
         copy: {},
         lines: [
-          { kind: "say", text: "Hi [Name], it's [First Name] from Loadlinkers, thanks for the chat. Here's your 7-day free trial: loadlinkers.co — reply here if you want me to import your spreadsheet. Reply STOP to opt out." },
+          { kind: "say", text: "Hi [Name], it's [First Name] from Loadlinkers, thanks for the chat. Here's your 7-day free trial: https://loadlinkers.co/freight-brokers — reply here if you want me to import your spreadsheet. Reply STOP to opt out." },
         ],
       },
       {
@@ -269,7 +269,7 @@ export const CALL_SCRIPT: ScriptSection[] = [
         title: "Marketplace",
         copy: {},
         lines: [
-          { kind: "say", text: "Hi [Name], it's [First Name] from Loadlinkers. Here's the link to create your free Marketplace profile: loadlinkers.co/marketplace — we'll reach out once we have a good match. Reply STOP to opt out." },
+          { kind: "say", text: "Hi [Name], it's [First Name] from Loadlinkers. Here's the link to create your free Marketplace profile: https://loadlinkers.co/freight-brokers — we'll reach out once we have a good match. Reply STOP to opt out." },
         ],
       },
     ],
