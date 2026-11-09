@@ -159,5 +159,5 @@ export const AGREEMENT_V1_0: AgreementDoc = {
   "signIntro": "By typing your full legal name and confirming below, you sign this Agreement (Version 1.0) and accept all of its terms.",
   "consentLabel": "I have read and agree to all terms of this Sales Agent Code of Conduct & Commission Agreement, including the arbitration clause in Section 10.",
   "doneThanks": "Thank you. Our team has received your signature. We will now set up your agent account and email you your login details and training link.",
-  "footer": "Questions? Write to info@loadlinkers.co."
+  "footer": "Questions? Write to info@loadlinkers.co"
 }
