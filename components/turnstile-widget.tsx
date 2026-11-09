@@ -43,7 +43,16 @@ function loadScript(): Promise<void> {
  * `resetKey`: change it (e.g. after each submit) to get a fresh single-use token.
  * `onToken`: the current token, or "" while there is none.
  */
-export function TurnstileWidget({ onToken, resetKey }: { onToken?: (token: string) => void; resetKey?: unknown }) {
+export function TurnstileWidget({
+  onToken,
+  resetKey,
+  appearance = "interaction-only",
+}: {
+  onToken?: (token: string) => void
+  resetKey?: unknown
+  /** "always" shows the check (login page), so a blocked check is visible instead of silent. */
+  appearance?: "always" | "interaction-only"
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const idRef = useRef<string | null>(null)
   const onTokenRef = useRef(onToken)
@@ -57,7 +66,7 @@ export function TurnstileWidget({ onToken, resetKey }: { onToken?: (token: strin
         if (cancelled || !ref.current || !window.turnstile || idRef.current) return
         idRef.current = window.turnstile.render(ref.current, {
           sitekey: TURNSTILE_SITE_KEY,
-          appearance: "interaction-only",
+          appearance,
           callback: (t: string) => onTokenRef.current?.(t),
           "expired-callback": () => onTokenRef.current?.(""),
           "error-callback": () => onTokenRef.current?.(""),
