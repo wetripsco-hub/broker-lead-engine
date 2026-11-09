@@ -120,17 +120,26 @@ export function TermsEditorModal({
             <span />
           </div>
           {rows.map((r, i) => (
-            <div key={r.key} className="grid grid-cols-[1fr_72px_96px] sm:grid-cols-[1fr_72px_96px_68px_28px] gap-2 items-center rounded-md border p-2 sm:border-0 sm:p-0">
-              <Input aria-label={`Level ${i + 1} name`} value={r.name} onChange={(e) => set(i, { name: e.target.value })} className="h-8 text-sm" maxLength={40} />
-              <Input aria-label={`${r.name || `Level ${i + 1}`} percent`} inputMode="decimal" value={r.pct} onChange={(e) => set(i, { pct: e.target.value })} className="h-8 text-sm tabular-nums" />
-              <Input
-                aria-label={`${r.name || `Level ${i + 1}`} active customers needed`}
-                inputMode="numeric"
-                value={r.min}
-                onChange={(e) => set(i, { min: e.target.value })}
-                className="h-8 text-sm tabular-nums"
-              />
-              <label className="flex items-center gap-1.5 text-xs col-span-2 sm:col-span-1">
+            <div key={r.key} className="grid grid-cols-2 sm:grid-cols-[1fr_72px_96px_68px_28px] gap-2 items-end sm:items-center rounded-md border p-2 sm:border-0 sm:p-0">
+              <label className="col-span-2 sm:col-span-1 space-y-1">
+                <span className="text-[11px] text-muted-foreground sm:sr-only">Name</span>
+                <Input aria-label={`Level ${i + 1} name`} value={r.name} onChange={(e) => set(i, { name: e.target.value })} className="h-8 text-sm" maxLength={40} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] text-muted-foreground sm:sr-only">Commission %</span>
+                <Input aria-label={`${r.name || `Level ${i + 1}`} percent`} inputMode="decimal" value={r.pct} onChange={(e) => set(i, { pct: e.target.value })} className="h-8 text-sm tabular-nums" />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] text-muted-foreground sm:sr-only">From (active paying)</span>
+                <Input
+                  aria-label={`${r.name || `Level ${i + 1}`} active customers needed`}
+                  inputMode="numeric"
+                  value={r.min}
+                  onChange={(e) => set(i, { min: e.target.value })}
+                  className="h-8 text-sm tabular-nums"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs sm:col-span-1">
                 <input type="checkbox" className="size-4 accent-primary" checked={r.salary_review} onChange={(e) => set(i, { salary_review: e.target.checked })} />
                 <span className="sm:sr-only">Show salary review message</span>
               </label>
