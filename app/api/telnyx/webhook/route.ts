@@ -128,16 +128,21 @@ export async function POST(req: NextRequest) {
     // Brokers saved before phone_e164 existed (or by a writer that didn't
     // fill it) are found by their raw phone, and fixed so the next message
     // matches directly.
+    // Those rows keep the number as the registry wrote it ("+1 (774) 433-7642"), so an
+    // exact match misses them. Narrow by the last four digits, then compare normalised.
     if (!brokerRow) {
-      const { data: legacy } = await (supabase.from("brokers") as any)
-        .select("id, phone")
-        .is("phone_e164", null)
-        .or(`phone.eq.${from},phone.eq.${normalised}`)
-        .limit(1)
-        .maybeSingle()
-      if (legacy && toE164((legacy as { phone: string | null }).phone) === normalised) {
-        brokerRow = { id: (legacy as { id: string }).id }
-        await (supabase.from("brokers") as any).update({ phone_e164: normalised }).eq("id", brokerRow.id)
+      const last4 = normalised.replace(/D/g, "").slice(-4)
+      if (last4.length === 4) {
+        const { data: candidates } = await (supabase.from("brokers") as any)
+          .select("id, phone")
+          .is("phone_e164", null)
+          .ilike("phone", `%${last4}%`)
+          .limit(200)
+        const hit = ((candidates ?? []) as Array<{ id: string; phone: string | null }>).find((c) => toE164(c.phone) === normalised)
+        if (hit) {
+          brokerRow = { id: hit.id }
+          await (supabase.from("brokers") as any).update({ phone_e164: normalised }).eq("id", hit.id)
+        }
       }
     }
 

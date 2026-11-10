@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Search, Send, UserPlus, MessageSquare, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -277,6 +279,7 @@ export function MessagesClient({ initialEvents, isAdmin = true }: { initialEvent
                       <p className={`text-sm truncate ${unread ? "font-semibold" : "font-medium"}`}>
                         {c.displayName}
                       </p>
+                      {!c.leadId && <span className="shrink-0 rounded-full border px-1.5 text-[9px] text-muted-foreground">Not in leads</span>}
                       <span className="text-[11px] text-muted-foreground shrink-0">{timeLabel(c.lastAt)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-2 mt-0.5">
@@ -319,7 +322,15 @@ export function MessagesClient({ initialEvents, isAdmin = true }: { initialEvent
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-medium text-sm truncate">{selected.displayName}</p>
-                  {!selected.leadId && <Badge variant="outline" className="text-[10px]">Unknown</Badge>}
+                  {selected.leadId ? (
+                    <Link href={`/leads/${selected.leadId}`} className="inline-flex">
+                      <Badge className="text-[10px] bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300">
+                        In leads
+                      </Badge>
+                    </Link>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px]">Not in leads</Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground font-mono">{selected.displayNumber}</p>
               </div>
