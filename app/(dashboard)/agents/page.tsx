@@ -34,6 +34,8 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
       active: a.active as boolean,
       created_at: a.created_at as string,
       onboarding_completed_at: (a.onboarding_completed_at ?? null) as string | null,
+      // null = the SMS column is not in the database yet.
+      sms_enabled: (a.sms_enabled ?? null) as boolean | null,
       last_seen_at: (a.last_seen_at ?? null) as string | null,
       last_signed_out_at: (a.last_signed_out_at ?? null) as string | null,
       last_sign_in_at: lastSignIn.get(a.user_id) ?? null,

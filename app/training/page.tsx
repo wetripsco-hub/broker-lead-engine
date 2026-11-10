@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   description: "Everything a new Loadlinkers agent needs before the first call: videos, playbook, call script and rules.",
 }
 
-const BROKER_LINK = "https://loadlinkers.co/freight-brokers"
+const BROKER_LINK = "https://loadlinkers.co"
 
 const RULES = [
   "Call 8 AM to 6 PM broker time, Monday to Friday.",

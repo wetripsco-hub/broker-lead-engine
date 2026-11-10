@@ -12,7 +12,7 @@ import {
   isSmsPermissionOutcome,
   type DispositionKey,
 } from "../lib/call-dispositions"
-import { evaluateSmsPermission, SMS_BLOCK_DNC, SMS_BLOCK_NO_CONSENT } from "../lib/sms-permission"
+import { evaluateSmsPermission, SMS_BLOCK_AGENT_OFF, SMS_BLOCK_DNC, SMS_BLOCK_NO_CONSENT } from "../lib/sms-permission"
 
 export {}
 let failed = 0
@@ -89,13 +89,15 @@ check("agent names: empty -> missing", agentNames("").firstName === null && agen
 
 // ── SMS permission ────────────────────────────────────────────────────────────
 {
-  const f = (o: object) => evaluateSmsPermission({ isAdmin: false, doNotCall: false, hasSmsConsent: false, hasInbound: false, ...o })
+  const f = (o: object) => evaluateSmsPermission({ isAdmin: false, doNotCall: false, hasSmsConsent: false, hasInbound: false, agentSmsEnabled: true, ...o })
   check("sms: admin may text any lead, even with no permission recorded", f({ isAdmin: true }).allowed === true)
   check("sms: an agent without permission is blocked, with a clear reason", (() => { const d = f({}); return !d.allowed && d.reason === SMS_BLOCK_NO_CONSENT })())
   check("sms: an agent with permission recorded on a call may text", f({ hasSmsConsent: true }).allowed === true)
   check("sms: an agent may reply to someone who texted first", f({ hasInbound: true }).allowed === true)
   check("sms: do-not-call blocks the agent even with permission", (() => { const d = f({ doNotCall: true, hasSmsConsent: true }); return !d.allowed && d.reason === SMS_BLOCK_DNC })())
   check("sms: do-not-call blocks the admin too", f({ isAdmin: true, doNotCall: true }).allowed === false)
+  check("sms: an agent with SMS turned off is blocked even with permission", (() => { const d = f({ agentSmsEnabled: false, hasSmsConsent: true, hasInbound: true }); return !d.allowed && d.reason === SMS_BLOCK_AGENT_OFF })())
+  check("sms: the agent SMS switch does not affect admins", f({ isAdmin: true, agentSmsEnabled: false }).allowed === true)
 }
 
 // ── Wiring (static) ───────────────────────────────────────────────────────────

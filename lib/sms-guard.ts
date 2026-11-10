@@ -44,5 +44,15 @@ export async function checkSmsAllowed(
     hasInbound = (inbound ?? []).length > 0
   }
 
-  return evaluateSmsPermission({ isAdmin, doNotCall, hasSmsConsent, hasInbound })
+  const smsOn = isAdmin || (await agentSmsEnabled(admin, userId))
+  return evaluateSmsPermission({ isAdmin, doNotCall, hasSmsConsent, hasInbound, agentSmsEnabled: smsOn })
+}
+
+/**
+ * The admin turned SMS on for this agent. Only an explicit false blocks: if the column is not
+ * in the database yet (migration not applied), the old behaviour stays.
+ */
+export async function agentSmsEnabled(admin: any, userId: string): Promise<boolean> {
+  const { data } = await admin.from("agents").select("*").eq("user_id", userId).maybeSingle()
+  return data?.sms_enabled !== false
 }

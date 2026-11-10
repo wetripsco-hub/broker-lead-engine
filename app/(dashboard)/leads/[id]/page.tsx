@@ -152,10 +152,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // Fetch agent record for the current user (needed for outreach logging)
   const { data: myAgentRaw } = await supabase
     .from("agents")
-    .select("id, name")
+    .select("*")
     .eq("user_id", user.id)
     .maybeSingle()
-  const myAgent = myAgentRaw as { id: string; name: string } | null
+  const myAgent = myAgentRaw as { id: string; name: string; sms_enabled?: boolean } | null
 
   // Email templates (for compose dialog)
   const { data: templatesRaw } = await supabase
@@ -236,6 +236,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     doNotCall: aiFlags.do_not_call === true,
     hasSmsConsent: !!aiFlags.sms_consent_at,
     hasInbound: smsEvents.some((e) => e.direction === "inbound"),
+    // Only an explicit false blocks (column missing = old behaviour).
+    agentSmsEnabled: myAgent?.sms_enabled !== false,
   })
 
   // Callback number set by an admin in Settings, for the call script's [number] / [Phone].

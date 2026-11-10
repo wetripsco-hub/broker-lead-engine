@@ -272,6 +272,18 @@ export async function deleteAgent(agentId: string): Promise<{ error: string | nu
  * Admin hands an account over: ticked, the welcome tour opens on the agent's
  * next sign-in (from the first step); finishing it unticks this again.
  */
+/** Turns SMS on/off for one agent (admins can always text). */
+export async function setAgentSms(agentId: string, enabled: boolean): Promise<{ error: string | null }> {
+  const check = await requireAdmin()
+  if (check.error) return { error: check.error }
+
+  const { error } = await (createAdminClient().from("agents") as any).update({ sms_enabled: enabled }).eq("id", agentId)
+  if (error) return { error: /sms_enabled/.test(error.message) ? "The SMS switch is not set up in the database yet." : error.message }
+
+  revalidatePath("/agents")
+  return { error: null }
+}
+
 export async function setWelcomeTour(agentId: string, show: boolean): Promise<{ error: string | null }> {
   const check = await requireAdmin()
   if (check.error) return { error: check.error }

@@ -10,7 +10,7 @@ export interface SmsTemplate {
 
 export const LOADLINKERS_URL = "https://loadlinkers.co"
 // Sent after the broker agrees on a call (trial / Marketplace texts).
-export const BROKER_SIGNUP_URL = "https://loadlinkers.co/freight-brokers"
+export const BROKER_SIGNUP_URL = "https://loadlinkers.co"
 
 // One SMS segment holds 160 characters of plain text (GSM-7). A single curly quote, emoji or
 // other special character switches the whole message to 70 characters per segment, so these

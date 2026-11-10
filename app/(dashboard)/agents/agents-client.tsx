@@ -13,7 +13,7 @@ import { describeLocation } from "@/lib/timezone/viewer-location"
 import { formatDay, formatRate, formatUsd } from "@/lib/commission"
 import type { AgentTerms, PayingCounts } from "@/lib/agent-terms"
 import { TermsEditorModal } from "./terms-editor"
-import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent, setWelcomeTour, setAgentComp } from "./actions"
+import { createAgent, toggleAgentActive, resetAgentPassword, updateAgent, deleteAgent, setWelcomeTour, setAgentComp, setAgentSms } from "./actions"
 
 /** Admin view of one agent's earnings (runbook section 4.3). */
 /** Outbound calls the agent made: all time, today (Pakistan time), answered. */
@@ -52,6 +52,8 @@ interface Agent {
   created_at: string
   /** null = the welcome tour opens on their next sign-in. */
   onboarding_completed_at: string | null
+  /** Admin turned SMS on for this agent. null = column not in the database yet. */
+  sms_enabled: boolean | null
   last_seen_at: string | null
   last_signed_out_at: string | null
   last_sign_in_at: string | null
@@ -148,6 +150,18 @@ export function AgentsClient({
   const [isPending, startTransition] = useTransition()
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [tourId, setTourId] = useState<string | null>(null)
+  const [smsId, setSmsId] = useState<string | null>(null)
+
+  function handleSms(agent: Agent, on: boolean) {
+    setSmsId(agent.id)
+    startTransition(async () => {
+      const { error } = await setAgentSms(agent.id, on)
+      if (error) toast.error(error)
+      else toast.success(on ? `SMS on for ${agent.name}` : `SMS off for ${agent.name}`)
+      setSmsId(null)
+      router.refresh()
+    })
+  }
   const router = useRouter()
   const now = useNow(30_000)
 
@@ -294,7 +308,7 @@ export function AgentsClient({
                   </div>
 
                   {/* Numbers */}
-                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2">
                     <Stat label="Leads" value={leadCounts[a.id] ?? 0} />
                     <Stat label="Calls" value={c.total} sub={`${c.answered} answered`} title="Outbound calls this agent made" />
                     <Stat label="Calls today" value={c.today} title="Calls today (Pakistan time)" />
@@ -313,6 +327,23 @@ export function AgentsClient({
                           aria-label={`Show welcome tour to ${a.name} on next sign-in`}
                         />
                         {a.onboarding_completed_at ? "Off" : "Next login"}
+                      </span>
+                    </label>
+                    <label
+                      className="rounded-md border px-2.5 py-1.5 flex flex-col justify-center gap-1 cursor-pointer"
+                      title="Tick to let this agent send SMS to leads. The usual permission rules still apply."
+                    >
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">SMS</span>
+                      <span className="flex items-center gap-1.5 text-xs">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary cursor-pointer"
+                          checked={a.sms_enabled === true}
+                          disabled={a.sms_enabled === null || (isPending && smsId === a.id)}
+                          onChange={(e) => handleSms(a, e.target.checked)}
+                          aria-label={`Let ${a.name} send SMS`}
+                        />
+                        {a.sms_enabled ? "On" : "Off"}
                       </span>
                     </label>
                   </div>
