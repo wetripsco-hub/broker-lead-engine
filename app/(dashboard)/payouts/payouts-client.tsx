@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Field, Modal } from "@/components/earnings/modal"
 import { StatusPill } from "@/components/earnings/status-pill"
 import { formatDay, formatRate, formatUsd, KIND_LABEL, nextPayoutDay, type EntryKind, type EntryStatus } from "@/lib/commission"
+import { PayoutDetailsView } from "@/components/earnings/payout-details-view"
+import { METHOD_LABEL, type PayoutDetails } from "@/lib/payout-details"
 import { addAdjustment, markPaid, overrideEntry, voidEntry } from "./actions"
 
 export interface PayoutEntry {
@@ -56,7 +58,20 @@ function groupByDateAndAgent(list: PayoutEntry[]): Array<{ date: string; totalCe
     })
 }
 
-export function PayoutsClient({ entries, today }: { entries: PayoutEntry[]; today: string }) {
+export function PayoutsClient({
+  entries,
+  today,
+  payoutDetails = {},
+  agentList = [],
+}: {
+  entries: PayoutEntry[]
+  today: string
+  payoutDetails?: Record<string, PayoutDetails>
+  agentList?: Array<{ id: string; name: string }>
+}) {
+  const [showDetails, setShowDetails] = useState(false)
+  const [openAgent, setOpenAgent] = useState<string | null>(null)
+  const missing = agentList.filter((a) => !payoutDetails[a.id]).length
   const [payFor, setPayFor] = useState<{ group: AgentGroup; date: string } | null>(null)
   const [editFor, setEditFor] = useState<PayoutEntry | null>(null)
   const [adjustFor, setAdjustFor] = useState<PayoutEntry | null>(null)
@@ -150,7 +165,46 @@ export function PayoutsClient({ entries, today }: { entries: PayoutEntry[]; toda
           ))}
       </section>
 
-      {payFor && <MarkPaidModal group={payFor.group} date={payFor.date} onClose={() => setPayFor(null)} />}
+      <section className="space-y-3">
+        <button type="button" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground" onClick={() => setShowDetails((v) => !v)} aria-expanded={showDetails}>
+          <ChevronDown className={`size-4 transition-transform duration-200 ease-[var(--ease-out)] ${showDetails ? "" : "-rotate-90"}`} />
+          Agent payout details ({agentList.length - missing}/{agentList.length} added)
+        </button>
+        {showDetails &&
+          (agentList.length === 0 ? (
+            <Empty text="No active agents." />
+          ) : (
+            <div className="rounded-lg border bg-card shadow-sm divide-y">
+              {agentList.map((a) => {
+                const d = payoutDetails[a.id]
+                const open = openAgent === a.id
+                return (
+                  <div key={a.id}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenAgent(open ? null : a.id)}
+                      aria-expanded={open}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left text-sm hover:bg-muted/40"
+                    >
+                      <span className="font-medium truncate">{a.name}</span>
+                      <span className={`shrink-0 text-xs ${d ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400"}`}>
+                        {d ? `${METHOD_LABEL[d.method] ?? d.method} · ${d.country}` : "Not added yet"}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="px-4 pb-3">
+                        <PayoutDetailsView d={d} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        <p className="text-xs text-muted-foreground">Agents add these in My Account. Only admins and the agent can see them.</p>
+      </section>
+
+      {payFor && <MarkPaidModal group={payFor.group} date={payFor.date} details={payoutDetails[payFor.group.agentId]} onClose={() => setPayFor(null)} />}
       {editFor && <OverrideModal entry={editFor} onClose={() => setEditFor(null)} />}
       {adjustFor && <AdjustmentModal entry={adjustFor} today={today} onClose={() => setAdjustFor(null)} />}
       {voidFor && <VoidModal entry={voidFor} onClose={() => setVoidFor(null)} />}
@@ -273,7 +327,7 @@ function useSubmit(onClose: () => void) {
   return { error, isPending, run }
 }
 
-function MarkPaidModal({ group, date, onClose }: { group: AgentGroup; date: string; onClose: () => void }) {
+function MarkPaidModal({ group, date, details, onClose }: { group: AgentGroup; date: string; details?: PayoutDetails; onClose: () => void }) {
   const [reference, setReference] = useState("")
   const { error, isPending, run } = useSubmit(onClose)
   return (
@@ -291,6 +345,10 @@ function MarkPaidModal({ group, date, onClose }: { group: AgentGroup; date: stri
             · {group.entries.length} entr{group.entries.length === 1 ? "y" : "ies"} · payout {formatDay(date)}
           </span>
         </p>
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Pay to</p>
+          <PayoutDetailsView d={details} />
+        </div>
         <Field label="Payment reference" htmlFor="paid-ref" hint="e.g. the Wise, Payoneer or bank transfer reference.">
           <Input id="paid-ref" value={reference} onChange={(e) => setReference(e.target.value)} required autoFocus className="h-9 text-sm" />
         </Field>

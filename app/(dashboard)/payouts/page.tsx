@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { effectiveStatus, toCents, todayIn, type EntryKind, type EntryStatus } from "@/lib/commission"
+import type { PayoutDetails } from "@/lib/payout-details"
 import { PayoutsClient, type PayoutEntry } from "./payouts-client"
 
 // Admin only: what each agent is owed on each 15th, and marking it paid.
@@ -12,12 +13,19 @@ export default async function PayoutsPage() {
   if (!user) redirect("/login")
   if (user.app_metadata?.role !== "admin") redirect("/dashboard")
 
-  const [{ data: entriesRaw }, { data: customersRaw }, { data: paymentsRaw }, { data: agentsRaw }] = await Promise.all([
+  const [{ data: entriesRaw }, { data: customersRaw }, { data: paymentsRaw }, { data: agentsRaw }, { data: detailsRaw }] = await Promise.all([
     (supabase.from("commission_entries") as any).select("*").order("payout_date", { ascending: true }),
     (supabase.from("customers") as any).select("id, company_name, status"),
     (supabase.from("customer_payments") as any).select("id, received_at, amount_usd"),
     (supabase.from("agents") as any).select("*"),
+    // Where each agent is paid (admins read every row; empty if the table is not there yet).
+    (supabase.from("agent_payout_details") as any).select("*"),
   ])
+  const payoutDetails: Record<string, PayoutDetails> = Object.fromEntries(((detailsRaw ?? []) as any[]).map((d) => [d.agent_id, d]))
+  const agentList = ((agentsRaw ?? []) as any[])
+    .filter((a) => !a.deleted_at && a.active !== false)
+    .map((a) => ({ id: a.id as string, name: a.name as string }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   const today = todayIn()
   const customers = new Map(((customersRaw ?? []) as any[]).map((c) => [c.id as string, c]))
@@ -52,7 +60,7 @@ export default async function PayoutsPage() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <PayoutsClient entries={entries} today={today} />
+      <PayoutsClient entries={entries} today={today} payoutDetails={payoutDetails} agentList={agentList} />
     </div>
   )
 }
