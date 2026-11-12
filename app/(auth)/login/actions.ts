@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { ONBOARDED_COOKIE } from "@/lib/onboarding"
+import { ACCOUNT_DISABLED_MESSAGE } from "@/lib/account-disabled"
 import { recordAgentLocation } from "@/lib/timezone/viewer-timezone"
 import { RULES, TOO_MANY, actionOverLimit, clientIp } from "@/lib/rate-limit"
 import { TURNSTILE_FAILED, TURNSTILE_FIELD, verifyTurnstile } from "@/lib/turnstile"
@@ -69,6 +70,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const { data: signedIn, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
+    // Disabled by the admin (the auth user is banned): don't say why.
+    if ((error as { code?: string }).code === "user_banned" || /banned/i.test(error.message)) return { error: ACCOUNT_DISABLED_MESSAGE }
     // Only a wrong email/password counts towards the lock, not e.g. a network error.
     const wrongCredentials = (error as { code?: string }).code === "invalid_credentials" || /invalid login credentials/i.test(error.message)
     if (!wrongCredentials) return { error: error.message }

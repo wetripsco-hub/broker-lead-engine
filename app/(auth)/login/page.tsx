@@ -1,8 +1,10 @@
 import { LoginForm } from "./login-form"
 import { ContactSupport } from "./contact-support"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ACCOUNT_DISABLED_MESSAGE } from "@/lib/account-disabled"
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ disabled?: string }> }) {
+  const { disabled } = await searchParams
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-sm px-4">
@@ -20,6 +22,11 @@ export default function LoginPage() {
             <CardDescription>Enter your email and password to continue</CardDescription>
           </CardHeader>
           <CardContent>
+            {disabled === "1" && (
+              <p role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {ACCOUNT_DISABLED_MESSAGE}
+              </p>
+            )}
             <LoginForm />
           </CardContent>
         </Card>

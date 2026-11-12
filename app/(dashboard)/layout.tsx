@@ -33,7 +33,7 @@ export default async function DashboardLayout({
     { count: ticketsBadgeCount },
     { count: supportRequestsCount },
   ] = await Promise.all([
-    supabase.from("agents").select("id, name").eq("user_id", user.id).maybeSingle(),
+    supabase.from("agents").select("id, name, active").eq("user_id", user.id).maybeSingle(),
     supabase
       .from("outreach_events")
       .select("id", { count: "exact", head: true })
@@ -63,7 +63,9 @@ export default async function DashboardLayout({
   // Admin only: agent agreements signed since the admin last opened the Agreements tab.
   const agreementsCount = role === "admin" ? await newAgreementsCount(user.id) : 0
 
-  const agent = agentData as { id: string; name: string } | null
+  const agent = agentData as { id: string; name: string; active?: boolean } | null
+  // Disabled while still signed in: sign out and show "Technical issue. Please contact your admin."
+  if (role !== "admin" && agent?.active === false) redirect("/auth/disabled")
   const userName = agent?.name ?? user.email ?? "User"
 
   return (
