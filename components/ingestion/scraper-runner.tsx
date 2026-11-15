@@ -21,6 +21,9 @@ export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
   const [running, setRunning] = useState(false)
   const [lines, setLines] = useState<string[]>([])
   const [date, setDate] = useState(lastWeekdayIso())
+  // Range mode: run every business day from `date` to `endDate`, one after the other.
+  const [rangeMode, setRangeMode] = useState(false)
+  const [endDate, setEndDate] = useState(lastWeekdayIso())
   const logRef = useRef<HTMLDivElement>(null)
 
   async function handleRun() {
@@ -31,7 +34,7 @@ export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
       const res = await fetch("/api/scrape/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }),
+        body: JSON.stringify(rangeMode ? { from: date, to: endDate } : { date }),
       })
 
       if (!res.ok || !res.body) {
@@ -54,7 +57,7 @@ export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
         })
       }
 
-      toast.success(`Scraper run finished — register date ${date}`)
+      toast.success(rangeMode ? `Scraper run finished — ${date} to ${endDate}` : `Scraper run finished — register date ${date}`)
       onFinished()
     } catch (err) {
       toast.error(`Scraper error: ${err instanceof Error ? err.message : String(err)}`)
@@ -76,15 +79,44 @@ export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
             Vercel app.
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <select
+            value={rangeMode ? "range" : "single"}
+            onChange={(e) => setRangeMode(e.target.value === "range")}
+            disabled={running}
+            aria-label="Single day or date range"
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+          >
+            <option value="single">One day</option>
+            <option value="range">Date range</option>
+          </select>
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => {
+              setDate(e.target.value)
+              if (endDate < e.target.value) setEndDate(e.target.value)
+            }}
             disabled={running}
             max={todayIso()}
+            aria-label={rangeMode ? "From date" : "Date"}
             className="h-9 rounded-md border bg-background px-2.5 text-sm"
           />
+          {rangeMode && (
+            <>
+              <span className="text-xs text-muted-foreground">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                disabled={running}
+                min={date}
+                max={todayIso()}
+                aria-label="To date"
+                className="h-9 rounded-md border bg-background px-2.5 text-sm"
+              />
+            </>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -93,7 +125,7 @@ export function ScraperRunner({ onFinished }: { onFinished: () => void }) {
             onClick={handleRun}
           >
             <Play className="size-3.5" />
-            {running ? "Running…" : "Run scraper now"}
+            {running ? "Running…" : rangeMode ? "Run range now" : "Run scraper now"}
           </Button>
         </div>
       </div>
