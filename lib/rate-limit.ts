@@ -27,7 +27,7 @@ export const RULES = {
  */
 export function apiRuleFor(pathname: string): RateRule | null {
   if (!pathname.startsWith("/api/")) return null
-  if (pathname.startsWith("/api/webhooks/") || pathname === "/api/telnyx/webhook" || pathname.startsWith("/api/track/")) return null
+  if (pathname.startsWith("/api/webhooks/") || pathname === "/api/telnyx/webhook" || pathname === "/api/telnyx/inbound" || pathname.startsWith("/api/track/")) return null
   if (pathname === "/api/support-request") return RULES.supportRequest
   if (pathname === "/api/telnyx/token" || pathname.startsWith("/api/ai-calls/start")) return RULES.calls
   if (pathname === "/api/ingest" || pathname === "/api/email/sync" || pathname === "/api/recruiter/cron") return RULES.cron

@@ -44,6 +44,7 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/tickets") ||
     request.nextUrl.pathname.startsWith("/account") ||
     request.nextUrl.pathname.startsWith("/support-requests") ||
+    request.nextUrl.pathname.startsWith("/callbacks") ||
     request.nextUrl.pathname.startsWith("/onboarding")
 
   if (!user && isDashboardRoute) {

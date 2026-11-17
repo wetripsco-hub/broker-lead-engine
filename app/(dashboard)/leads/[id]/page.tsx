@@ -10,6 +10,8 @@ import { AGENT_TZ } from "@/lib/timezone/broker-time"
 import { AgentCallBanner } from "@/components/leads/agent-call-banner"
 import { StageSelector } from "@/components/leads/stage-selector"
 import { StageBadge } from "@/components/leads/stage-badge"
+import { CallbackBadge } from "@/components/leads/callback-badge"
+import { getOpenCallbacks } from "@/lib/callbacks/badge"
 import { NotesEditor } from "@/components/leads/notes-editor"
 import { AssignedAgentSelector } from "@/components/leads/assigned-agent-selector"
 import { EmailCompose } from "@/components/leads/email-compose"
@@ -241,11 +243,18 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   })
 
   // Callback number set by an admin in Settings, for the call script's [number] / [Phone].
+  // Unset: our outbound caller ID, which is the number brokers call back on anyway.
   const { data: cbRaw } = await (supabase.from("app_settings") as any).select("value").eq("key", "callback_phone").maybeSingle()
   const cbValue = (cbRaw as { value: unknown } | null)?.value
-  const callbackPhone = typeof cbValue === "string" && cbValue ? formatPhoneDisplay(cbValue) : null
+  const callbackPhone =
+    typeof cbValue === "string" && cbValue
+      ? formatPhoneDisplay(cbValue)
+      : process.env.NEXT_PUBLIC_TELNYX_FROM_NUMBER
+        ? formatPhoneDisplay(process.env.NEXT_PUBLIC_TELNYX_FROM_NUMBER)
+        : null
 
   const followUp = (await getFollowUps(supabase, lead.id))[lead.id]
+  const openCallback = (await getOpenCallbacks(supabase, lead.id))[lead.id] ?? null
   // Personal star; if the favorites migration isn't run yet this is simply empty.
   const { data: favRow } = await (supabase.from("lead_favorites") as any).select("lead_id").eq("lead_id", lead.id).maybeSingle()
   const isFavorite = !!favRow
@@ -302,6 +311,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                 {b?.mc_number ? `MC-${b.mc_number}` : b?.dot_number ? `DOT-${b.dot_number}` : "—"}
               </span>
               <McStatusBadge status={b?.mc_status ?? null} />
+              {openCallback && <CallbackBadge status={openCallback.status} />}
               {b?.usdot_status && (
                 <span className="text-xs text-muted-foreground">
                   USDOT {b.usdot_status}

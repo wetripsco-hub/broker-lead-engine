@@ -26,6 +26,7 @@ import {
   Wallet,
   UserPlus,
   Clapperboard,
+  PhoneIncoming,
 } from "lucide-react"
 import {
   Sidebar,
@@ -48,6 +49,7 @@ import { UnreadSmsBadge } from "@/components/messages/unread-sms-badge"
 import { PendingRequestsBadge } from "@/components/requests/pending-requests-badge"
 import { TicketsBadge } from "@/components/tickets/tickets-badge"
 import { SupportRequestsBadge } from "@/components/requests/support-requests-badge"
+import { CallbacksBadge } from "@/components/callbacks/callbacks-badge"
 import type { UserRole } from "@/types/database"
 
 // `adminOnly` items are not rendered for agents (the pages also redirect them).
@@ -112,9 +114,11 @@ interface AppSidebarProps {
   supportRequestsCount?: number
   /** Admin only: agent agreements signed since the Agreements tab was last opened. */
   agreementsCount?: number
+  /** Admin only: missed callbacks / voicemails not marked handled. */
+  callbacksCount?: number
 }
 
-export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount, pendingRequestsCount = 0, ticketsBadgeCount = 0, supportRequestsCount = 0, agreementsCount = 0 }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount, unreadEmailCount, pendingRequestsCount = 0, ticketsBadgeCount = 0, supportRequestsCount = 0, agreementsCount = 0, callbacksCount = 0 }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const isAdmin = role === "admin"
@@ -159,6 +163,13 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                 badge={<UnreadSmsBadge initialCount={unreadSmsCount} />}
               />
               <NavLink
+                href="/callbacks"
+                label="Callbacks"
+                icon={PhoneIncoming}
+                active={pathname === "/callbacks"}
+                badge={isAdmin ? <CallbacksBadge initialCount={callbacksCount} /> : undefined}
+              />
+              <NavLink
                 href="/emails"
                 label="Emails"
                 icon={Inbox}
@@ -181,7 +192,7 @@ export function AppSidebar({ userName, userEmail, role, agentId, unreadSmsCount,
                 />
               )}
               {/* Agent view is intentionally limited to Dashboard, Leads, Company, Call script,
-                  Messages, Emails, Support and My Account — everything below is admin-only. The server-side
+                  Messages, Callbacks, Emails, Support and My Account — everything below is admin-only. The server-side
                   page guards are what actually enforce this; hiding the
                   links is just so an agent never sees a dead end. */}
               {isAdmin && (

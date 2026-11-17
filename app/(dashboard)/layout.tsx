@@ -32,6 +32,7 @@ export default async function DashboardLayout({
     { count: pendingRequestsCount },
     { count: ticketsBadgeCount },
     { count: supportRequestsCount },
+    { count: callbacksCount },
   ] = await Promise.all([
     supabase.from("agents").select("id, name, active").eq("user_id", user.id).maybeSingle(),
     supabase
@@ -58,6 +59,13 @@ export default async function DashboardLayout({
     role === "admin"
       ? (supabase.from("support_requests") as any).select("id", { count: "exact", head: true }).eq("status", "open")
       : Promise.resolve({ count: 0 }),
+    // Admin only: missed callbacks / voicemails not handled yet.
+    role === "admin"
+      ? (supabase.from("callbacks") as any)
+          .select("id", { count: "exact", head: true })
+          .is("handled_at", null)
+          .in("status", ["missed", "voicemail"])
+      : Promise.resolve({ count: 0 }),
   ])
 
   // Admin only: agent agreements signed since the admin last opened the Agreements tab.
@@ -81,6 +89,7 @@ export default async function DashboardLayout({
         ticketsBadgeCount={(ticketsBadgeCount as number | null) ?? 0}
         supportRequestsCount={(supportRequestsCount as number | null) ?? 0}
         agreementsCount={agreementsCount}
+        callbacksCount={(callbacksCount as number | null) ?? 0}
       />
       <main className="flex flex-1 flex-col min-h-screen">
         <header className="flex items-center h-12 px-4 border-b shrink-0">

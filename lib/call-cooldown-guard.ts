@@ -24,6 +24,18 @@ export async function checkCallCooldown(
   const leadIds = ((leadRows ?? []) as Array<{ id: string }>).map((l) => l.id)
   if (leadIds.length === 0) return { blocked: false, until: null, streak: 0, message: null }
 
+  // A callback from the broker resets the counter (see evaluateCooldown).
+  const { data: lastCallback } = await admin
+    .from("callbacks")
+    .select("received_at")
+    .in("lead_id", leadIds)
+    .order("received_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const resetAfter = (lastCallback as { received_at: string } | null)?.received_at
+    ? new Date((lastCallback as { received_at: string }).received_at)
+    : null
+
   const { data: events } = await admin
     .from("outreach_events")
     .select("status, occurred_at")
@@ -38,7 +50,7 @@ export async function checkCallCooldown(
     at: new Date(e.occurred_at),
     unanswered: isUnansweredStatus(e.status),
   }))
-  const result = evaluateCooldown(attempts, now)
+  const result = evaluateCooldown(attempts, now, resetAfter)
   return {
     ...result,
     message: result.blocked && result.until

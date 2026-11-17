@@ -5,6 +5,7 @@ import { isAdminInDb } from "@/lib/voice-agents/admin-check"
 import { emailFor, phoneFor } from "@/lib/mask"
 import { getFollowUps } from "@/lib/follow-up/query"
 import { fetchAll } from "@/lib/supabase/fetch-all"
+import { getOpenCallbacks } from "@/lib/callbacks/badge"
 import { LeadsListClient } from "./leads-list-client"
 
 export default async function LeadsPage({
@@ -71,6 +72,9 @@ export default async function LeadsPage({
       : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
   ])
 
+  // Leads the broker called back about: badge + pinned to the top of the list.
+  const callbackByLead = await getOpenCallbacks(supabase)
+
   const templates = (templatesRes.data ?? []) as Array<{
     id: string; name: string; subject: string; body: string; type: "initial" | "follow_up"
   }>
@@ -117,6 +121,7 @@ export default async function LeadsPage({
         allAgents={allAgents}
         followUpByLead={followUpByLead}
         favoriteIds={favoriteIds}
+        callbackByLead={callbackByLead}
         initialFollowUpOnly={filter === "followup"}
       />
     </div>

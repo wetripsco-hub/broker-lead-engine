@@ -65,3 +65,17 @@ export async function startCallRecording(callControlId: string): Promise<void> {
     throw new Error(`Telnyx startCallRecording failed (${res.status}): ${body}`)
   }
 }
+
+/** Any Call Control command (answer, transfer, speak, record_start…). Throws on a non-2xx. */
+export async function callCommand(callControlId: string, action: string, body: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${TELNYX_API}/calls/${encodeURIComponent(callControlId)}/actions/${action}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Telnyx ${action} failed (${res.status}): ${text.slice(0, 300)}`)
+  }
+}

@@ -12,6 +12,7 @@ import { ExportMenu } from "@/components/leads/export-menu"
 import { AiCallQueueModal } from "@/components/leads/ai-call-queue-modal"
 import { BulkConsentModal } from "@/components/leads/bulk-consent-modal"
 import { FavoriteButton } from "@/components/leads/favorite-button"
+import { CallbackBadge } from "@/components/leads/callback-badge"
 import { Search, ChevronRight, Mail, X, ArrowDown, ArrowUp, Clock, Bot, Star, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 import { CallDot, describeCall, type CallDisplayState } from "@/components/leads/call-status"
@@ -208,6 +209,7 @@ export function LeadsListClient({
   allAgents,
   followUpByLead,
   favoriteIds,
+  callbackByLead = {},
   initialFollowUpOnly,
 }: {
   leads: LeadRow[]
@@ -219,6 +221,8 @@ export function LeadsListClient({
   allAgents: Array<{ id: string; name: string }>
   followUpByLead: Record<string, FollowUpInfo>
   favoriteIds: string[]
+  /** Leads with an open "Callback received" (lead id -> newest callback). */
+  callbackByLead?: Record<string, { at: string; status: string }>
   initialFollowUpOnly: boolean
 }) {
   const [stageFilter, setStageFilter] = useState<LeadStage | "all">("all")
@@ -317,6 +321,14 @@ export function LeadsListClient({
   })
 
   const filtered = [...matching].sort((a, b) => {
+    // A broker who called back always comes first (newest callback first), whatever the sort.
+    const cba = callbackByLead[a.id]?.at
+    const cbb = callbackByLead[b.id]?.at
+    if (cba || cbb) {
+      if (!cba) return 1
+      if (!cbb) return -1
+      if (cba !== cbb) return cbb.localeCompare(cba)
+    }
     if (sortMode === "favorites") {
       const d = Number(favorites.has(b.id)) - Number(favorites.has(a.id))
       return d !== 0 ? d : b.created_at.localeCompare(a.created_at) // newest first within each group
@@ -699,6 +711,7 @@ export function LeadsListClient({
                       <span className="font-mono">
                         {b?.mc_number ? `MC-${b.mc_number}` : b?.dot_number ? `DOT-${b.dot_number}` : "—"}
                       </span>
+                      {callbackByLead[lead.id] && <CallbackBadge status={callbackByLead[lead.id].status} />}
                       {followUpByLead[lead.id]?.due && (
                         <span className="rounded-full bg-orange-100 px-1.5 py-0.5 font-medium text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
                           Follow-up due - {followUpByLead[lead.id].days}d

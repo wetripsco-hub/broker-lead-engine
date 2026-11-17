@@ -26,8 +26,13 @@ export interface CooldownResult {
   streak: number
 }
 
-export function evaluateCooldown(attempts: CallAttempt[], now: Date): CooldownResult {
-  const sorted = attempts.slice().sort((a, b) => b.at.getTime() - a.at.getTime()) // newest first
+/**
+ * `resetAfter`: the broker called us back at this time, so attempts made before it no longer
+ * count (the try counter and the hour both start over).
+ */
+export function evaluateCooldown(attempts: CallAttempt[], now: Date, resetAfter: Date | null = null): CooldownResult {
+  const counted = resetAfter ? attempts.filter((a) => a.at.getTime() > resetAfter.getTime()) : attempts
+  const sorted = counted.slice().sort((a, b) => b.at.getTime() - a.at.getTime()) // newest first
   let streak = 0
   let prev: CallAttempt | null = null
   for (const a of sorted) {

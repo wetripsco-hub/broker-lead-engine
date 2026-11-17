@@ -24,6 +24,7 @@ import { DISPOSITION_LABEL, DISPOSITION_MENU, isSmsPermissionOutcome } from "@/l
 import { OUTCOME_NEXT_ACTION } from "@/lib/call-script/script"
 import { CallScriptPanel } from "@/components/leads/call-script-panel"
 import { AskSupportButton } from "@/components/leads/ask-support-button"
+import { CallbackNumberCard } from "@/components/leads/callback-number-card"
 import { formatPhoneDisplay, toE164 } from "@/lib/phone"
 import type { DispositionKey } from "@/lib/call-dispositions"
 
@@ -504,6 +505,8 @@ export function DialerModal({
               </p>
             )}
           </div>
+
+          <CallbackNumberCard brokerName={brokerName} agentName={agentName} />
 
           {/* ── Timer or status label ── */}
           {isActive && (
