@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { MISSED_REASON_LABEL, DEFAULT_GREETING } from "@/lib/callbacks/rules"
 import type { InboundSettingsRow } from "@/lib/callbacks/server"
+import { CallbackNumberCard } from "@/components/leads/callback-number-card"
 import { getVoicemailUrl, saveInboundSettings, setCallbackHandled } from "./actions"
 
 export interface CallbackItem {
@@ -265,11 +266,13 @@ export function CallbacksClient({
   isAdmin,
   settings,
   callbackNumber,
+  agentName = null,
 }: {
   items: CallbackItem[]
   isAdmin: boolean
   settings: InboundSettingsRow | null
   callbackNumber: string
+  agentName?: string | null
 }) {
   const [tab, setTab] = useState<"list" | "settings">("list")
   const [openOnly, setOpenOnly] = useState(isAdmin)
@@ -302,6 +305,11 @@ export function CallbacksClient({
             ))}
           </div>
         )}
+      </div>
+
+      {/* The number brokers call back on: to say in voicemails, or paste into a text / email. */}
+      <div className="max-w-xl">
+        <CallbackNumberCard brokerName={null} agentName={agentName} />
       </div>
 
       {tab === "settings" && settings ? (

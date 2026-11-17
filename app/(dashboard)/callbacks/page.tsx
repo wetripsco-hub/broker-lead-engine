@@ -68,6 +68,7 @@ export default async function CallbacksPage() {
   }
 
   const settings = isAdmin ? await loadSettingsRow(admin) : null
+  const { data: me } = await (supabase.from("agents") as any).select("name").eq("user_id", user.id).maybeSingle()
 
   return (
     <div className="p-3 sm:p-6 max-w-6xl mx-auto">
@@ -76,6 +77,7 @@ export default async function CallbacksPage() {
         isAdmin={isAdmin}
         settings={settings}
         callbackNumber={formatPhoneDisplay(process.env.NEXT_PUBLIC_TELNYX_FROM_NUMBER ?? "")}
+        agentName={(me as { name: string } | null)?.name ?? null}
       />
     </div>
   )
